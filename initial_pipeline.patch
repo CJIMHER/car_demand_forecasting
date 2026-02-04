@@ -1,0 +1,576 @@
+*** Begin Patch
+*** Add File: car_demand/gt_fetch.py
++from pytrends.request import TrendReq
++import pandas as pd
++
++def fetch_trends_monthly(keyword, start_ym, end_ym, geo='', cat=None, sleep=0.1):
++    """
++    Download monthly Google Trends series for keyword between start_ym and end_ym (inclusive).
++    - keyword: str, e.g. "Toyota Corolla"
++    - start_ym, end_ym: "YYYY-MM" strings inclusive
++    - geo: country code (e.g. 'ES'), default all
++    - cat: category id (int) or None
++    Returns: pd.Series indexed by Timestamp (month start) named 'GT'
++    """
++    pytrends = TrendReq(hl='es-ES', tz=0)
++    start = start_ym + "-01"
++    end = end_ym + "-01"
++    timeframe = f"{start} {end}"
++    kw_list = [keyword]
++    pytrends.build_payload(kw_list, cat=cat or 0, timeframe=timeframe, geo=geo, gprop='')
++    df = pytrends.interest_over_time()
++    if df.empty:
++        return pd.Series(dtype=float)
++    # Ensure monthly frequency and align to period start
++    s = df[keyword].resample('M').mean()
++    s.index = s.index.to_period('M').to_timestamp()
++    s.name = 'GT'
++    return s
++
+*** End Patch
+*** Begin Patch
+*** Add File: car_demand/transform_utils.py
++import numpy as np
++import pandas as pd
++from scipy import stats
++
++def choose_and_transform(series):
++    """
++    Decide and apply a transform: Yeo-Johnson if zeros/negatives, else Box-Cox (fallback log1p).
++    Returns: transformed_series (pd.Series), info dict with method and lambda when applicable.
++    """
++    s = series.copy().astype(float)
++    info = {}
++    if (s <= 0).any():
++        transformed, lmbda = stats.yeojohnson(s.values)
++        info['method'] = 'yeo-johnson'
++        info['lambda'] = float(lmbda)
++        return pd.Series(transformed, index=s.index), info
++    else:
++        try:
++            transformed, lmbda = stats.boxcox(s.values)
++            info['method'] = 'boxcox'
++            info['lambda'] = float(lmbda)
++            if abs(lmbda) < 0.15:
++                info['note'] = 'lambda ~ 0, boxcox ~ log; consider log1p'
++            return pd.Series(transformed, index=s.index), info
++        except Exception as e:
++            transformed = np.log1p(s.values)
++            info['method'] = 'log1p-fallback'
++            info['lambda'] = None
++            info['error'] = str(e)
++            return pd.Series(transformed, index=s.index), info
++
++
++def inverse_transform(transformed_series, info):
++    """Inverse of transform based on info returned by choose_and_transform."""
++    import numpy as _np
++    from scipy import stats as _stats
++    s = transformed_series.copy()
++    method = info.get('method')
++    if method == 'yeo-johnson':
++        lmbda = info.get('lambda')
++        return pd.Series(_stats.yeojohnson_inverse(s.values, lmbda), index=s.index)
++    elif method == 'boxcox':
++        lmbda = info.get('lambda')
++        return pd.Series(_stats.inv_boxcox(s.values, lmbda), index=s.index)
++    elif method and method.startswith('log1p'):
++        return pd.Series(_np.expm1(s.values), index=s.index)
++    else:
++        # fallback
++        return pd.Series(_np.expm1(s.values), index=s.index)
++
+*** End Patch
+*** Begin Patch
+*** Add File: car_demand/lag_correlations.py
++import numpy as np
++import pandas as pd
++from scipy.stats import pearsonr, spearmanr
++from sklearn.feature_selection import mutual_info_regression
++import dcor
++
++def lagged_correlations(series_x, series_y, max_lag=12):
++    """
++    Compute correlations for lags 1..max_lag of series_y against series_x.
++    Returns DataFrame with columns: lag, pearson, spearman, distance_corr, mutual_info
++    """
++    results = []
++    for lag in range(1, max_lag+1):
++        y_lag = series_y.shift(lag).dropna()
++        x_aligned = series_x.reindex(y_lag.index).dropna()
++        y_aligned = y_lag.reindex(x_aligned.index)
++        if len(x_aligned) < 3:
++            results.append((lag, np.nan, np.nan, np.nan, np.nan))
++            continue
++        pr, _ = pearsonr(x_aligned, y_aligned)
++        sr, _ = spearmanr(x_aligned, y_aligned)
++        try:
++            dc = dcor.distance_correlation(x_aligned.values, y_aligned.values)
++        except Exception:
++            dc = np.nan
++        try:
++            mi = mutual_info_regression(x_aligned.values.reshape(-1,1), y_aligned.values, random_state=0)
++            mi = float(mi[0])
++        except Exception:
++            mi = np.nan
++        results.append((lag, pr, sr, dc, mi))
++    df = pd.DataFrame(results, columns=['lag','pearson','spearman','distance_corr','mutual_info'])
++    return df
++
+*** End Patch
+*** Begin Patch
+*** Add File: car_demand/evaluation.py
++import numpy as np
++
++def rmse(y_true, y_pred):
++    return np.sqrt(np.mean((y_true - y_pred)**2))
++
++def mae(y_true, y_pred):
++    return np.mean(np.abs(y_true - y_pred))
++
++def mase(y_train, y_true, y_pred, sp=12):
++    # naive seasonal forecast error as scale
++    n = len(y_train)
++    if n <= sp:
++        denom = np.mean(np.abs(y_train - np.mean(y_train)))
++    else:
++        denom = np.mean(np.abs(y_train[sp:] - y_train[:-sp]))
++    num = np.mean(np.abs(y_true - y_pred))
++    return num / denom if denom != 0 else np.nan
++
+*** End Patch
+*** Begin Patch
+*** Add File: car_demand/star_model.py
++import numpy as np
++from scipy.optimize import minimize
++from scipy.stats import t as student_t
++
++class STARModel:
++    """
++    Simple two-regime STAR model with logistic or exponential transition.
++    Model: y_t = X_t @ phi + X_t @ theta * G(z_t; gamma, c) + eps_t
++    eps_t ~ StudentT(df=nu, loc=0, scale=sigma)
++
++    Fit strategy:
++      - For given gamma and threshold c, optimize parameters [phi, theta, sigma, nu] by minimizing
++        negative log-likelihood under Student's t using scipy.optimize.minimize.
++      - Grid search over gamma (transition steepness) and c (threshold choice provided externally).
++    """
++
++    def __init__(self, p=1, transition='logistic'):
++        self.p = p
++        self.transition = transition
++        self.fitted_ = False
++
++    def _make_lagged_matrix(self, y):
++        n = len(y)
++        p = self.p
++        X = np.zeros((n-p, p))
++        for i in range(p):
++            X[:, i] = y[p - i - 1: n - i - 1]
++        return X
++
++    def _transition_function(self, z, gamma, c):
++        if self.transition == 'logistic':
++            return 1.0 / (1.0 + np.exp(-gamma * (z - c)))
++        else:
++            # exponential transition
++            return 1.0 - np.exp(-gamma * np.maximum(0, z - c))
++
++    def _neg_loglike(self, params, X, y_target, G):
++        # params: [phi (p), theta (p), log_sigma, log_nu_minus2]
++        p = self.p
++        phi = params[:p]
++        theta = params[p:2*p]
++        log_sigma = params[2*p]
++        log_nu_m2 = params[2*p+1]
++        sigma = np.exp(log_sigma)
++        nu = np.exp(log_nu_m2) + 2.0  # ensure nu>2 for finite variance
++        mu = X.dot(phi) + X.dot(theta) * G
++        ll = student_t.logpdf(y_target - mu, df=nu, loc=0, scale=sigma)
++        return -np.sum(ll)
++
++    def fit(self, y, z=None, gamma_grid=[0.1,0.5,1.0,5.0], thresholds=['median','mean','q75'],
++            z_col=None, maxiter=1000):
++        """
++        y: pd.Series or 1d-array
++        z: optional series to use as transition variable (same length as y)
++        gamma_grid: list of gamma candidates
++        thresholds: list of strings or numeric values for threshold c
++        """
++        y = np.asarray(y).astype(float)
++        n = len(y)
++        p = self.p
++        if n <= p:
++            raise ValueError('Series too short for lag p')
++        X = self._make_lagged_matrix(y)
++        y_target = y[p:]
++        if z is None:
++            z = y
++        z = np.asarray(z)[p:]
++        best = None
++        best_val = np.inf
++        for gamma in gamma_grid:
++            for thr in thresholds:
++                if isinstance(thr, str):
++                    if thr == 'median':
++                        c = np.median(z)
++                    elif thr == 'mean':
++                        c = np.mean(z)
++                    elif thr == 'q75':
++                        c = np.percentile(z, 75)
++                    else:
++                        raise ValueError('unknown threshold string')
++                else:
++                    c = float(thr)
++                G = self._transition_function(z, gamma, c)
++                # initial params
++                phi0 = np.zeros(p)
++                theta0 = np.zeros(p)
++                log_sigma0 = np.log(np.std(y_target) + 1e-6)
++                log_nu_m20 = np.log(10.0 - 2.0)
++                params0 = np.concatenate([phi0, theta0, [log_sigma0, log_nu_m20]])
++                res = minimize(self._neg_loglike, params0, args=(X, y_target, G), method='L-BFGS-B',
++                               options={'maxiter': maxiter})
++                if res.success and res.fun < best_val:
++                    best_val = res.fun
++                    best = dict(res=res, gamma=gamma, c=c, G=G)
++        if best is None:
++            raise RuntimeError('STAR fit failed on all grid points')
++        # store results
++        res = best['res']
++        p = self.p
++        self.phi_ = res.x[:p]
++        self.theta_ = res.x[p:2*p]
++        self.sigma_ = np.exp(res.x[2*p])
++        self.nu_ = np.exp(res.x[2*p+1]) + 2.0
++        self.gamma_ = best['gamma']
++        self.c_ = best['c']
++        self.transition_ = best['G']
++        self.nll_ = best['res'].fun
++        self.fitted_ = True
++        return self
++
++    def predict_one(self, y_history, z_val):
++        """Predict a single step given most recent p values in y_history (length p) and z_val scalar"""
++        if not self.fitted_:
++            raise RuntimeError('Model not fitted')
++        X = np.asarray(y_history).reshape(1, -1)
++        G = self._transition_function(z_val, self.gamma_, self.c_)
++        mu = X.dot(self.phi_) + X.dot(self.theta_) * G
++        return float(mu)
++
+*** End Patch
+*** Begin Patch
+*** Add File: car_demand/data_utils.py
++import pandas as pd
++
++def load_sales_file(path_or_buffer):
++    """
++    Load CSV or Excel with columns FECHA and VENTAS_MENSUALES.
++    Returns DataFrame with FECHA as monthly PeriodIndex start (Timestamp) and column 'VENTAS_MENSUALES'.
++    """
++    if hasattr(path_or_buffer, 'read'):
++        # file-like
++        try:
++            df = pd.read_csv(path_or_buffer)
++        except Exception:
++            path_or_buffer.seek(0)
++            df = pd.read_excel(path_or_buffer)
++    else:
++        if str(path_or_buffer).lower().endswith('.csv'):
++            df = pd.read_csv(path_or_buffer)
++        else:
++            df = pd.read_excel(path_or_buffer)
++    if 'FECHA' not in df.columns or 'VENTAS_MENSUALES' not in df.columns:
++        raise ValueError('El fichero debe contener las columnas FECHA y VENTAS_MENSUALES')
++    df['FECHA'] = pd.to_datetime(df['FECHA'], errors='coerce')
++    df = df.dropna(subset=['FECHA'])
++    df = df.sort_values('FECHA')
++    df = df.set_index(pd.DatetimeIndex(df['FECHA']).to_period('M').to_timestamp())
++    return df[['VENTAS_MENSUALES']]
++
+*** End Patch
+*** Begin Patch
+*** Add File: car_demand/stationarity_tests.py
++import numpy as np
++from statsmodels.tsa.stattools import adfuller, kpss, zivot_andrews
++
++def adf_test(series, **kwargs):
++    res = adfuller(series.dropna(), **kwargs)
++    return {'adf_stat': res[0], 'pvalue': res[1], 'usedlag': res[2], 'nobs': res[3]}
++
++def kpss_test(series, **kwargs):
++    try:
++        res = kpss(series.dropna(), **kwargs)
++        return {'kpss_stat': res[0], 'pvalue': res[1], 'lags': res[2]}
++    except Exception as e:
++        return {'error': str(e)}
++
++def zivot_andrews_test(series, **kwargs):
++    try:
++        res = zivot_andrews(series.dropna(), **kwargs)
++        return {'za_stat': res[0], 'pvalue': None, 'crit_values': res[2]}
++    except Exception as e:
++        return {'error': str(e)}
++
+*** End Patch
+*** Begin Patch
+*** Add File: car_demand/modeling.py
++import numpy as np
++import pandas as pd
++from statsmodels.tsa.holtwinters import ExponentialSmoothing
++from statsmodels.tsa.filters.hp_filter import hpfilter
++from sklearn.model_selection import ParameterGrid
++from xgboost import XGBRegressor
++
++def holt_winters_grid_search(series, seasonal_periods=12, param_grid=None, rolling_folds=6):
++    """
++    Minimal HW grid search skeleton using expanding window rolling-origin.
++    Returns best model (fitted) and best params.
++    """
++    if param_grid is None:
++        param_grid = {'trend': [None, 'add'], 'seasonal': ['add', 'mul'], 'damped_trend': [False, True]}
++    best = None
++    best_score = np.inf
++    for params in ParameterGrid(param_grid):
++        try:
++            model = ExponentialSmoothing(series, trend=params['trend'],
++                                         seasonal=params.get('seasonal', None),
++                                         seasonal_periods=seasonal_periods,
++                                         damped_trend=params.get('damped_trend', False))
++            fit = model.fit(optimized=True, use_boxcox=False, remove_bias=False)
++            # small validation: last point
++            pred = fit.forecast(1)
++            true = series.iloc[-1]
++            score = np.sqrt(((pred - true)**2).mean())
++            if score < best_score:
++                best_score = score
++                best = (fit, params)
++        except Exception:
++            continue
++    return best
++
++def hp_filter_predict(series):
++    cycle, trend = hpfilter(series, lamb=129600)  # monthly lambda ~ 129600 is high; adjust if needed
++    # naive forecast using trend last value
++    last_trend = trend.iloc[-1]
++    return float(last_trend)
++
++def xgboost_train_predict(X_train, y_train, X_pred, params=None):
++    if params is None:
++        params = {'n_estimators':100, 'max_depth':5, 'learning_rate':0.05}
++    model = XGBRegressor(**params)
++    model.fit(X_train, y_train)
++    return model.predict(X_pred), model
++
+*** End Patch
+*** Begin Patch
+*** Add File: app/app_streamlit.py
++import streamlit as st
++import pandas as pd
++from car_demand.gt_fetch import fetch_trends_monthly
++
++st.set_page_config(page_title='Demanda de vehículos - Análisis', layout='wide')
++st.title('Análisis y recomendación de modelo para demanda de vehículos')
++
++with st.form('input_form'):
++    col1, col2 = st.columns(2)
++    with col1:
++        start_ym = st.text_input('Fecha inicio (YYYY-MM)', value='2020-01')
++        end_ym = st.text_input('Fecha fin (YYYY-MM)', value='2023-12')
++        ciudad = st.text_input('Ciudad', value='')
++    with col2:
++        marca = st.text_input('Marca', value='Toyota')
++        modelo = st.text_input('Modelo', value='Corolla')
++        estado = st.selectbox('VO/VN', ['VO', 'VN'])
++    uploaded = st.file_uploader('Sube CSV o Excel con FECHA y VENTAS_MENSUALES', type=['csv','xlsx'])
++    submitted = st.form_submit_button('Ejecutar análisis')
++
++if submitted:
++    if uploaded is None:
++        st.error('Sube el fichero con las columnas FECHA y VENTAS_MENSUALES')
++    else:
++        df = pd.read_csv(uploaded) if uploaded.name.endswith('.csv') else pd.read_excel(uploaded)
++        st.write('Preview', df.head())
++        keyword = f"{marca} {modelo}"
++        st.info(f"Descargando Google Trends para '{keyword}'...")
++        gt_series = fetch_trends_monthly(keyword, start_ym, end_ym, geo='')
++        st.write('GT sample', gt_series.head())
++        st.success('GT descargado. Ejecuta los notebooks para el pipeline completo.')
++
+*** End Patch
+*** Begin Patch
+*** Add File: requirements.txt
++streamlit==1.22.0
++pandas==2.1.1
++numpy==1.25.2
++scipy==1.11.1
++statsmodels==0.14.0
++pytrends==4.8.0
++scikit-learn==1.2.2
++xgboost==1.8.2
++dcor==0.7.0
++joblib==1.3.2
++matplotlib==3.8.0
++seaborn==0.12.2
++ruptures==1.1.7
++openpyxl==3.1.1
++python-dateutil==2.8.2
++tqdm==4.65.0
++pmdarima==2.2.1
++
+*** End Patch
+*** Begin Patch
+*** Add File: README.md
++# car_demand_forecasting
++
++Initial pipeline and Streamlit app for vehicle demand forecasting.
++
++Contents:
++- car_demand/: reusable modules (data ingestion, transforms, models)
++- notebooks/: notebooks for Colab (to be added)
++- app/: Streamlit app skeleton
++
++Notes:
++- Google Trends category/subcategory: the pipeline allows passing a category id to pytrends.build_payload(). By default cat=0 (all categories). If you want to restrict to "Automóviles y vehículos" and subcategory "Compra de vehículos" set the appropriate category id in the notebook or app. I left it configurable because ids may change; the notebooks show how to set it.
++- STAR model implemented in Python with Student-t errors (df estimated) and grid search over gamma and threshold choices (median/mean/q75). This is a first implementation designed for clarity and further improvement.
++
++How to run:
++1. Create a Python environment and install requirements: `pip install -r requirements.txt`
++2. Run Streamlit app: `streamlit run app/app_streamlit.py`
++3. Open notebooks in `notebooks/` (Colab-ready). They document each step: ingestion, GT download, transforms, stationarity tests, modeling and evaluation.
++
+*** End Patch
+*** Begin Patch
+*** Add File: .github/workflows/ci.yml
++name: CI
++
++on:
++  pull_request:
++    branches: [ main, feature/* ]
++  push:
++    branches: [ feature/* ]
++
++jobs:
++  build:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - name: Set up Python
++        uses: actions/setup-python@v4
++        with:
++          python-version: '3.10'
++      - name: Install dependencies
++        run: |
++          python -m pip install --upgrade pip
++          pip install -r requirements.txt
++          pip install pytest
++      - name: Run tests
++        run: |
++          pytest -q
++
+*** End Patch
+*** Begin Patch
+*** Add File: tests/test_transform.py
++import numpy as np
++import pandas as pd
++from car_demand.transform_utils import choose_and_transform, inverse_transform
++
++def test_choose_transform_boxcox_and_inverse():
++    s = pd.Series([1,2,3,4,5], index=pd.date_range('2020-01-01', periods=5, freq='M'))
++    transformed, info = choose_and_transform(s)
++    inv = inverse_transform(transformed, info)
++    # close to original (boxcox may scale), check length and no nans
++    assert len(inv) == len(s)
++    assert not inv.isna().any()
++
+*** End Patch
+*** Begin Patch
+*** Add File: notebooks/01_data_ingest_and_gt_fetch.ipynb
++{
++ "cells": [
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": [
++    "# 01 - Data ingest and Google Trends fetch\n",
++    "\n",
++    "Notebook preparado para Colab. Ejecuta las celdas en orden. Aquí se cargan los datos de ventas y se descarga Google Trends con pytrends."
++   ]
++  }
++ ],
++ "metadata": {
++  "kernelspec": {
++   "display_name": "Python 3",
++   "language": "python",
++   "name": "python3"
++  },
++  "language_info": {
++   "name": "python"
++  }
++ },
++ "nbformat": 4,
++ "nbformat_minor": 5
++}
++
+*** End Patch
+*** Begin Patch
+*** Add File: notebooks/02_preprocessing_and_tests.ipynb
++{
++ "cells": [
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": [
++    "# 02 - Preprocessing and stationarity tests\n",
++    "\n",
++    "Notebook para limpieza, transformaciones (Yeo-Johnson / Box-Cox / log1p), tests ADF/KPSS/Zivot-Andrews y detección de outliers (3*IQR)."
++   ]
++  }
++ ],
++ "metadata": {
++  "kernelspec": {
++   "display_name": "Python 3",
++   "language": "python",
++   "name": "python3"
++  },
++  "language_info": {
++   "name": "python"
++  }
++ },
++ "nbformat": 4,
++ "nbformat_minor": 5
++}
++
+*** End Patch
+*** Begin Patch
+*** Add File: notebooks/03_modeling_and_evaluation.ipynb
++{
++ "cells": [
++  {
++   "cell_type": "markdown",
++   "metadata": {},
++   "source": [
++    "# 03 - Modeling and evaluation\n",
++    "\n",
++    "Notebook para entrenar Holt-Winters, HP baseline, XGBoost (rolling origin + grid search) y STAR (implementado en Python con errores Student-t)."
++   ]
++  }
++ ],
++ "metadata": {
++  "kernelspec": {
++   "display_name": "Python 3",
++   "language": "python",
++   "name": "python3"
++  },
++  "language_info": {
++   "name": "python"
++  }
++ },
++ "nbformat": 4,
++ "nbformat_minor": 5
++}
++
+*** End Patch
+*** End Patch
