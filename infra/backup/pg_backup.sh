@@ -18,6 +18,12 @@ DESTINO="$REMOTO:$BUCKET/backups/postgres"
 NOMBRE="cdf_${DIA}.dump.gpg"
 
 TMP="$(mktemp -d)"
+# gpg necesita un directorio propio y HOME puede no ser escribible (en cdf_jobs no tiene por qué
+# serlo). El cifrado es simétrico con BACKUP_PASSPHRASE: basta un GNUPGHOME temporal, que se borra al
+# salir. En /tmp para que la ruta del socket del agente sea corta (límite de ~100 caracteres).
+GNUPGHOME="$(mktemp -d /tmp/cdf_gnupg.XXXXXX)"
+export GNUPGHOME
+chmod 700 "$GNUPGHOME"
 
 anotar() {  # deja el resultado en fuentes_estado (si Postgres responde)
   psql -X -q -v ON_ERROR_STOP=1 -v estado="$1" -v detalle="$2" <<'SQL' || true
@@ -28,15 +34,20 @@ SQL
 terminar() {
   local rc=$?
   if [ "$rc" -ne 0 ]; then anotar error "{\"error\": \"pg_backup.sh terminó con código $rc\"}"; fi
-  rm -rf "$TMP"
+  gpgconf --kill all >/dev/null 2>&1 || true   # el gpg-agent que haya arrancado gpg en ese GNUPGHOME
+  rm -rf "$TMP" "$GNUPGHOME"
   exit "$rc"
 }
 trap terminar EXIT
 
 echo "== $(date -Is) pg_dump de ${PGDATABASE:-?}"
 # El pipefail hace fallar la copia si falla pg_dump, aunque gpg termine bien.
+# Sin agente ni terminal: --batch y --pinentry-mode loopback; la frase entra por el descriptor 3
+# (printf es interno de bash: no aparece en la lista de procesos ni en ningún log) y no se guarda
+# en la caché del agente (--no-symkey-cache).
 pg_dump -Fc --no-owner --no-privileges \
-  | gpg --batch --yes --quiet --pinentry-mode loopback --symmetric --cipher-algo AES256 \
+  | gpg --batch --yes --quiet --no-tty --pinentry-mode loopback --no-symkey-cache \
+        --symmetric --cipher-algo AES256 \
         --passphrase-fd 3 -o "$TMP/$NOMBRE" 3< <(printf '%s' "$BACKUP_PASSPHRASE")
 
 TAMANO="$(stat -c %s "$TMP/$NOMBRE" 2>/dev/null || stat -f %z "$TMP/$NOMBRE")"

@@ -3,6 +3,7 @@
 import os
 import re
 import stat
+from pathlib import Path
 import subprocess
 
 import pytest
@@ -90,3 +91,69 @@ def test_carga_se_niega_a_correr_como_root(datos, monkeypatch):
     with pytest.raises(sv.ErrorCarga, match="root"):
         sv.abrir_sqlite(sv.FUENTES["vo"])
     assert not list(datos.rglob("*-shm"))
+
+
+# --- La copia funciona con un HOME no escribible (en cdf_jobs, HOME no debe ser necesario para gpg)
+
+def test_copia_con_home_de_solo_lectura(pg_admin, pg_url, pg, datos, tmp_path):
+    import glob
+    import shutil
+
+    import psycopg
+
+    _, bindir = pg_admin
+    if not shutil.which("gpg") or not (shutil.which("pg_dump") or (bindir and (Path(bindir) / "pg_dump").exists())):
+        pytest.skip("faltan gpg o pg_dump")
+    capturar(datos, "vo", "2026-11-10", flota("VO", 6))
+    sv.cargar(pg)
+
+    falsos = tmp_path / "bin"
+    falsos.mkdir()
+    (falsos / "rclone").write_text(
+        '#!/usr/bin/env bash\nset -e\n[ "$1" = copyto ] && { d="$FAKE_BUCKET/${3#*:}"; mkdir -p "$(dirname "$d")"; cp "$2" "$d"; }\nexit 0\n')
+    (falsos / "rclone").chmod(0o755)
+    home = tmp_path / "home_solo_lectura"
+    home.mkdir()
+    home.chmod(0o555)
+    frase = "frase-secreta-de-prueba-4c9e"
+
+    # Conexión SOLO por variables PG*, como en el contenedor (sin CDF_DATABASE_URL)
+    info = psycopg.conninfo.conninfo_to_dict(pg_url)
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("PG", "GNUPG")) and k not in ("CDF_DATABASE_URL", "HOME")}
+    env.update({"HOME": str(home), "BUCKET": "b", "BACKUP_PASSPHRASE": frase, "FAKE_BUCKET": str(tmp_path / "bucket"),
+                "PATH": os.pathsep.join(p for p in (str(falsos), bindir, os.environ["PATH"]) if p)})
+    for clave, var in (("host", "PGHOST"), ("port", "PGPORT"), ("user", "PGUSER"), ("password", "PGPASSWORD"),
+                       ("dbname", "PGDATABASE")):
+        valor = info.get(clave) or os.environ.get(var)
+        if valor:
+            env[var] = str(valor)
+
+    antes = set(glob.glob("/tmp/cdf_gnupg.*"))
+    try:
+        r = subprocess.run(["bash", str(RAIZ / "infra/backup/pg_backup.sh")], env=env,
+                           capture_output=True, text=True, timeout=120)
+    finally:
+        home.chmod(0o755)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert frase not in r.stdout + r.stderr
+    assert list(home.iterdir()) == []                       # nada escrito en HOME
+    assert set(glob.glob("/tmp/cdf_gnupg.*")) == antes      # el GNUPGHOME temporal se borra
+    copia = next((tmp_path / "bucket").rglob("cdf_*.dump.gpg"))
+    assert not copia.read_bytes().startswith(b"PGDMP")
+    assert pg.execute("SELECT estado FROM fuentes_estado WHERE tipo = 'copia'").fetchone() == ("ok",)
+
+
+def test_gpg_sin_frase_en_la_linea_de_ordenes():
+    for script in ("infra/backup/pg_backup.sh", "infra/backup/probar_restauracion.sh"):
+        texto = (RAIZ / script).read_text()
+        llamadas = [l for l in texto.splitlines() if re.search(r"\bgpg\b", l) and not l.lstrip().startswith("#")]
+        assert llamadas, script
+        assert "--passphrase " not in texto and '--passphrase "' not in texto
+        assert "--batch" in texto and "--pinentry-mode loopback" in texto and "--passphrase-fd" in texto
+        assert "GNUPGHOME" in texto and "--no-symkey-cache" in texto
+
+
+def test_home_de_cdf_escribible_en_la_imagen():
+    assert re.search(r"useradd [^\n]*-m -d /home/cdf", DOCKERFILE)
+    assert "-d /app" not in DOCKERFILE

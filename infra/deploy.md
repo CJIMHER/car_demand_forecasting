@@ -180,6 +180,9 @@ make restaurar-prueba  # restaura la última copia en cdf_restore_test (sin red)
                        # o una concreta: make restaurar-prueba DIA=2026-11-20
 ```
 
+gpg trabaja con un `GNUPGHOME` temporal en `/tmp` que se borra al terminar (el cifrado es simétrico
+con `BACKUP_PASSPHRASE`; no hay llavero), sin agente ni terminal y con la frase por un descriptor,
+nunca en la línea de órdenes. En `cdf_jobs` el usuario `cdf` tiene `HOME=/home/cdf`, escribible.
 Las dos usan el remoto `hz` de las variables `RCLONE_CONFIG_HZ_*`: `make copia` dentro del
 contenedor, `make restaurar-prueba` en el host (carga el `.env`). La copia diaria la hace el cron a
 las 09:30 y conserva 30 días en el bucket. La prueba de restauración es manual: una vez al mes

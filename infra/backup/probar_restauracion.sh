@@ -26,7 +26,15 @@ fi
 
 TMP="$(mktemp -d)"
 chmod 700 "$TMP"
-limpiar() { docker rm -f "$CONT" >/dev/null 2>&1 || true; rm -rf "$TMP"; }
+# GNUPGHOME temporal (descifrado simétrico: no hace falta llavero), en /tmp por la ruta del socket.
+GNUPGHOME="$(mktemp -d /tmp/cdf_gnupg.XXXXXX)"
+export GNUPGHOME
+chmod 700 "$GNUPGHOME"
+limpiar() {
+  docker rm -f "$CONT" >/dev/null 2>&1 || true
+  gpgconf --kill all >/dev/null 2>&1 || true
+  rm -rf "$TMP" "$GNUPGHOME"
+}
 trap limpiar EXIT
 
 prod() { docker exec -i cdf_postgres psql -X -q -At -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$PG_DB" "$@"; }
@@ -43,7 +51,9 @@ rclone copyto "$ORIGEN/$NOMBRE.sha256" "$TMP/$NOMBRE.sha256"
 (cd "$TMP" && sha256sum -c --quiet "$NOMBRE.sha256")
 
 echo "== Descifro"
-gpg --batch --quiet --pinentry-mode loopback --decrypt --passphrase-fd 3 -o "$TMP/cdf.dump" "$TMP/$NOMBRE" 3< <(printf '%s' "$BACKUP_PASSPHRASE")
+# Sin agente ni terminal; la frase por el descriptor 3, nunca en la línea de órdenes.
+gpg --batch --quiet --no-tty --pinentry-mode loopback --no-symkey-cache --decrypt \
+    --passphrase-fd 3 -o "$TMP/cdf.dump" "$TMP/$NOMBRE" 3< <(printf '%s' "$BACKUP_PASSPHRASE")
 
 echo "== Contenedor aparte $CONT (postgres:16, sin red)"
 docker rm -f "$CONT" >/dev/null 2>&1 || true

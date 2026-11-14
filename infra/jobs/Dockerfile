@@ -25,8 +25,10 @@ RUN apt-get update \
  && command -v runuser >/dev/null
 
 # Mismo UID/GID que el usuario cdf del servidor, para que los ficheros compartidos sean suyos.
+# HOME propio y escribible (/home/cdf, de cdf): el código en /app es de root y no se toca en marcha.
 RUN test -n "$CDF_UID" -a -n "$CDF_GID" -a "$CDF_UID" != 0 || { echo "Faltan CDF_UID/CDF_GID (no root)"; exit 1; } \
- && groupadd -o -g "$CDF_GID" cdf && useradd -o -u "$CDF_UID" -g cdf -M -d /app -s /usr/sbin/nologin cdf
+ && groupadd -o -g "$CDF_GID" cdf && useradd -o -u "$CDF_UID" -g cdf -m -d /home/cdf -s /usr/sbin/nologin cdf \
+ && chmod 700 /home/cdf && test "$(stat -c %U /home/cdf)" = cdf
 
 WORKDIR /app
 COPY requirements.txt requirements-dev.txt ./

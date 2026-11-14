@@ -8,6 +8,7 @@ probar_restauracion.sh que usa Docker no se puede probar sin Docker; aquí se re
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import psycopg
@@ -71,15 +72,27 @@ def test_copia_cifrada_y_restaurable(pg_admin, pg_url, pg, datos, tmp_path):
     assert "--min-age 30d" in (bucket / "borrados.txt").read_text()
     assert pg.execute("SELECT estado FROM fuentes_estado WHERE tipo = 'copia'").fetchone() == ("ok",)
 
-    # Con otra frase no se descifra
-    mala = subprocess.run(["gpg", "--batch", "--quiet", "--pinentry-mode", "loopback", "--passphrase", "otra",
-                           "--decrypt", "-o", str(tmp_path / "x.dump"), str(copias[0])], capture_output=True)
-    assert mala.returncode != 0
+    # Descifrado como en probar_restauracion.sh: GNUPGHOME temporal (sin depender de HOME), sin
+    # caché del agente y la frase por stdin.
+    gnupg = tempfile.mkdtemp(prefix="cdf_testgpg.", dir="/tmp")
+    os.chmod(gnupg, 0o700)
+    env_gpg = {**env, "GNUPGHOME": gnupg}
 
-    # Núcleo de probar_restauracion.sh: descifrar, restaurar en una base aparte y comparar recuentos
-    volcado = tmp_path / "cdf.dump"
-    subprocess.run(["gpg", "--batch", "--quiet", "--pinentry-mode", "loopback", "--passphrase", "frase de prueba",
-                    "--decrypt", "-o", str(volcado), str(copias[0])], check=True)
+    def descifrar(frase, salida):
+        return subprocess.run(["gpg", "--batch", "--quiet", "--no-tty", "--pinentry-mode", "loopback",
+                               "--no-symkey-cache", "--passphrase-fd", "0", "--decrypt", "-o", str(salida),
+                               str(copias[0])], input=frase.encode(), env=env_gpg, capture_output=True)
+
+    try:
+        assert descifrar("otra", tmp_path / "x.dump").returncode != 0  # con otra frase no se descifra
+        volcado = tmp_path / "cdf.dump"
+        r = descifrar("frase de prueba", volcado)
+        assert r.returncode == 0, r.stderr
+    finally:
+        subprocess.run(["gpgconf", "--kill", "all"], env=env_gpg, capture_output=True)
+        shutil.rmtree(gnupg, ignore_errors=True)
+
+    # Núcleo de probar_restauracion.sh: restaurar en una base aparte y comparar recuentos
     with psycopg.connect(pg_url, autocommit=True) as c:
         c.execute("CREATE DATABASE cdf_restaurada_prueba")
     try:

@@ -1,5 +1,15 @@
 # Cambios
 
+## 2026-11-14 · Hito 0: gpg sin HOME escribible (rama hito-0)
+
+- `pg_backup.sh` y `probar_restauracion.sh`: `GNUPGHOME` temporal (`/tmp/cdf_gnupg.XXXXXX`, 700) que
+  se borra al salir junto con su gpg-agent; `--batch --no-tty --pinentry-mode loopback
+  --no-symkey-cache` y la frase por `--passphrase-fd`. Arregla `gpg: Fatal: can't create directory
+  '/app/.gnupg'`, que habría hecho fallar la copia de las 09:30.
+- Imagen `cdf_jobs`: el usuario `cdf` tiene `HOME=/home/cdf` (creado, suyo, 700) en vez de `/app`.
+- Pruebas: `pg_backup.sh` con HOME de solo lectura y conexión solo por variables PG*; la frase no
+  aparece en la salida y no queda nada en HOME ni en `/tmp`.
+
 ## 2026-11-14 · Hito 0: make test en el contenedor (rama hito-0)
 
 - `ingesta/db.py`: `url_sqlalchemy()` convierte una cadena libpq «clave=valor» en una URL
