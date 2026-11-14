@@ -51,11 +51,39 @@ La comprobación de las 09:00 primero carga lo que falte (por si un reintento te
 08:30) y luego escribe en `fuentes_estado`, por fuente: `ok`, `sin_captura` (el scraper no tiene
 pasada success hoy), `sin_cargar` o `error` (base ausente, ámbito equivocado...).
 
+## Resumen diario por Telegram (telegram.py)
+
+Al terminar la comprobación de las 09:00 se envía siempre, vaya bien o mal, un mensaje de texto
+plano al grupo (`sendMessage` de la Bot API, sin `parse_mode`, sin ningún modelo por medio):
+
+```
+CDF 14/11 · todo correcto
+VO: 3.076 anuncios
+VN: 4.798 anuncios
+VN eléctricos e híbridos: 419 anuncios
+Carga a Postgres: correcta (8.293 filas)
+```
+
+Las cifras salen de Postgres (`stock_externo_snapshot` del día) y el estado de las cargas, de la
+última anotación `carga` del día en `fuentes_estado`. Con problemas, la cabecera los cuenta
+(«1 problema», «2 problemas») y cada línea afectada dice cuál.
+
+- `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` salen del entorno (del `/opt/cdf/.env`).
+- Reintentos con espera ante 429 (respetando `retry_after`), 5xx o fallos de red; un 400/401/403 no
+  se reintenta.
+- El token va en la URL de la Bot API: los errores se relanzan con un mensaje propio y sin la
+  excepción original, nunca se escribe una traza, y `telegram.limpiar()` lo borra de cualquier texto.
+- Si no se puede enviar, se anota en `fuentes_estado` (`telegram`, `aviso`, `error`) y la
+  comprobación no falla por ello. Si se envía, la fila `ok` guarda el texto enviado.
+- `make comprobar` también lo envía; `SIN_TELEGRAM=1 make comprobar` no.
+
 ## Cómo se prueba
 
 Con bases SQLite sintéticas que se escriben con el **propio código de los scrapers** (sus funciones
 `connect_db`, `start_run` y `commit_snapshot`, importadas sin modificarlas): mismos esquemas,
-eventos y ausencias que en el servidor, sin ningún dato real.
+eventos y ausencias que en el servidor, sin ningún dato real. Telegram nunca se llama en las
+pruebas: `tests/conftest.py` borra las credenciales y bloquea la salida a la red del módulo, y las
+pruebas de envío usan un Telegram simulado (429, red caída, 400...).
 
 ```bash
 # En el Mac (Postgres 16 embebido con pgserver)

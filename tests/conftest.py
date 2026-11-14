@@ -24,6 +24,19 @@ sys.path.insert(0, str(RAIZ))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
+@pytest.fixture(autouse=True)
+def sin_telegram(monkeypatch):
+    """Ninguna prueba llama a Telegram: sin credenciales y con la salida a la red bloqueada."""
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+
+    def prohibido(*args, **kwargs):
+        raise AssertionError("Una prueba ha intentado llamar a Telegram")
+
+    from ingesta import telegram
+    monkeypatch.setattr(telegram, "_urlopen", prohibido)
+
+
 @pytest.fixture(scope="session")
 def pg_admin():
     """(conninfo de administración, directorio de binarios de Postgres o None)."""

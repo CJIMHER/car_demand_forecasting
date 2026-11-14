@@ -12,7 +12,8 @@ presente, ausente y retirado, tal como los deciden los eventos del scraper.
 
 Órdenes (python -m ingesta.scrapers_vw ...):
   cargar            carga lo nuevo de las tres fuentes (cron 08:30)
-  comprobar         carga lo pendiente y anota en fuentes_estado si falta la captura del día (cron 09:00)
+  comprobar         carga lo pendiente, anota en fuentes_estado si falta la captura del día y envía
+                    el resumen del día por Telegram (cron 09:00)
   recuento          anuncios cargados por día y fuente, frente a lo que dijo el scraper
   concesionarios    dealer_id y nombres que coinciden con config/concesionario.yaml
   remarcar-propio   vuelve a calcular es_propio tras cambiar config/concesionario.yaml
@@ -35,6 +36,7 @@ import psycopg
 import yaml
 from psycopg.types.json import Jsonb
 
+from ingesta import telegram
 from ingesta.db import conectar
 from ingesta.provincias import normalizar_cp, provincia
 
@@ -100,6 +102,9 @@ def hoy_madrid() -> date:
 
 def abrir_sqlite(fuente: Fuente, base: Path | None = None) -> sqlite3.Connection:
     ruta = (base or dir_datos()) / fuente.fichero
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        # Como root, SQLite dejaría ficheros -shm/-wal de root que bloquearían al scraper (usuario cdf).
+        raise ErrorCarga("No se abren las bases de los scrapers como root: ejecuta como el usuario cdf")
     if not ruta.is_file():
         raise ErrorCarga(f"No existe la base de {fuente.nombre}: {ruta}")
     # mode=ro: esta conexión no puede escribir en la base del scraper.
@@ -324,8 +329,12 @@ def cargar(pg: psycopg.Connection, nombres=None, base: Path | None = None, dia: 
 
 
 def comprobar(pg: psycopg.Connection, base: Path | None = None, dia: date | None = None,
-              cargar_antes: bool = True) -> dict:
-    """Comprobación de las 09:00: ¿tiene cada scraper su captura success del día, y está cargada?"""
+              cargar_antes: bool = True, avisar=None) -> dict:
+    """Comprobación de las 09:00: ¿tiene cada scraper su captura success del día, y está cargada?
+
+    Al terminar envía siempre el resumen del día por Telegram. `avisar` es la función de envío
+    (por defecto telegram.enviar); False no envía nada.
+    """
     dia = dia or hoy_madrid()
     if cargar_antes:
         cargar(pg, base=base, dia=dia)
@@ -357,7 +366,93 @@ def comprobar(pg: psycopg.Connection, base: Path | None = None, dia: date | None
             estado, detalle = "error", {"error": str(exc)[:2000]}
         _anotar(pg, nombre, "comprobacion", dia, estado, detalle)
         resultado[nombre] = {"estado": estado, **detalle}
+    if avisar is not False:
+        enviar_resumen(pg, dia, resultado, avisar or telegram.enviar)
     return resultado
+
+
+# --------------------------------------------------------------------------- resumen por Telegram
+
+ETIQUETAS = {"vo": "VO", "vn": "VN", "vn_otros": "VN eléctricos e híbridos"}
+
+
+def _miles(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
+def _dia_corto(valor) -> str:
+    try:
+        return date.fromisoformat(str(valor)[:10]).strftime("%d/%m")
+    except ValueError:
+        return str(valor)
+
+
+def texto_resumen(dia: date, comprobacion: dict, filas: dict[str, int], errores_carga: dict[str, str]) -> str:
+    """Resumen del día en texto plano. Las cifras son las de Postgres (filas) y las del scraper."""
+    lineas, problemas = [], 0
+    for nombre, etiqueta in ETIQUETAS.items():
+        r = comprobacion.get(nombre) or {"estado": "error", "error": "sin comprobar"}
+        estado = r.get("estado")
+        if estado == "ok":
+            lineas.append(f"{etiqueta}: {_miles(filas.get(nombre, 0))} anuncios")
+            continue
+        problemas += 1
+        if estado == "sin_captura":
+            partes = ["sin captura de hoy"]
+            if r.get("ultima_captura"):
+                partes.append(f"última el {_dia_corto(r['ultima_captura'])}")
+            intento = r.get("ultimo_intento") or {}
+            if intento.get("estado"):
+                motivo = f"último intento: {intento['estado']}"
+                if intento.get("error"):
+                    motivo += f" ({intento['error'][:120]})"
+                partes.append(motivo)
+            lineas.append(f"{etiqueta}: " + "; ".join(partes))
+        elif estado == "sin_cargar":
+            lineas.append(f"{etiqueta}: {_miles(r.get('anuncios') or 0)} anuncios capturados, sin cargar en Postgres")
+        else:
+            lineas.append(f"{etiqueta}: error al comprobar ({str(r.get('error', ''))[:150]})")
+    total = _miles(sum(filas.values()))
+    if errores_carga:
+        problemas += 1
+        detalle = "; ".join(f"{ETIQUETAS.get(f, f)}: {e[:120]}" for f, e in sorted(errores_carga.items()))
+        lineas.append(f"Carga a Postgres: con errores ({total} filas) · {detalle}")
+    else:
+        lineas.append(f"Carga a Postgres: correcta ({total} filas)")
+    cabecera = "todo correcto" if problemas == 0 else f"{problemas} problema{'s' if problemas > 1 else ''}"
+    return "\n".join([f"CDF {dia.strftime('%d/%m')} · {cabecera}", *lineas])
+
+
+def datos_resumen(pg: psycopg.Connection, dia: date) -> tuple[dict[str, int], dict[str, str]]:
+    """Filas cargadas hoy por fuente y última carga del día en error (si la hay), sacadas de Postgres."""
+    filas = dict(pg.execute("SELECT fuente, count(*) FROM stock_externo_snapshot WHERE snapshot_day = %s "
+                            "GROUP BY fuente", (dia,)).fetchall())
+    errores = {}
+    for fuente, estado, detalle in pg.execute(
+            """SELECT DISTINCT ON (fuente) fuente, estado, detalle FROM fuentes_estado
+               WHERE tipo = 'carga' AND dia = %s ORDER BY fuente, id DESC""", (dia,)):
+        if estado != "ok":
+            errores[fuente] = str((detalle or {}).get("error", estado))
+    return filas, errores
+
+
+def enviar_resumen(pg: psycopg.Connection, dia: date, comprobacion: dict, avisar) -> bool:
+    """Envía el resumen y lo anota en fuentes_estado. Nunca lanza: un fallo de Telegram no hace fallar el job."""
+    texto = None
+    try:
+        texto = texto_resumen(dia, comprobacion, *datos_resumen(pg, dia))
+        intentos = avisar(texto)
+        _anotar(pg, "telegram", "aviso", dia, "ok", {"texto": texto, "intentos": intentos})
+        LOG.info("Resumen enviado a Telegram")
+        return True
+    except Exception as exc:  # sin traza: podría llevar la URL con el token
+        error = telegram.limpiar(f"{type(exc).__name__}: {exc}")[:500]
+        LOG.warning("No se pudo enviar el resumen a Telegram: %s", error)
+        try:
+            _anotar(pg, "telegram", "aviso", dia, "error", {"error": error, "texto": texto})
+        except Exception:
+            LOG.warning("Tampoco se pudo anotar el fallo de Telegram en fuentes_estado")
+        return False
 
 
 def recuento(pg: psycopg.Connection, dias: int = 14) -> list[tuple]:
@@ -410,6 +505,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("comprobar")
     p.add_argument("--dia", type=date.fromisoformat)
     p.add_argument("--sin-cargar", action="store_true", help="no intentar cargar antes de comprobar")
+    p.add_argument("--sin-telegram", action="store_true", help="no enviar el resumen por Telegram")
     p = sub.add_parser("recuento")
     p.add_argument("--dias", type=int, default=14)
     sub.add_parser("concesionarios")
@@ -423,7 +519,8 @@ def main(argv=None) -> int:
             print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
             return 1 if any("error" in r for r in res.values()) else 0
         if args.orden == "comprobar":
-            res = comprobar(pg, dia=args.dia, cargar_antes=not args.sin_cargar)
+            res = comprobar(pg, dia=args.dia, cargar_antes=not args.sin_cargar,
+                            avisar=False if args.sin_telegram else None)
             print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
             return 0 if all(r["estado"] == "ok" for r in res.values()) else 1
         if args.orden == "recuento":

@@ -7,6 +7,8 @@ name: cdf
 services:
   postgres:
     image: postgres:16
+    # Sin «ports»: solo se llega desde la red interna cdf_net (contenedor jobs). No añadir puertos;
+    # como mucho "127.0.0.1:5432:5432" para una consulta puntual desde el propio servidor.
     container_name: cdf_postgres
     restart: unless-stopped
     environment:
@@ -30,25 +32,27 @@ services:
       context: ..
       dockerfile: infra/jobs/Dockerfile
       args:
-        CDF_UID: ${CDF_UID:-1000}
-        CDF_GID: ${CDF_GID:-1000}
+        # UID/GID del usuario cdf del servidor, dueño de /opt/cdf/data/* (el Makefile usa  id -u cdf).
+        CDF_UID: ${CDF_UID:?falta CDF_UID (id -u cdf)}
+        CDF_GID: ${CDF_GID:?falta CDF_GID (id -g cdf)}
     image: cdf_jobs:latest
     container_name: cdf_jobs
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-    # Solo las variables que necesitan los jobs; el resto del .env no entra en el contenedor.
+    # El .env del servidor es la única fuente de secretos: de ahí salen BUCKET, BACKUP_PASSPHRASE,
+    # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID y el remoto de rclone (RCLONE_CONFIG_HZ_*), sin fichero
+    # rclone.conf. Las tareas de cron solo reciben la lista de infra/jobs/exportar_entorno.sh.
+    env_file:
+      - ${CDF_ENV_FILE:-/opt/cdf/.env}
     environment:
       TZ: Europe/Madrid
       PGHOST: postgres
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB:-cdf}
-      BUCKET: ${BUCKET:-}
       RCLONE_REMOTE: ${RCLONE_REMOTE:-hz}
-      RCLONE_CONFIG: /run/cdf/rclone.conf
-      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
       CDF_SCRAPERS_DATA: /datos/scrapers
     volumes:
       # Bases de los scrapers. Se abren SIEMPRE con mode=ro; la carpeta se monta con escritura
@@ -57,7 +61,6 @@ services:
       - /opt/cdf/data/vn:/datos/scrapers/vn
       - /opt/cdf/data/vn_otros:/datos/scrapers/vn_otros
       - /opt/cdf/logs/jobs:/logs
-      - ${RCLONE_CONF_HOST:-/home/cdf/.config/rclone/rclone.conf}:/run/cdf/rclone.conf:ro
     networks: [cdf_net]
 
   # Hito 1b. Definidos para reservar nombre; no arrancan hasta que se quite el perfil.

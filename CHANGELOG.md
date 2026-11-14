@@ -1,5 +1,19 @@
 # Cambios
 
+## 2026-11-14 · Hito 0: resumen por Telegram y ajustes de despliegue (rama hito-0)
+
+- Resumen diario por Telegram tras la comprobación de las 09:00 (`ingesta/telegram.py`): texto
+  plano con una línea por scraper y la carga a Postgres; reintentos ante 429 y fallos de red; el
+  token nunca sale en logs ni errores; un fallo de envío se anota en `fuentes_estado` sin hacer
+  fallar el job. Migración `0002`: tipo `aviso` en `fuentes_estado`.
+- rclone por variables `RCLONE_CONFIG_HZ_*` del `.env` (sin `rclone.conf`): el contenedor recibe el
+  `.env` como `env_file` y cron solo la lista de `exportar_entorno.sh`.
+- Hora de Madrid comprobada al arrancar `cdf_jobs` (tzdata, `/etc/localtime`, CET/CEST).
+- `cdf_jobs` con el UID/GID de `cdf` obligatorio (sin valor por defecto); todo salvo el demonio de
+  cron corre como `cdf`, y la carga se niega a abrir las bases de los scrapers como root.
+- Postgres sin puertos, comprobado en pruebas. `make hora` y comprobaciones nuevas en
+  `make comprobar-entorno`.
+
 ## 2026-11-14 · Hito 0, segunda parte (rama hito-0)
 
 - `CLAUDE.md` con las reglas comunes; estructura de módulos con su README (`ingesta`, `analitica`,
