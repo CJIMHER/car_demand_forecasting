@@ -18,3 +18,8 @@ ventas_vn.csv
 __pycache__/
 *.pyc
 .venv/
+
+# Copias y volcados de Postgres: solo en el bucket, cifrados
+*.dump
+*.dump.gpg
+.pytest_cache/

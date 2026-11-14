@@ -1,0 +1,87 @@
+# Plataforma cdf: Postgres y jobs. Se usa siempre a través del Makefile de la raíz, que hace:
+#   docker compose -p cdf --env-file /opt/cdf/.env -f infra/docker-compose.yml ...
+# Prefijo cdf_ en contenedores, red y volúmenes. Postgres NO publica ningún puerto.
+
+name: cdf
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: cdf_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?falta POSTGRES_USER en /opt/cdf/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en /opt/cdf/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-cdf}
+      TZ: Europe/Madrid
+      PGTZ: Europe/Madrid
+    volumes:
+      - cdf_pgdata:/var/lib/postgresql/data
+    networks: [cdf_net]
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  jobs:
+    build:
+      context: ..
+      dockerfile: infra/jobs/Dockerfile
+      args:
+        CDF_UID: ${CDF_UID:-1000}
+        CDF_GID: ${CDF_GID:-1000}
+    image: cdf_jobs:latest
+    container_name: cdf_jobs
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Solo las variables que necesitan los jobs; el resto del .env no entra en el contenedor.
+    environment:
+      TZ: Europe/Madrid
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-cdf}
+      BUCKET: ${BUCKET:-}
+      RCLONE_REMOTE: ${RCLONE_REMOTE:-hz}
+      RCLONE_CONFIG: /run/cdf/rclone.conf
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      CDF_SCRAPERS_DATA: /datos/scrapers
+    volumes:
+      # Bases de los scrapers. Se abren SIEMPRE con mode=ro; la carpeta se monta con escritura
+      # solo porque SQLite necesita crear su fichero -shm para leer una base en modo WAL.
+      - /opt/cdf/data/vo:/datos/scrapers/vo
+      - /opt/cdf/data/vn:/datos/scrapers/vn
+      - /opt/cdf/data/vn_otros:/datos/scrapers/vn_otros
+      - /opt/cdf/logs/jobs:/logs
+      - ${RCLONE_CONF_HOST:-/home/cdf/.config/rclone/rclone.conf}:/run/cdf/rclone.conf:ro
+    networks: [cdf_net]
+
+  # Hito 1b. Definidos para reservar nombre; no arrancan hasta que se quite el perfil.
+  panel:
+    image: busybox:1.36
+    container_name: cdf_panel
+    profiles: ["hito1b"]
+    command: ["true"]
+    networks: [cdf_net]
+
+  caddy:
+    image: caddy:2
+    container_name: cdf_caddy
+    profiles: ["hito1b"]
+    networks: [cdf_net]
+    volumes:
+      - cdf_caddy_data:/data
+
+networks:
+  cdf_net:
+    name: cdf_net
+
+volumes:
+  cdf_pgdata:
+    name: cdf_pgdata
+  cdf_caddy_data:
+    name: cdf_caddy_data

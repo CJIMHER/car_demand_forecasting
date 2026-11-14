@@ -1,0 +1,25 @@
+# Concesionario propio y competencia cercana, tal como aparecen en los scrapers de Volkswagen.
+#
+# La marca es_propio de stock_externo_snapshot se decide SOLO por dealer_id (el campo dealer.key
+# de la web de stock, p. ej. ESP00710). Los nombres son informativos: la web puede escribirlos
+# de varias formas y no se usan para marcar filas.
+#
+# Si se cambia este fichero, las filas ya cargadas se vuelven a marcar con:
+#   make remarcar-propio
+
+propio:
+  nombre: AVISA
+  ciudad: Sevilla
+  dealer_ids:
+    - ESP00710
+  # Nombres con que aparece en los scrapers (dealer_name). Comprobar con  make concesionarios
+  nombres_en_scrapers:
+    - AVISA
+
+# Competencia directa en Sevilla. No cambia ninguna columna todavía; se deja aquí para el panel
+# y las alertas de los hitos siguientes.
+competencia:
+  - dealer_id: ESP00713
+    nombre: Sevilla Wagen
+  - dealer_id: ESP00714
+    nombre: Utrewal

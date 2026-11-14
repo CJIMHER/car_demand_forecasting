@@ -1,0 +1,11 @@
+# Tareas del contenedor cdf_jobs (hora de Madrid). Formato /etc/cron.d: minuto hora dom mes dsem usuario orden
+# Scrapers en el host (systemd): VO 04:00, VN 05:30, VN otros 06:45, con hasta 4 intentos.
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Carga de las tres bases SQLite a Postgres, cuando ya han podido terminar los reintentos
+30 8 * * * cdf /app/infra/jobs/tarea.sh cargar
+# Comprobación: carga lo que falte y anota en fuentes_estado si un scraper no tiene captura del día
+0 9 * * * cdf /app/infra/jobs/tarea.sh comprobar
+# Copia cifrada de Postgres al bucket, con la carga del día ya dentro
+30 9 * * * cdf /app/infra/jobs/tarea.sh copia
