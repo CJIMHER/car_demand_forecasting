@@ -1,5 +1,13 @@
 # Cambios
 
+## 2026-11-14 · Hito 0: make test en el contenedor (rama hito-0)
+
+- `ingesta/db.py`: `url_sqlalchemy()` convierte una cadena libpq «clave=valor» en una URL
+  `postgresql+psycopg://` completa (host, puerto, usuario, contraseña escapada, base y parámetros
+  extra), completando con las variables PG*. Arregla los 17 errores de `make test` en el servidor
+  (Alembic recibía `dbname=cdf_test_...`). La conexión de producción no cambia.
+- `tests/test_db.py`: la conversión en los dos formatos (libpq del contenedor y URL del Mac).
+
 ## 2026-11-14 · Hito 0: resumen por Telegram y ajustes de despliegue (rama hito-0)
 
 - Resumen diario por Telegram tras la comprobación de las 09:00 (`ingesta/telegram.py`): texto
