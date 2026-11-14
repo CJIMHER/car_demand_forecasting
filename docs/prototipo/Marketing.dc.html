@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel · Marketing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F6F5F1}
+a{color:#1D5FD6}a:hover{color:#174BA8}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #14213D; background: #F6F5F1; min-height: 100vh">
+  <header style="background: #0F1B2D; color: #F3F1EA">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 10px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1D5FD6"></rect><path d="M7 9 H13 V14 H18 V19 H25" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"></path></svg>
+        <div>
+          <div style="font-family: 'Space Grotesk', Inter, sans-serif; font-weight: 600; font-size: 16px; color: #F3F1EA">Stock · Demanda · Campañas</div>
+          <div style="font-size: 12px; color: #BFCBDB">Volkswagen Sevilla</div>
+        </div>
+      </div>
+      <nav aria-label="Secciones del panel" style="display: flex; flex-wrap: wrap; gap: 4px">
+        <a href="Main.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Dirección</a>
+        <a href="Ventas.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Ventas</a>
+        <a href="Marketing.dc.html" aria-current="page" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: rgba(255,255,255,0.14); color: #FFFFFF; font-weight: 600; font-size: 14px; text-decoration: none">Marketing</a>
+        <a href="Mercado.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Mercado</a>
+      </nav>
+      <div style="margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 13px; color: #BFCBDB">
+        <span style="display: inline-flex; align-items: center; gap: 6px"><svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill="#3DBE8B"></circle></svg>Fuentes al día · 07:30</span>
+        <span style="padding: 6px 10px; border: 1px solid #2A3B55; border-radius: 999px; color: #F3F1EA">Marketing</span>
+      </div>
+    </div>
+  </header>
+  <div role="note" style="background: #FFF1D6; color: #6B4A00; font-size: 13px; text-align: center; padding: 6px 16px">Maqueta con datos ficticios: sirve para decidir qué se ve y cómo, no para leer cifras.</div>
+
+  <main style="max-width: 1280px; margin: 0 auto; padding: 32px 24px 48px; display: flex; flex-direction: column; gap: 24px">
+    <div>
+      <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 32px; font-weight: 600; color: #14213D">Dónde invertir esta semana</h1>
+      <p style="margin: 6px 0 0; font-size: 15px; color: #5B6675">Meta Ads cruzado con los leads, citas y ventas de Walcu · últimos 28 días</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px">
+      <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 14px; color: #5B6675; font-weight: 500">Inversión</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 36px; font-weight: 600; color: #14213D">5.410 €</span>
+        <span style="font-size: 13px; color: #44505F">4 campañas activas</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 14px; color: #5B6675; font-weight: 500">Leads</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 36px; font-weight: 600; color: #14213D">191</span>
+        <span style="font-size: 13px; color: #44505F">66 citas · 11 ventas atribuidas</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 14px; color: #5B6675; font-weight: 500">Coste por lead</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 36px; font-weight: 600; color: #14213D">28 €</span>
+        <span style="font-size: 13px; color: #44505F">+9 % frente a los 28 días anteriores</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 14px; color: #5B6675; font-weight: 500">Coste por venta</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 36px; font-weight: 600; color: #14213D">492 €</span>
+        <span style="font-size: 13px; color: #44505F">Lo que de verdad importa</span>
+      </div>
+    </div>
+
+    <section aria-labelledby="t-reco" style="display: flex; flex-direction: column; gap: 12px">
+      <h2 id="t-reco" style="margin: 0; font-size: 20px; font-weight: 600; color: #14213D">Recomendación por modelo</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px">
+        <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-top: 4px solid #1D5FD6; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #174BA8">Aumentar</span>
+          <div>
+            <div style="font-size: 17px; font-weight: 600; color: #14213D">T-Cross</div>
+            <p style="margin: 4px 0 0; font-size: 14px; color: #44505F">Gana atención frente a sus rivales (+14), tiene el coste por venta más bajo (400 €) y 18 unidades llevan más de 60 días.</p>
+          </div>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-top: 4px solid #9AA5B5; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #44505F">Mantener</span>
+          <div>
+            <div style="font-size: 17px; font-weight: 600; color: #14213D">Tiguan</div>
+            <p style="margin: 4px 0 0; font-size: 14px; color: #44505F">Coste por venta en la media (463 €). Su atención baja un poco (−3): revisar en dos semanas.</p>
+          </div>
+          <div>
+            <div style="font-size: 17px; font-weight: 600; color: #14213D">Golf</div>
+            <p style="margin: 4px 0 0; font-size: 14px; color: #44505F">Atención al alza (+9) con stock joven: no hace falta empujar más.</p>
+          </div>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-top: 4px solid #F2A93B; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8A5A00">Reducir o cambiar</span>
+          <div>
+            <div style="font-size: 17px; font-weight: 600; color: #14213D">ID.4 Pro</div>
+            <p style="margin: 4px 0 0; font-size: 14px; color: #44505F">El coste por lead se ha multiplicado por 2,2 en 28 días. Cambiar la creatividad antes de invertir más.</p>
+          </div>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; color: #5B6675">Son sugerencias; decide marketing. Cada una combina cuatro cosas: coste real por venta, stock envejecido, atención frente a los rivales y tendencia de los leads.</p>
+    </section>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+      <section aria-labelledby="t-campanas" style="flex: 999 1 620px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+          <h2 id="t-campanas" style="margin: 0; font-size: 17px; font-weight: 600; color: #14213D">Campañas: del gasto a la venta</h2>
+          <div role="group" aria-label="Ordenar campañas" style="display: inline-flex; padding: 4px; background: #E7E9EC; border-radius: 10px; gap: 4px">
+            <sc-for list="{{ordenes}}" as="o" hint-placeholder-count="2">
+              <button type="button" aria-pressed="{{o.pressed}}" onClick="{{o.pick}}" style="min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; background: {{o.bg}}; color: {{o.fg}}">{{o.label}}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 600px; border-collapse: collapse; font-size: 14px">
+            <thead>
+              <tr style="text-align: right; color: #5B6675; font-size: 13px">
+                <th scope="col" style="padding: 8px 8px 8px 0; font-weight: 600; text-align: left">Campaña</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Gasto</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Leads</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Citas</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Ventas</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">€ / lead</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">€ / cita</th>
+                <th scope="col" style="padding: 8px 0 8px 8px; font-weight: 600">€ / venta</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{campanas}}" as="c" hint-placeholder-count="4">
+                <tr style="border-top: 1px solid #EEF0F3; text-align: right; background: {{c.fondo}}">
+                  <td style="padding: 12px 8px 12px 0; text-align: left">
+                    <span style="display: block; font-weight: 600; color: #14213D">{{c.nombre}}</span>
+                    <span style="display: block; font-size: 12px; color: {{c.notaColor}}">{{c.nota}}</span>
+                  </td>
+                  <td style="padding: 12px 8px">{{c.gasto}}</td>
+                  <td style="padding: 12px 8px">{{c.leads}}</td>
+                  <td style="padding: 12px 8px">{{c.citas}}</td>
+                  <td style="padding: 12px 8px">{{c.ventas}}</td>
+                  <td style="padding: 12px 8px; font-weight: {{c.pesoLead}}">{{c.cpl}}</td>
+                  <td style="padding: 12px 8px">{{c.cpc}}</td>
+                  <td style="padding: 12px 0 12px 8px; font-weight: 600">{{c.cpv}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="t-atencion" style="flex: 1 1 360px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <div>
+          <h2 id="t-atencion" style="margin: 0; font-size: 17px; font-weight: 600; color: #14213D">Atención frente a sus rivales</h2>
+          <p style="margin: 4px 0 0; font-size: 13px; color: #5B6675">Búsquedas en Google del modelo frente a su segmento, en puntos</p>
+        </div>
+        <sc-for list="{{atencion}}" as="m" hint-placeholder-count="6">
+          <div style="display: grid; grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr) 36px; align-items: center; gap: 0 6px">
+            <span style="font-size: 14px; color: #14213D">{{m.modelo}}</span>
+            <div style="display: flex; justify-content: flex-end; height: 18px; border-right: 1px solid #9AA5B5">
+              <div style="height: 100%; width: {{m.neg}}; background: #F2A93B; border-radius: 4px 0 0 4px"></div>
+            </div>
+            <div style="display: flex; height: 18px">
+              <div style="height: 100%; width: {{m.pos}}; background: #1D5FD6; border-radius: 0 4px 4px 0"></div>
+            </div>
+            <span style="font-size: 14px; font-weight: 600; color: #14213D; text-align: right">{{m.texto}}</span>
+          </div>
+        </sc-for>
+        <p style="margin: 4px 0 0; font-size: 13px; color: #5B6675">Es la única señal externa que ha anticipado algo las matriculaciones. Anticipa poco, así que se usa como pista, no como orden; se confirma con datos de 2026.</p>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  state = { orden: 'venta' };
+
+  renderVals() {
+    const orden = this.state.orden;
+    const euros = (n) => Math.round(n).toLocaleString('es-ES') + ' €';
+    const base = [
+      { nombre: 'Tiguan Life · km 0', gasto: 1850, leads: 74, citas: 26, ventas: 4, nota: 'Activa desde el 20 de octubre', alerta: false },
+      { nombre: 'T-Cross · Oferta', gasto: 1200, leads: 63, citas: 20, ventas: 3, nota: 'Activa desde el 2 de noviembre', alerta: false },
+      { nombre: 'Golf · Financiación', gasto: 960, leads: 30, citas: 10, ventas: 2, nota: 'Activa desde el 15 de octubre', alerta: false },
+      { nombre: 'ID.4 Pro', gasto: 1400, leads: 24, citas: 10, ventas: 2, nota: 'Coste por lead 2,2 veces su media de 28 días', alerta: true }
+    ];
+    const filas = base.map((c) => ({ ...c, cpv: c.gasto / c.ventas }));
+    filas.sort((a, b) => (orden === 'venta' ? a.cpv - b.cpv : b.gasto - a.gasto));
+    const campanas = filas.map((c) => ({
+      nombre: c.nombre,
+      nota: c.nota,
+      notaColor: c.alerta ? '#8A5A00' : '#5B6675',
+      fondo: c.alerta ? '#FFF8EA' : 'transparent',
+      gasto: euros(c.gasto),
+      leads: String(c.leads),
+      citas: String(c.citas),
+      ventas: String(c.ventas),
+      cpl: euros(c.gasto / c.leads),
+      cpc: euros(c.gasto / c.citas),
+      cpv: euros(c.cpv),
+      pesoLead: c.alerta ? '700' : '400'
+    }));
+    const ordenes = [['venta', 'Por coste por venta'], ['gasto', 'Por gasto']].map(([id, label]) => ({
+      label,
+      pressed: orden === id ? 'true' : 'false',
+      bg: orden === id ? '#FFFFFF' : 'transparent',
+      fg: orden === id ? '#14213D' : '#44505F',
+      pick: () => this.setState({ orden: id })
+    }));
+    const valores = [['T-Cross', 14], ['Golf', 9], ['Polo', 2], ['Tiguan', -3], ['Taigo', -5], ['T-Roc', -8]];
+    const tope = 14;
+    const atencion = valores.map(([modelo, v]) => ({
+      modelo,
+      texto: (v > 0 ? '+' : '') + v,
+      pos: v > 0 ? Math.round((v / tope) * 100) + '%' : '0%',
+      neg: v < 0 ? Math.round((-v / tope) * 100) + '%' : '0%'
+    }));
+    return { campanas, ordenes, atencion };
+  }
+}
+</script>
+</body>
+</html>

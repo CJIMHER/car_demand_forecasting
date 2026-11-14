@@ -1,0 +1,64 @@
+test_discovery_uses_public_page_and_rejects_unknown_host (test_collector.AccessTests.test_discovery_uses_public_page_and_rejects_unknown_host) ... ok
+test_gzip_response_decodes_before_json_parsing (test_collector.AccessTests.test_gzip_response_decodes_before_json_parsing) ... ok
+test_http_date_and_age_validation (test_collector.AccessTests.test_http_date_and_age_validation) ... ok
+test_robots_merge_groups_and_longest_rule (test_collector.AccessTests.test_robots_merge_groups_and_longest_rule) ... ok
+test_server_error_on_robots_is_not_treated_as_permission (test_collector.AccessTests.test_server_error_on_robots_is_not_treated_as_permission) ... ok
+test_specific_agent_and_crawl_delay (test_collector.AccessTests.test_specific_agent_and_crawl_delay) ... ok
+test_unavailable_robots_is_recorded_but_data_401_is_not_retried (test_collector.AccessTests.test_unavailable_robots_is_recorded_but_data_401_is_not_retried) ... ok
+test_anomaly_does_not_mutate_snapshot (test_collector.HistoryTests.test_anomaly_does_not_mutate_snapshot) ... ok
+test_churn_guard_even_when_total_is_constant (test_collector.HistoryTests.test_churn_guard_even_when_total_is_constant) ... ok
+test_complete_live_workflow_with_fixture_transport_and_idempotent_second_run (test_collector.HistoryTests.test_complete_live_workflow_with_fixture_transport_and_idempotent_second_run) ... ok
+test_default_robot_denial_does_not_fetch_data_or_create_observations (test_collector.HistoryTests.test_default_robot_denial_does_not_fetch_data_or_create_observations) ... ok
+test_export_from_db_is_recoverable (test_collector.HistoryTests.test_export_from_db_is_recoverable) ... ok
+test_lifecycle_price_change_missing_return_removed (test_collector.HistoryTests.test_lifecycle_price_change_missing_return_removed) ... ok
+test_process_lock_prevents_parallel_run (test_collector.HistoryTests.test_process_lock_prevents_parallel_run) ... ok
+test_same_day_not_rewritten (test_collector.HistoryTests.test_same_day_not_rewritten) ... ok
+test_transaction_rolls_back_late_failure (test_collector.HistoryTests.test_transaction_rolls_back_late_failure) ... ok
+test_config_validation_and_relative_directory (test_collector.OperationalTests.test_config_validation_and_relative_directory) ... ok
+test_csv_formula_safety (test_collector.OperationalTests.test_csv_formula_safety) ... ok
+test_used_stock_database_cannot_be_mixed_with_new_stock (test_collector.OperationalTests.test_used_stock_database_cannot_be_mixed_with_new_stock) ... ok
+test_complete_pagination_and_recheck (test_collector.PaginationTests.test_complete_pagination_and_recheck) ... ok
+test_concurrent_capture_preserves_page_order_and_completeness (test_collector.PaginationTests.test_concurrent_capture_preserves_page_order_and_completeness) ... ok
+test_duplicates_not_silently_deduplicated (test_collector.PaginationTests.test_duplicates_not_silently_deduplicated) ... ok
+test_empty_stock_is_not_mass_removal (test_collector.PaginationTests.test_empty_stock_is_not_mass_removal) ... ok
+test_failure_in_prefetched_page_aborts_capture (test_collector.PaginationTests.test_failure_in_prefetched_page_aborts_capture) ... ok
+test_membership_changed_during_pass (test_collector.PaginationTests.test_membership_changed_during_pass) ... ok
+test_mid_capture_total_change (test_collector.PaginationTests.test_mid_capture_total_change) ... ok
+test_page_limit_does_not_mark_partial_as_complete (test_collector.PaginationTests.test_page_limit_does_not_mark_partial_as_complete) ... ok
+test_price_coverage_guard (test_collector.PaginationTests.test_price_coverage_guard) ... ok
+test_truncated_response (test_collector.PaginationTests.test_truncated_response) ... ok
+test_wrong_page_size_order_and_page_count (test_collector.PaginationTests.test_wrong_page_size_order_and_page_count) ... ok
+test_delivery_and_price_conditions_changes_are_tracked (test_collector.ParserTests.test_delivery_and_price_conditions_changes_are_tracked) ... ok
+test_fuel_scope_accepts_both_selected_codes_and_rejects_other_fuels (test_collector.ParserTests.test_fuel_scope_accepts_both_selected_codes_and_rejects_other_fuels) ... ok
+test_identity_conflict_and_wrong_scope (test_collector.ParserTests.test_identity_conflict_and_wrong_scope) ... ok
+test_missing_mileage_and_malformed_vin_remain_unknown (test_collector.ParserTests.test_missing_mileage_and_malformed_vin_remain_unknown) ... ok
+test_operational_timestamp_does_not_generate_business_changes (test_collector.ParserTests.test_operational_timestamp_does_not_generate_business_changes) ... ok
+test_plate_is_preserved_only_if_explicitly_published (test_collector.ParserTests.test_plate_is_preserved_only_if_explicitly_published) ... ok
+test_price_precision_and_invalid_values (test_collector.ParserTests.test_price_precision_and_invalid_values) ... ok
+test_price_reference_and_finance_terms_are_separate (test_collector.ParserTests.test_price_reference_and_finance_terms_are_separate) ... ok
+test_real_other_fuels_response_contract (test_collector.ParserTests.test_real_other_fuels_response_contract) ... ok
+test_real_second_and_last_page (test_collector.ParserTests.test_real_second_and_last_page) ... ok
+test_reservation_ui_switch_is_not_reservation (test_collector.ParserTests.test_reservation_ui_switch_is_not_reservation) ... ok
+test_unregistered_new_car_and_unknown_mileage_are_not_invented (test_collector.ParserTests.test_unregistered_new_car_and_unknown_mileage_are_not_invented) ... ok
+test_default_scope_is_exactly_the_legacy_namespace (test_fuel_config.FuelConfigTests.test_default_scope_is_exactly_the_legacy_namespace) ... ok
+test_explicit_empty_null_scalar_or_invalid_codes_fail (test_fuel_config.FuelConfigTests.test_explicit_empty_null_scalar_or_invalid_codes_fail) ... ok
+test_missing_fuels_in_an_old_config_load_as_b_d (test_fuel_config.FuelConfigTests.test_missing_fuels_in_an_old_config_load_as_b_d) ... ok
+test_no_mutable_scope_or_filter_state_leaks_between_configurations (test_fuel_config.FuelConfigTests.test_no_mutable_scope_or_filter_state_leaks_between_configurations) ... ok
+test_normalized_record_and_business_hash_match_version_100 (test_fuel_config.FuelConfigTests.test_normalized_record_and_business_hash_match_version_100) ... ok
+test_order_case_whitespace_and_duplicates_do_not_change_scope (test_fuel_config.FuelConfigTests.test_order_case_whitespace_and_duplicates_do_not_change_scope) ... ok
+test_other_fuels_accepted_only_in_their_config (test_fuel_config.FuelConfigTests.test_other_fuels_accepted_only_in_their_config) ... ok
+test_source_and_api_filters_share_the_canonical_selection (test_fuel_config.FuelConfigTests.test_source_and_api_filters_share_the_canonical_selection) ... ok
+test_task_names_preserve_legacy_and_separate_other_fuels (test_fuel_config.FuelConfigTests.test_task_names_preserve_legacy_and_separate_other_fuels) ... ok
+test_legacy_database_opens_and_closes_without_changing_any_bytes (test_fuel_config.LegacyDatabaseTests.test_legacy_database_opens_and_closes_without_changing_any_bytes) ... ok
+test_legacy_history_continues_without_false_new_or_changed_events (test_fuel_config.LegacyDatabaseTests.test_legacy_history_continues_without_false_new_or_changed_events) ... ok
+test_other_database_gets_its_own_scope_and_never_relabels_legacy (test_fuel_config.LegacyDatabaseTests.test_other_database_gets_its_own_scope_and_never_relabels_legacy) ... ok
+test_other_fuels_end_to_end_preserves_both_query_values_and_scope (test_fuel_config.LegacyDatabaseTests.test_other_fuels_end_to_end_preserves_both_query_values_and_scope) ... ok
+test_wrong_fuels_fail_without_rewriting_the_legacy_database (test_fuel_config.LegacyDatabaseTests.test_wrong_fuels_fail_without_rewriting_the_legacy_database) ... ok
+test_wrong_scope_run_and_export_fail_before_network_or_exports (test_fuel_config.LegacyDatabaseTests.test_wrong_scope_run_and_export_fail_before_network_or_exports) ... 2026-11-13 08:39:04,517 ERROR CollectorError: Base de datos de otro ámbito; usa otra carpeta data_dir para estos combustibles.
+2026-11-13 08:39:04,518 ERROR CollectorError: Base de datos de otro ámbito; usa otra carpeta data_dir para estos combustibles.
+ok
+
+----------------------------------------------------------------------
+Ran 57 tests in 0.076s
+
+OK

@@ -1,0 +1,40 @@
+{
+  "source": "https://www.volkswagen.es/es/stock-resultados.html",
+  "filters": {
+    "t_manuf": "BQ",
+    "t_cartype": "U"
+  },
+  "samples": [
+    {
+      "file": "sample1.json.gz",
+      "capture_day": "2026-10-31",
+      "complete_snapshot": false,
+      "api_page": 1,
+      "page_items": 12,
+      "rows": 12,
+      "reported_total": 2921,
+      "sha256_uncompressed": "df860dec0050f536b35fe6c5036eca6e6f87abdf771fe20a6f7beaf711905873"
+    },
+    {
+      "file": "sample2_24.json.gz",
+      "capture_day": "2026-10-31",
+      "complete_snapshot": false,
+      "api_page": 2,
+      "page_items": 12,
+      "rows": 12,
+      "reported_total": 2921,
+      "sha256_uncompressed": "2b0d54f6973a2e2a02650bbb853c35e0da0b3cbbc9f9b05909e7e730f1ed1649"
+    },
+    {
+      "file": "sample_last_20261101.json.gz",
+      "capture_day": "2026-11-01",
+      "complete_snapshot": false,
+      "api_page": 244,
+      "page_items": 12,
+      "rows": 6,
+      "reported_total": 2922,
+      "sha256_uncompressed": "4cd0a676b10113ccab465241ea527425d4c90052592a0618f5fb4b96a4ef91c9"
+    }
+  ],
+  "note": "Muestras diagnósticas; no se importan automáticamente al histórico."
+}

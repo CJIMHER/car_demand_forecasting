@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel · Dirección general</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F6F5F1}
+a{color:#1D5FD6}a:hover{color:#174BA8}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #14213D; background: #F6F5F1; min-height: 100vh">
+  <header style="background: #0F1B2D; color: #F3F1EA">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 10px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1D5FD6"></rect><path d="M7 9 H13 V14 H18 V19 H25" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"></path></svg>
+        <div>
+          <div style="font-family: 'Space Grotesk', Inter, sans-serif; font-weight: 600; font-size: 16px; color: #F3F1EA">Stock · Demanda · Campañas</div>
+          <div style="font-size: 12px; color: #BFCBDB">Volkswagen Sevilla</div>
+        </div>
+      </div>
+      <nav aria-label="Secciones del panel" style="display: flex; flex-wrap: wrap; gap: 4px">
+        <a href="Main.dc.html" aria-current="page" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: rgba(255,255,255,0.14); color: #FFFFFF; font-weight: 600; font-size: 14px; text-decoration: none">Dirección</a>
+        <a href="Ventas.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Ventas</a>
+        <a href="Marketing.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Marketing</a>
+        <a href="Mercado.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Mercado</a>
+      </nav>
+      <div style="margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 13px; color: #BFCBDB">
+        <span style="display: inline-flex; align-items: center; gap: 6px"><svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill="#3DBE8B"></circle></svg>Fuentes al día · 07:30</span>
+        <span style="padding: 6px 10px; border: 1px solid #2A3B55; border-radius: 999px; color: #F3F1EA">Dirección general</span>
+      </div>
+    </div>
+  </header>
+  <div role="note" style="background: #FFF1D6; color: #6B4A00; font-size: 13px; text-align: center; padding: 6px 16px">Maqueta con datos ficticios: sirve para decidir qué se ve y cómo, no para leer cifras.</div>
+
+  <main style="max-width: 1280px; margin: 0 auto; padding: 32px 24px 48px; display: flex; flex-direction: column; gap: 24px">
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div>
+        <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 32px; font-weight: 600; color: #14213D">Así está el negocio hoy</h1>
+        <p style="margin: 6px 0 0; font-size: 15px; color: #5B6675">Jueves 12 de noviembre · comparado con lo previsto para estas alturas del mes</p>
+      </div>
+      <div role="group" aria-label="Tipo de stock" style="display: inline-flex; padding: 4px; background: #E7E9EC; border-radius: 10px; gap: 4px">
+        <sc-for list="{{opciones}}" as="o" hint-placeholder-count="3">
+          <button type="button" aria-pressed="{{o.pressed}}" onClick="{{o.pick}}" style="min-height: 40px; padding: 0 16px; border: 0; border-radius: 8px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; background: {{o.bg}}; color: {{o.fg}}">{{o.label}}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px">
+      <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+        <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+            <span style="font-size: 14px; color: #5B6675; font-weight: 500">{{k.label}}</span>
+            <span style="font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: {{k.bg}}; color: {{k.fg}}">{{k.badge}}</span>
+          </div>
+          <div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 40px; font-weight: 600; line-height: 1.1; color: #14213D">{{k.valor}}</div>
+          <div style="font-size: 13px; color: #44505F">{{k.sub}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px">
+      <section aria-labelledby="t-ventas" style="flex: 999 1 560px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px 20px 16px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px">
+          <h2 id="t-ventas" style="margin: 0; font-size: 17px; font-weight: 600; color: #14213D">Ventas acumuladas del mes frente a lo previsto</h2>
+          <span style="font-size: 13px; color: #5B6675">{{rangoMes}}</span>
+        </div>
+        <svg viewBox="0 0 640 260" role="img" aria-label="Ventas acumuladas del mes: la línea real va por debajo de la banda prevista" style="width: 100%; height: auto; display: block">
+          <line x1="48" y1="30" x2="620" y2="30" stroke="#E7E9EC"></line>
+          <line x1="48" y1="130" x2="620" y2="130" stroke="#E7E9EC"></line>
+          <line x1="48" y1="230" x2="620" y2="230" stroke="#9AA5B5"></line>
+          <text x="40" y="34" text-anchor="end" font-size="12" fill="#5B6675">{{yMax}}</text>
+          <text x="40" y="134" text-anchor="end" font-size="12" fill="#5B6675">{{yMid}}</text>
+          <text x="40" y="234" text-anchor="end" font-size="12" fill="#5B6675">0</text>
+          <polygon points="{{banda}}" fill="#1D5FD6" fill-opacity="0.12"></polygon>
+          <polyline points="{{previsto}}" fill="none" stroke="#1D5FD6" stroke-width="2" stroke-dasharray="6 5"></polyline>
+          <line x1="{{hoyX}}" y1="24" x2="{{hoyX}}" y2="230" stroke="#9AA5B5" stroke-dasharray="3 4"></line>
+          <text x="{{hoyX}}" y="18" text-anchor="middle" font-size="12" fill="#44505F">hoy</text>
+          <polyline points="{{real}}" fill="none" stroke="#14213D" stroke-width="3" stroke-linejoin="round"></polyline>
+          <circle cx="{{hoyX}}" cy="{{ultimoY}}" r="5" fill="#F2A93B" stroke="#14213D" stroke-width="2"></circle>
+          <text x="{{x1}}" y="250" text-anchor="middle" font-size="12" fill="#5B6675">día 1</text>
+          <text x="{{x10}}" y="250" text-anchor="middle" font-size="12" fill="#5B6675">10</text>
+          <text x="{{x20}}" y="250" text-anchor="middle" font-size="12" fill="#5B6675">20</text>
+          <text x="{{x30}}" y="250" text-anchor="middle" font-size="12" fill="#5B6675">30</text>
+        </svg>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: #44505F">
+          <span style="display: inline-flex; align-items: center; gap: 6px"><svg width="18" height="4" viewBox="0 0 18 4" aria-hidden="true"><rect width="18" height="4" rx="2" fill="#14213D"></rect></svg>Real</span>
+          <span style="display: inline-flex; align-items: center; gap: 6px"><svg width="18" height="4" viewBox="0 0 18 4" aria-hidden="true"><line x1="0" y1="2" x2="18" y2="2" stroke="#1D5FD6" stroke-width="2" stroke-dasharray="5 3"></line></svg>Previsto</span>
+          <span style="display: inline-flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#1D5FD6" fill-opacity="0.18"></rect></svg>Lo normal: 8 de cada 10 meses caen aquí</span>
+        </div>
+      </section>
+
+      <section aria-labelledby="t-alertas" style="flex: 1 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 4px">
+        <h2 id="t-alertas" style="margin: 0 0 8px; font-size: 17px; font-weight: 600; color: #14213D">Alertas de hoy</h2>
+        <div style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="flex: none; margin-top: 5px"><circle cx="5" cy="5" r="5" fill="#F2A93B"></circle></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; color: #14213D">Ventas del mes por debajo de lo previsto: 21 frente a 23–29.</span>
+            <span style="font-size: 12px; color: #5B6675">Ventas · para dirección y jefe de ventas</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="flex: none; margin-top: 5px"><circle cx="5" cy="5" r="5" fill="#F2A93B"></circle></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; color: #14213D">T-Roc 1.0 TSI Style supera 90 días; su probabilidad de salida baja al 48 %.</span>
+            <span style="font-size: 12px; color: #5B6675">Stock · para el jefe de ventas</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="flex: none; margin-top: 5px"><circle cx="5" cy="5" r="5" fill="#F2A93B"></circle></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; color: #14213D">ID.4 Pro: el coste por lead es 2,2 veces su media de 28 días.</span>
+            <span style="font-size: 12px; color: #5B6675">Campañas · para marketing</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="flex: none; margin-top: 5px"><circle cx="5" cy="5" r="5" fill="#1D5FD6"></circle></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; color: #14213D">Tiguan Life: 9 unidades similares en Sevilla, de media un 2,1 % más baratas.</span>
+            <span style="font-size: 12px; color: #5B6675">Mercado · para el jefe de ventas</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="flex: none; margin-top: 5px"><circle cx="5" cy="5" r="5" fill="#1D5FD6"></circle></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; color: #14213D">T-Cross gana atención frente a sus rivales (+14 puntos): buen momento para una campaña.</span>
+            <span style="font-size: 12px; color: #5B6675">Campañas · para marketing</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px">
+      <section aria-labelledby="t-edad" style="flex: 999 1 560px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px">
+          <h2 id="t-edad" style="margin: 0; font-size: 17px; font-weight: 600; color: #14213D">Stock por días en exposición</h2>
+          <span style="font-size: 13px; color: #5B6675">Vehículos</span>
+        </div>
+        <sc-for list="{{edad}}" as="e" hint-placeholder-count="4">
+          <div style="display: grid; grid-template-columns: 110px minmax(0, 1fr) 40px; align-items: center; gap: 12px">
+            <span style="font-size: 14px; color: #44505F">{{e.label}}</span>
+            <div style="height: 22px; background: #F1F2F4; border-radius: 6px; overflow: hidden">
+              <div style="height: 100%; width: {{e.pct}}; background: {{e.color}}; border-radius: 6px"></div>
+            </div>
+            <span style="font-size: 14px; font-weight: 600; color: #14213D; text-align: right">{{e.n}}</span>
+          </div>
+        </sc-for>
+        <p style="margin: 4px 0 0; font-size: 13px; color: #5B6675">En naranja, lo que ya supera los 90 días: ahí están casi todas las alertas de stock.</p>
+      </section>
+
+      <section aria-labelledby="t-mercado" style="flex: 1 1 340px; min-width: 0; background: #0F1B2D; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 10px; color: #F3F1EA">
+        <h2 id="t-mercado" style="margin: 0; font-size: 17px; font-weight: 600; color: #F3F1EA">El mercado en Sevilla</h2>
+        <p style="margin: 0; font-size: 14px; color: #BFCBDB">Stock Volkswagen publicado por otros concesionarios</p>
+        <div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 40px; font-weight: 600; line-height: 1.1">{{mercado}}</div>
+        <p style="margin: 0; font-size: 14px; color: #BFCBDB">{{mercadoSub}}</p>
+        <p style="margin: 6px 0 0; font-size: 14px; color: #F3F1EA">Nuestro peso en lo publicado: <strong>{{peso}}</strong></p>
+        <a href="Mercado.dc.html" style="margin-top: auto; align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: #1D5FD6; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">Ver el mercado</a>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  state = { tipo: 'todo' };
+
+  renderVals() {
+    const tipo = this.state.tipo;
+    const tonos = {
+      neutro: { bg: '#EEF0F3', fg: '#44505F' },
+      aviso: { bg: '#FFF1D6', fg: '#8A5A00' },
+      info: { bg: '#E3ECFC', fg: '#174BA8' }
+    };
+    const datos = {
+      todo: {
+        kpis: [
+          { label: 'Stock total', valor: '142', sub: 'VN 96 · VO 46 · +6 frente a octubre', badge: 'Estable', tono: 'neutro' },
+          { label: 'Antigüedad media', valor: '74 días', sub: 'Objetivo: 60 días', badge: 'Por encima', tono: 'aviso' },
+          { label: 'Ventas del mes', valor: '21', sub: 'Previsto a estas alturas: 23–29', badge: 'Por debajo', tono: 'aviso' },
+          { label: 'Alertas abiertas', valor: '5', sub: '2 de stock · 2 de campañas · 1 de ventas', badge: '2 nuevas hoy', tono: 'info' }
+        ],
+        real: [1, 3, 4, 6, 8, 9, 11, 13, 15, 17, 19, 21], ritmo: 2.17, max: 80,
+        edad: [38, 34, 29, 41],
+        mercado: '680', mercadoSub: '412 nuevos · 268 de ocasión', peso: '17 %'
+      },
+      vn: {
+        kpis: [
+          { label: 'Stock VN', valor: '96', sub: '+4 frente a octubre', badge: 'Estable', tono: 'neutro' },
+          { label: 'Antigüedad media', valor: '71 días', sub: 'Objetivo: 60 días', badge: 'Por encima', tono: 'aviso' },
+          { label: 'Ventas VN del mes', valor: '13', sub: 'Previsto a estas alturas: 14–18', badge: 'Por debajo', tono: 'aviso' },
+          { label: 'Alertas abiertas', valor: '3', sub: '1 de stock · 2 de campañas', badge: '1 nueva hoy', tono: 'info' }
+        ],
+        real: [0, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13], ritmo: 1.33, max: 50,
+        edad: [28, 24, 18, 26],
+        mercado: '412', mercadoSub: 'vehículos nuevos', peso: '19 %'
+      },
+      vo: {
+        kpis: [
+          { label: 'Stock VO', valor: '46', sub: '+2 frente a octubre', badge: 'Estable', tono: 'neutro' },
+          { label: 'Antigüedad media', valor: '80 días', sub: 'Objetivo: 60 días', badge: 'Por encima', tono: 'aviso' },
+          { label: 'Ventas VO del mes', valor: '8', sub: 'Previsto a estas alturas: 9–11', badge: 'Por debajo', tono: 'aviso' },
+          { label: 'Alertas abiertas', valor: '2', sub: '1 de stock · 1 de mercado', badge: '1 nueva hoy', tono: 'info' }
+        ],
+        real: [1, 1, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8], ritmo: 0.83, max: 30,
+        edad: [10, 10, 11, 15],
+        mercado: '268', mercadoSub: 'vehículos de ocasión', peso: '15 %'
+      }
+    };
+    const d = datos[tipo];
+
+    const opciones = [['todo', 'Todo'], ['vn', 'Nuevos (VN)'], ['vo', 'Ocasión (VO)']].map(([id, label]) => ({
+      label,
+      pressed: tipo === id ? 'true' : 'false',
+      bg: tipo === id ? '#FFFFFF' : 'transparent',
+      fg: tipo === id ? '#14213D' : '#44505F',
+      pick: () => this.setState({ tipo: id })
+    }));
+
+    const kpis = d.kpis.map((k) => ({ ...k, bg: tonos[k.tono].bg, fg: tonos[k.tono].fg }));
+
+    const X = (dia) => 48 + dia * (572 / 30);
+    const Y = (v) => 230 - v * (200 / d.max);
+    const p = (x, y) => x.toFixed(1) + ',' + y.toFixed(1);
+    const arriba = [];
+    const abajo = [];
+    for (let i = 0; i <= 30; i++) {
+      arriba.push(p(X(i), Y(d.ritmo * i * 1.12)));
+      abajo.unshift(p(X(i), Y(d.ritmo * i * 0.88)));
+    }
+    const real = [p(X(0), Y(0))].concat(d.real.map((v, i) => p(X(i + 1), Y(v))));
+
+    const etiquetas = ['0–30 días', '31–60 días', '61–90 días', 'Más de 90'];
+    const maxEdad = Math.max(...d.edad);
+    const edad = d.edad.map((n, i) => ({
+      label: etiquetas[i],
+      n: String(n),
+      pct: Math.round((n / maxEdad) * 100) + '%',
+      color: i === 3 ? '#F2A93B' : '#1D5FD6'
+    }));
+
+    return {
+      opciones,
+      kpis,
+      banda: arriba.concat(abajo).join(' '),
+      previsto: p(X(0), Y(0)) + ' ' + p(X(30), Y(d.ritmo * 30)),
+      real: real.join(' '),
+      hoyX: X(12).toFixed(1),
+      ultimoY: Y(d.real[11]).toFixed(1),
+      yMax: String(d.max),
+      yMid: String(d.max / 2),
+      x1: X(1).toFixed(1),
+      x10: X(10).toFixed(1),
+      x20: X(20).toFixed(1),
+      x30: X(30).toFixed(1),
+      rangoMes: 'Previsión a fin de mes: ' + Math.round(d.ritmo * 30 * 0.88) + '–' + Math.round(d.ritmo * 30 * 1.12),
+      edad,
+      mercado: d.mercado,
+      mercadoSub: d.mercadoSub,
+      peso: d.peso
+    };
+  }
+}
+</script>
+</body>
+</html>

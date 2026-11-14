@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel · Mercado</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F6F5F1}
+a{color:#1D5FD6}a:hover{color:#174BA8}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #14213D; background: #F6F5F1; min-height: 100vh">
+  <header style="background: #0F1B2D; color: #F3F1EA">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 10px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1D5FD6"></rect><path d="M7 9 H13 V14 H18 V19 H25" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"></path></svg>
+        <div>
+          <div style="font-family: 'Space Grotesk', Inter, sans-serif; font-weight: 600; font-size: 16px; color: #F3F1EA">Stock · Demanda · Campañas</div>
+          <div style="font-size: 12px; color: #BFCBDB">Volkswagen Sevilla</div>
+        </div>
+      </div>
+      <nav aria-label="Secciones del panel" style="display: flex; flex-wrap: wrap; gap: 4px">
+        <a href="Main.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Dirección</a>
+        <a href="Ventas.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Ventas</a>
+        <a href="Marketing.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Marketing</a>
+        <a href="Mercado.dc.html" aria-current="page" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: rgba(255,255,255,0.14); color: #FFFFFF; font-weight: 600; font-size: 14px; text-decoration: none">Mercado</a>
+      </nav>
+      <div style="margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 13px; color: #BFCBDB">
+        <span style="display: inline-flex; align-items: center; gap: 6px"><svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill="#3DBE8B"></circle></svg>Fuentes al día · 07:30</span>
+        <span style="padding: 6px 10px; border: 1px solid #2A3B55; border-radius: 999px; color: #F3F1EA">Jefe de ventas</span>
+      </div>
+    </div>
+  </header>
+  <div role="note" style="background: #FFF1D6; color: #6B4A00; font-size: 13px; text-align: center; padding: 6px 16px">Maqueta con datos ficticios: sirve para decidir qué se ve y cómo, no para leer cifras.</div>
+
+  <main style="max-width: 1280px; margin: 0 auto; padding: 32px 24px 48px; display: flex; flex-direction: column; gap: 24px">
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div>
+        <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 32px; font-weight: 600; color: #14213D">El mercado Volkswagen, hoy</h1>
+        <p style="margin: 6px 0 0; font-size: 15px; color: #5B6675">Stock publicado en la web oficial de Volkswagen por toda la red de concesionarios</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px">
+        <div role="group" aria-label="Zona" style="display: inline-flex; padding: 4px; background: #E7E9EC; border-radius: 10px; gap: 4px">
+          <sc-for list="{{zonas}}" as="o" hint-placeholder-count="3">
+            <button type="button" aria-pressed="{{o.pressed}}" onClick="{{o.pick}}" style="min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; background: {{o.bg}}; color: {{o.fg}}">{{o.label}}</button>
+          </sc-for>
+        </div>
+        <div role="group" aria-label="Tipo de stock" style="display: inline-flex; padding: 4px; background: #E7E9EC; border-radius: 10px; gap: 4px">
+          <sc-for list="{{tipos}}" as="o" hint-placeholder-count="2">
+            <button type="button" aria-pressed="{{o.pressed}}" onClick="{{o.pick}}" style="min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; background: {{o.bg}}; color: {{o.fg}}">{{o.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 8px 12px">
+      <span style="display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 999px; font-size: 13px; color: #14213D"><svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill="#2E9E73"></circle></svg>Ocasión: captura completa hoy a las 04:12 · 3.136 anuncios en España</span>
+      <span style="display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 999px; font-size: 13px; color: #14213D"><svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill="#2E9E73"></circle></svg>Nuevos: captura completa hoy a las 05:41 · 4.780 anuncios (gasolina y diésel)</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px">
+      <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+        <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 6px">
+          <span style="font-size: 14px; color: #5B6675; font-weight: 500">{{k.label}}</span>
+          <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 36px; font-weight: 600; color: #14213D">{{k.valor}}</span>
+          <span style="font-size: 13px; color: #44505F">{{k.sub}}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+      <section aria-labelledby="t-modelos" style="flex: 999 1 620px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="t-modelos" style="margin: 0; font-size: 17px; font-weight: 600; color: #14213D">Por modelo · {{titulo}}</h2>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 620px; border-collapse: collapse; font-size: 14px">
+            <thead>
+              <tr style="text-align: right; color: #5B6675; font-size: 13px">
+                <th scope="col" style="padding: 8px 8px 8px 0; font-weight: 600; text-align: left">Modelo</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Anuncios</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Frente a hace 7 días</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Altas 7 días</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Ausencias 7 días</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Precio mediano</th>
+                <th scope="col" style="padding: 8px 0 8px 8px; font-weight: 600">Días publicado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{modelos}}" as="m" hint-placeholder-count="10">
+                <tr style="border-top: 1px solid #EEF0F3; text-align: right">
+                  <td style="padding: 10px 8px 10px 0; text-align: left; font-weight: 600; color: #14213D">{{m.modelo}}</td>
+                  <td style="padding: 10px 8px">{{m.stock}}</td>
+                  <td style="padding: 10px 8px; color: {{m.varColor}}; font-weight: 600">{{m.variacion}}</td>
+                  <td style="padding: 10px 8px">{{m.altas}}</td>
+                  <td style="padding: 10px 8px">{{m.ausencias}}</td>
+                  <td style="padding: 10px 8px">{{m.precio}}</td>
+                  <td style="padding: 10px 0 10px 8px">{{m.dias}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: #5B6675">{{nota}}</p>
+      </section>
+
+      <section aria-labelledby="t-serie" style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="t-serie" style="margin: 0; font-size: 17px; font-weight: 600; color: #14213D">Anuncios publicados, últimos 90 días</h2>
+        <svg viewBox="0 0 400 220" role="img" aria-label="Evolución diaria del número de anuncios publicados en los últimos 90 días" style="width: 100%; height: auto; display: block">
+          <line x1="44" y1="20" x2="388" y2="20" stroke="#EEF0F3"></line>
+          <line x1="44" y1="100" x2="388" y2="100" stroke="#EEF0F3"></line>
+          <line x1="44" y1="180" x2="388" y2="180" stroke="#9AA5B5"></line>
+          <text x="38" y="24" text-anchor="end" font-size="11" fill="#5B6675">{{serie.yMax}}</text>
+          <text x="38" y="104" text-anchor="end" font-size="11" fill="#5B6675">{{serie.yMid}}</text>
+          <text x="38" y="184" text-anchor="end" font-size="11" fill="#5B6675">{{serie.yMin}}</text>
+          <polyline points="{{serie.puntos}}" fill="none" stroke="#1D5FD6" stroke-width="2.5" stroke-linejoin="round"></polyline>
+          <circle cx="388" cy="{{serie.yHoy}}" r="4.5" fill="#14213D"></circle>
+          <text x="44" y="200" font-size="11" fill="#5B6675">hace 90 días</text>
+          <text x="388" y="200" text-anchor="end" font-size="11" fill="#5B6675">hoy</text>
+        </svg>
+        <p style="margin: 0; font-size: 13px; color: #5B6675">En el panel real, esta serie empieza el día que arrancaron los scrapers y crece con cada captura.</p>
+        <p style="margin: 0; padding: 12px; background: #F6F5F1; border-radius: 8px; font-size: 13px; color: #44505F">Desaparecer de la web no es vender: una ausencia puede ser una venta, un traslado o una retirada. Solo cuenta como baja tras tres capturas seguidas sin verlo.</p>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  state = { zona: 'sevilla', tipo: 'VN' };
+
+  renderVals() {
+    const { zona, tipo } = this.state;
+    const fmt = (n) => Math.round(n).toLocaleString('es-ES');
+    const base = {
+      VN: [
+        ['T-Roc', 98, 2, 31900, 52], ['T-Cross', 91, -3, 25400, 41], ['Tiguan', 66, 5, 41200, 63], ['Golf', 45, -1, 31500, 47],
+        ['Taigo', 44, 0, 26800, 58], ['Polo', 28, -4, 21900, 39], ['Tayron', 24, 8, 49900, 71], ['Golf Variant', 10, 0, 33900, 66], ['Passat', 6, -14, 47300, 80]
+      ],
+      VO: [
+        ['T-Roc', 60, -2, 24900, 44], ['T-Cross', 47, 4, 19500, 37], ['Taigo', 38, 1, 21900, 41], ['Golf', 36, -3, 21400, 46],
+        ['Tiguan', 33, 0, 29900, 52], ['Polo', 24, 5, 15400, 33], ['Touran', 7, 0, 22500, 61], ['Passat', 6, -14, 27900, 58],
+        ['Golf Variant', 6, 0, 22900, 49], ['ID.3', 4, 0, 23900, 69], ['ID.4', 4, -20, 31500, 74], ['Tayron', 3, 50, 44900, 28]
+      ]
+    };
+    const factor = { sevilla: { VN: 1, VO: 1 }, andalucia: { VN: 1.68, VO: 1.75 }, espana: { VN: 11.6, VO: 11.7 } }[zona][tipo];
+    const nombresZona = { sevilla: 'Sevilla', andalucia: 'Andalucía', espana: 'España' };
+    const nuestro = { VN: 96, VO: 46 };
+
+    const filas = base[tipo];
+    const total = filas.reduce((s, f) => s + f[1], 0) * factor;
+    const modelos = filas.map(([modelo, n, varPct, precio, dias]) => ({
+      modelo,
+      stock: fmt(n * factor),
+      variacion: (varPct > 0 ? '+' : '') + varPct + ' %',
+      varColor: varPct > 0 ? '#174BA8' : (varPct < 0 ? '#8A5A00' : '#44505F'),
+      altas: fmt(Math.max(1, n * factor * 0.11)),
+      ausencias: fmt(Math.max(1, n * factor * 0.1)),
+      precio: fmt(precio) + ' €',
+      dias: String(dias)
+    }));
+
+    const altasHoy = (tipo === 'VN' ? 9 : 6) * factor;
+    const ausenciasHoy = (tipo === 'VN' ? 7 : 5) * factor;
+    const kpis = [
+      { label: 'Anuncios publicados', valor: fmt(total), sub: (tipo === 'VN' ? 'Nuevos' : 'De ocasión') + ' · ' + nombresZona[zona] },
+      { label: 'Altas hoy', valor: fmt(altasHoy), sub: 'Anuncios que no estaban ayer' },
+      { label: 'Ausencias hoy', valor: fmt(ausenciasHoy), sub: 'Estaban ayer y hoy no' },
+      zona === 'sevilla'
+        ? { label: 'Nuestro peso en Sevilla', valor: Math.round((nuestro[tipo] / (nuestro[tipo] + total)) * 100) + ' %', sub: 'Nuestro stock frente a todo lo publicado' }
+        : { label: 'Concesionarios con stock', valor: fmt((tipo === 'VN' ? 14 : 12) * factor), sub: 'Con al menos un anuncio publicado' }
+    ];
+
+    const puntosValor = [];
+    for (let i = 0; i <= 90; i++) {
+      puntosValor.push(total * (0.94 + 0.04 * Math.sin(i / 9) + 0.015 * Math.sin(i / 2.3) + 0.0007 * i));
+    }
+    puntosValor[90] = total;
+    const minV = Math.min(...puntosValor) * 0.98;
+    const maxV = Math.max(...puntosValor) * 1.02;
+    const X = (i) => 44 + i * (344 / 90);
+    const Y = (v) => 180 - ((v - minV) / (maxV - minV)) * 160;
+    const puntos = puntosValor.map((v, i) => X(i).toFixed(1) + ',' + Y(v).toFixed(1)).join(' ');
+
+    const boton = (actual, id, label, setter) => ({
+      label,
+      pressed: actual === id ? 'true' : 'false',
+      bg: actual === id ? '#FFFFFF' : 'transparent',
+      fg: actual === id ? '#14213D' : '#44505F',
+      pick: setter
+    });
+
+    return {
+      zonas: [['sevilla', 'Sevilla'], ['andalucia', 'Andalucía'], ['espana', 'España']].map(([id, label]) => boton(zona, id, label, () => this.setState({ zona: id }))),
+      tipos: [['VN', 'Nuevos (VN)'], ['VO', 'Ocasión (VO)']].map(([id, label]) => boton(tipo, id, label, () => this.setState({ tipo: id }))),
+      kpis,
+      modelos,
+      titulo: (tipo === 'VN' ? 'nuevos' : 'ocasión') + ' en ' + nombresZona[zona],
+      nota: tipo === 'VN'
+        ? 'Faltan los eléctricos (familia ID) y los híbridos enchufables: el scraper de nuevos solo recoge gasolina y diésel por ahora.'
+        : 'El precio y los días son medianas de los anuncios publicados hoy.',
+      serie: {
+        puntos,
+        yMax: fmt(maxV),
+        yMid: fmt((maxV + minV) / 2),
+        yMin: fmt(minV),
+        yHoy: Y(total).toFixed(1)
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

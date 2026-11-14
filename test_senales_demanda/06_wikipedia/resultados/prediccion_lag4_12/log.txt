@@ -1,0 +1,42 @@
+0. CCF media prewhitened 2018-2022, cat47, sin COVID (39 modelos):
+   lag0:-0.012  lag1:-0.032  lag2:+0.060  lag3:-0.021  lag4:+0.049  lag5:-0.114  lag6:-0.029  lag7:+0.002  lag8:+0.027  lag9:+0.030  lag10:-0.060  lag11:+0.037  lag12:-0.091
+   Lag 4 ocupa el puesto 2 de 12 (lags 1-12) en 2018-2022.
+
+1. Panel por especificacion y lag (h=4: placebos 4..12):
+       rol    cat  h  glag  modelos  mejora_media_%  mejora_mediana_%  %_mejoran  CW_sig5  p_binom  %_coef_pos  p_signo
+ principal  cat47  4     4     39.0          -1.178            -1.026     25.641      3.0    0.309      79.487    0.000
+ principal  cat47  4     5     39.0          -1.339            -0.905     23.077      6.0    0.012      25.641    0.999
+ principal  cat47  4     6     39.0          -0.710            -0.722     35.897      5.0    0.044      82.051    0.000
+ principal  cat47  4     7     39.0          -1.136            -1.110     28.205      3.0    0.309      30.769    0.995
+ principal  cat47  4     8     39.0          -0.939            -0.884     30.769      3.0    0.309      51.282    0.500
+ principal  cat47  4     9     39.0          -0.711            -0.221     41.026      7.0    0.003      84.615    0.000
+ principal  cat47  4    10     39.0          -1.027            -0.668     28.205      2.0    0.587      43.590    0.832
+ principal  cat47  4    11     39.0          -1.187            -1.153     25.641      1.0    0.865      53.846    0.375
+ principal  cat47  4    12     39.0          -2.270            -2.107     35.897      6.0    0.012      10.256    1.000
+secundaria  cat47  1     4     39.0          -1.985            -1.549     25.641      0.0    1.000      87.179    0.000
+secundaria cat473  1     4     41.0          -1.043            -0.804     34.146      4.0    0.147      82.927    0.000
+secundaria cat473  4     4     41.0          -1.633            -0.800     39.024      6.0    0.016      85.366    0.000
+secundaria cat473  4     5     41.0          -0.180            -0.382     43.902      4.0    0.147      29.268    0.998
+secundaria cat473  4     6     41.0          -0.587            -0.765     29.268      4.0    0.147      60.976    0.106
+secundaria cat473  4     7     41.0          -1.162            -1.008     29.268      1.0    0.878      26.829    0.999
+secundaria cat473  4     8     41.0          -1.402            -1.316     34.146      4.0    0.147      31.707    0.994
+secundaria cat473  4     9     41.0           1.109             0.373     60.976     14.0    0.000      95.122    0.000
+secundaria cat473  4    10     41.0          -1.504            -0.393     34.146      4.0    0.147      51.220    0.500
+secundaria cat473  4    11     41.0          -1.095            -0.894     26.829      5.0    0.053      58.537    0.174
+secundaria cat473  4    12     41.0          -2.417            -1.474     34.146      6.0    0.016      19.512    1.000
+
+2. Surrogates (2) principal: mejora media obs -1.18% (p=0.667, p95 sur -0.85%), mediana obs -1.03% (p=0.667)
+
+3. Regla de decision prerregistrada:
+   (1) mejora > p95 surrogates y mediana > 0: False
+   (2) lag 4 es el mejor entre 4..12: False (mejor: lag 6)
+   (3) coeficiente positivo en la mayoria (p<0.05): True (79% positivos)
+   => NO CONFIRMADO
+
+Modelos VW (principal, lag 4):
+   modelo  n   gain  p_CW   coef
+  vw_troc 36 -1.703 0.757  0.215
+vw_tiguan 36 -0.469 0.571  0.319
+  vw_golf 36 -0.157 0.557  0.148
+vw_tcross 36 -8.037 0.760  0.187
+  vw_polo 36 -0.855 0.913 -0.170

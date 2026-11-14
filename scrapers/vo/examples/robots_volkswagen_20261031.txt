@@ -1,0 +1,86 @@
+### whitelist user agents / pages to visit for app-paths 
+
+User-agent: Baiduspider
+User-agent: rogerbot
+User-agent: DotBot
+User-agent: dotbot
+User-agent: SemrushBot
+User-agent: SemrushBot-SA
+User-agent: MJ12Bot
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: SearchmetricsBot 
+Allow: /app/ 
+
+User-agent: Googlebot
+Allow: /app/
+Disallow: /*.integrator-includes.txt
+Disallow: /*.integrator-includes.json
+
+User-agent: Slurp
+Allow: /app/
+Disallow: /*.integrator-includes.txt
+Disallow: /*.integrator-includes.json
+
+User-Agent: Bingbot
+Allow: /app/
+Disallow: /*.integrator-includes.txt
+Disallow: /*.integrator-includes.json
+
+User-Agent: msnbot
+Allow: /app/
+Disallow: /*.integrator-includes.txt
+Disallow: /*.integrator-includes.json
+
+### default block 
+User-agent: * 
+Disallow: /app/ 
+Disallow: /*.notification 
+Disallow: /*.integrator-includes.txt
+Disallow: /*.integrator-includes.json
+Disallow: /es/dev/
+Disallow: /es/backup/
+Disallow: /es/test/
+Disallow: /ads/
+Disallow: /vwcms_publish/
+Disallow: /es/formularios/
+Disallow: /content/vw_pkw/
+Disallow: /es/mundo_vw/
+Disallow: /*debugClientLibs=
+Disallow: /*page=engine
+Disallow: /*page=compare
+Disallow: /*page=wheels
+Disallow: /*leadType=contact
+Disallow: /*iframe=true
+Disallow: /*configProvider.json
+Disallow: /*cdnCacheId
+Disallow: /*ordenacion=
+Disallow: /*condicion
+Disallow: /stock/*/oferta
+Disallow: /stock/*/solicitud-bloqueo
+Disallow: /stock/*condicion
+Disallow: /stock/*pagina
+
+### block direct access to dam images and videos
+User-agent: *
+Disallow: /content/dam/*.jpeg$
+Disallow: /content/dam/*.jpg$
+Disallow: /content/dam/*.png$
+Disallow: /content/dam/*.mp4$
+Disallow: /content/dam/*.JPEG$
+Disallow: /content/dam/*.JPG$
+Disallow: /content/dam/*.PNG$
+Disallow: /content/dam/*.MP4$
+Disallow: /idhub/content/dam/*.jpeg$
+Disallow: /idhub/content/dam/*.jpg$
+Disallow: /idhub/content/dam/*.png$
+Disallow: /idhub/content/dam/*.mp4$
+Disallow: /idhub/content/dam/*.JPEG$
+Disallow: /idhub/content/dam/*.JPG$
+Disallow: /idhub/content/dam/*.PNG$
+Disallow: /idhub/content/dam/*.MP4$
+
+### sitemap 
+Sitemap: https://www.volkswagen.es/es.sitemap.xml
+

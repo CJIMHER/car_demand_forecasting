@@ -1,0 +1,11 @@
+[Unit]
+Description=Scraper Volkswagen VN cada madrugada (proyecto cdf)
+
+[Timer]
+OnCalendar=*-*-* 05:30:00 Europe/Madrid
+Persistent=true
+RandomizedDelaySec=300
+Unit=cdf-scraper@vn.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Scraper Volkswagen VN eléctricos e híbridos cada madrugada (proyecto cdf)
+
+[Timer]
+OnCalendar=*-*-* 06:45:00 Europe/Madrid
+Persistent=true
+RandomizedDelaySec=300
+Unit=cdf-scraper@vn_otros.service
+
+[Install]
+WantedBy=timers.target

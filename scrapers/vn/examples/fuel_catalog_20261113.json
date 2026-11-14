@@ -1,0 +1,47 @@
+{
+  "checked_at_utc": "2026-11-13T08:36:06+00:00",
+  "app_version": "3.127.1",
+  "source": "https://www.volkswagen.es/es/stock-resultados.html",
+  "catalog_endpoint": "/bff/setup",
+  "counts_endpoint": "/bff/criteria/possible",
+  "filters": {
+    "t_manuf": "BQ",
+    "t_cartype": "N"
+  },
+  "fuel_catalog": [
+    {
+      "criteria": "t_petr",
+      "key": "B",
+      "name": "Gasolina"
+    },
+    {
+      "criteria": "t_petr",
+      "key": "D",
+      "name": "Diésel"
+    },
+    {
+      "criteria": "t_petr",
+      "key": "E",
+      "name": "Eléctrico"
+    },
+    {
+      "criteria": "t_petr",
+      "key": "H",
+      "name": "Híbrido"
+    }
+  ],
+  "counts": {
+    "D": 515,
+    "E": 40,
+    "B": 4300,
+    "H": 382
+  },
+  "total": 5237,
+  "setup_sha256": "06d9d26cb8784d98a074947db6dc23039172538c3908081c12623c7bb60670f1",
+  "possible_sha256": "6b3a00ee87f1e844e45c0c66885a984c7b3085173df64dedee4461902bcfc90a",
+  "other_codes": [
+    "E",
+    "H"
+  ],
+  "note": "La selección otros contiene todos los códigos publicados por este catálogo salvo B/D; el catálogo no distingue otro código de PHEV ni publica gas."
+}

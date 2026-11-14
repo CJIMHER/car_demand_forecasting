@@ -1,0 +1,19 @@
+{
+  "snapshot_day": "2026-11-01",
+  "started_at_utc": "2026-11-01T09:07:14+00:00",
+  "finished_at_utc": "2026-11-01T09:14:47+00:00",
+  "vehicles": 2922,
+  "data_pages": 244,
+  "total_data_responses": 245,
+  "priced_vehicles": 2922,
+  "valid_vins": 2922,
+  "distinct_vins": 2921,
+  "dealer_ids": 56,
+  "app_version": "3.126.1",
+  "unit_tests_passed": 37,
+  "validation_max_in_flight": 4,
+  "all_raw_hashes_verified": true,
+  "sqlite_integrity_check": "ok",
+  "foreign_key_check": "ok",
+  "schedule_active": false
+}

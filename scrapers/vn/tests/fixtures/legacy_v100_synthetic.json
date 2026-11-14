@@ -1,0 +1,115 @@
+{
+  "description": "Fixture sintético normalizado con código 1.0.0; no contiene datos del histórico real",
+  "scope": "volkswagen-es-new-BQ-N-fuel-B-D-passenger-v1",
+  "config": {
+    "data_dir": "data",
+    "timezone": "Europe/Madrid",
+    "page_size": 12,
+    "request_interval_seconds": 1.5,
+    "timeout_seconds": 40,
+    "http_attempts": 3,
+    "max_in_flight": 2,
+    "missing_confirmations": 3,
+    "max_count_drop_fraction": 0.25,
+    "max_missing_fraction": 0.25,
+    "min_retail_price_coverage": 0.95,
+    "max_source_age_hours": 24,
+    "max_pages": 1500,
+    "robots_policy": "respect",
+    "authorization_reference": ""
+  },
+  "car": {
+    "carid": "ESPFIXTURE0001",
+    "key": "RVNQRklYVFVSRTAwMDE=",
+    "cartype": {
+      "code": "N"
+    },
+    "mbvManuf": {
+      "code": "V"
+    },
+    "model": {
+      "value": "Volkswagen Test"
+    },
+    "motor": {
+      "fuel": {
+        "code": "B",
+        "value": "Gasolina"
+      },
+      "powerKw": {
+        "raw_value": 110
+      }
+    },
+    "parsedPrice": {
+      "value": 25000,
+      "unit": "EUR",
+      "suffix": {
+        "label": "PVP de prueba",
+        "disclaimer": "Datos sintéticos para probar compatibilidad"
+      }
+    },
+    "initialreg": "libre de",
+    "dealer": {
+      "key": "ESPTEST",
+      "country": "ESP",
+      "name": {
+        "value": "Concesionario ficticio"
+      }
+    }
+  },
+  "record": {
+    "vehicle_id": "ESPFIXTURE0001",
+    "business": {
+      "brand": "Volkswagen",
+      "vehicle_type": "N",
+      "model": "Volkswagen Test",
+      "model_code": null,
+      "carline": null,
+      "version": null,
+      "model_year": null,
+      "vin": null,
+      "registration_plate": null,
+      "commission_number": null,
+      "price_retail_cents": 2500000,
+      "price_basis_label": "PVP de prueba",
+      "price_conditions_text": "Datos sintéticos para probar compatibilidad",
+      "price_new_reference_cents": null,
+      "price_reference_label": null,
+      "currency": "EUR",
+      "financing_terms": {},
+      "mileage_km": null,
+      "first_registration_date": null,
+      "fuel": "Gasolina",
+      "fuel_code": "B",
+      "power_kw": 110,
+      "power_cv": null,
+      "engine_capacity_cc": null,
+      "exterior_color": null,
+      "interior_color": null,
+      "emission_label_source": null,
+      "reservation": null,
+      "vat_reclaimable": null,
+      "approved": null,
+      "business_model": null,
+      "delivery_status_code": null,
+      "delivery_status_text": null,
+      "dealer_id": "ESPTEST",
+      "dealer_name": "Concesionario ficticio",
+      "dealer_city": null,
+      "dealer_postcode": null,
+      "campaign_codes": []
+    },
+    "business_hash": "c0536712fee8de131dbc302de858b2a0dd090bb0b321cb44a6296a3ae91f781e",
+    "encoded_id": "RVNQRklYVFVSRTAwMDE=",
+    "public_url": "https://www.volkswagen.es/es/stock-resultados.html/.app/search/car/RVNQRklYVFVSRTAwMDE%3D",
+    "source_offer_at": null,
+    "source_production_at": null,
+    "image_urls": [],
+    "source_vin": null,
+    "source_registration": "libre de",
+    "source_plate": null,
+    "reservation_check_requested_by_ui": null,
+    "source_price_disclaimer": "Datos sintéticos para probar compatibilidad",
+    "raw_record_hash": "fedd6c645c34c8baa80977ff1adfec32ffb5c2797d8e16f3326ce9162b3b543c",
+    "observed_at": "2026-01-01T12:00:00+00:00"
+  }
+}

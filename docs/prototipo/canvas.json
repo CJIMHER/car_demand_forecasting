@@ -1,0 +1,20 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-11-12T17:10:00Z"},
+  "title": "Prototipo del panel · Stock, demanda y campañas",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 1240, "title": "Dirección general", "expand": "fill", "is_interactive": true},
+    "Ventas.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 1240, "title": "Jefe de ventas", "expand": "fill", "is_interactive": true},
+    "Marketing.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 1320, "title": "Marketing", "expand": "fill", "is_interactive": true},
+    "Mercado.dc.html": {"x": 0, "y": 1560, "w": 1440, "h": 1240, "title": "Mercado (primer panel, semana 3)", "expand": "fill", "is_interactive": true},
+    "Movil.dc.html": {"x": 1520, "y": 1560, "w": 390, "h": 844, "title": "Dirección en el móvil"}
+  },
+  "order": ["Main.dc.html", "Ventas.dc.html", "Marketing.dc.html", "Mercado.dc.html", "Movil.dc.html"],
+  "notes": {
+    "titulo": {"x": 0, "y": -300, "text": "Prototipo del panel · maqueta con datos ficticios", "kind": "title1", "maxW": 4480},
+    "uso": {"x": 1990, "y": 1560, "text": "Cómo usarlo: pulsa Play en cualquier pantalla. Las pestañas de arriba llevan de una a otra; los botones VN/VO/Todo, la provincia y las filas de vehículos responden. Las cifras son inventadas: lo que se valida es qué se ve, en qué orden y qué falta.", "w": 420, "size": "m", "fill": "blue"}
+  },
+  "designSystems": []
+}

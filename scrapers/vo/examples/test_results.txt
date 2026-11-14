@@ -1,0 +1,42 @@
+test_discovery_uses_public_page_and_rejects_unknown_host (test_collector.AccessTests.test_discovery_uses_public_page_and_rejects_unknown_host) ... ok
+test_gzip_response_decodes_before_json_parsing (test_collector.AccessTests.test_gzip_response_decodes_before_json_parsing) ... ok
+test_http_date_and_age_validation (test_collector.AccessTests.test_http_date_and_age_validation) ... ok
+test_robots_merge_groups_and_longest_rule (test_collector.AccessTests.test_robots_merge_groups_and_longest_rule) ... ok
+test_server_error_on_robots_is_not_treated_as_permission (test_collector.AccessTests.test_server_error_on_robots_is_not_treated_as_permission) ... ok
+test_specific_agent_and_crawl_delay (test_collector.AccessTests.test_specific_agent_and_crawl_delay) ... ok
+test_unavailable_robots_is_recorded_but_data_401_is_not_retried (test_collector.AccessTests.test_unavailable_robots_is_recorded_but_data_401_is_not_retried) ... ok
+test_anomaly_does_not_mutate_snapshot (test_collector.HistoryTests.test_anomaly_does_not_mutate_snapshot) ... ok
+test_churn_guard_even_when_total_is_constant (test_collector.HistoryTests.test_churn_guard_even_when_total_is_constant) ... ok
+test_complete_live_workflow_with_fixture_transport_and_idempotent_second_run (test_collector.HistoryTests.test_complete_live_workflow_with_fixture_transport_and_idempotent_second_run) ... ok
+test_default_robot_denial_does_not_fetch_data_or_create_observations (test_collector.HistoryTests.test_default_robot_denial_does_not_fetch_data_or_create_observations) ... ok
+test_export_from_db_is_recoverable (test_collector.HistoryTests.test_export_from_db_is_recoverable) ... ok
+test_lifecycle_price_change_missing_return_removed (test_collector.HistoryTests.test_lifecycle_price_change_missing_return_removed) ... ok
+test_process_lock_prevents_parallel_run (test_collector.HistoryTests.test_process_lock_prevents_parallel_run) ... ok
+test_same_day_not_rewritten (test_collector.HistoryTests.test_same_day_not_rewritten) ... ok
+test_transaction_rolls_back_late_failure (test_collector.HistoryTests.test_transaction_rolls_back_late_failure) ... ok
+test_config_validation_and_relative_directory (test_collector.OperationalTests.test_config_validation_and_relative_directory) ... ok
+test_csv_formula_safety (test_collector.OperationalTests.test_csv_formula_safety) ... ok
+test_complete_pagination_and_recheck (test_collector.PaginationTests.test_complete_pagination_and_recheck) ... ok
+test_concurrent_capture_preserves_page_order_and_completeness (test_collector.PaginationTests.test_concurrent_capture_preserves_page_order_and_completeness) ... ok
+test_duplicates_not_silently_deduplicated (test_collector.PaginationTests.test_duplicates_not_silently_deduplicated) ... ok
+test_empty_stock_is_not_mass_removal (test_collector.PaginationTests.test_empty_stock_is_not_mass_removal) ... ok
+test_failure_in_prefetched_page_aborts_capture (test_collector.PaginationTests.test_failure_in_prefetched_page_aborts_capture) ... ok
+test_membership_changed_during_pass (test_collector.PaginationTests.test_membership_changed_during_pass) ... ok
+test_mid_capture_total_change (test_collector.PaginationTests.test_mid_capture_total_change) ... ok
+test_page_limit_does_not_mark_partial_as_complete (test_collector.PaginationTests.test_page_limit_does_not_mark_partial_as_complete) ... ok
+test_price_coverage_guard (test_collector.PaginationTests.test_price_coverage_guard) ... ok
+test_truncated_response (test_collector.PaginationTests.test_truncated_response) ... ok
+test_wrong_page_size_order_and_page_count (test_collector.PaginationTests.test_wrong_page_size_order_and_page_count) ... ok
+test_identity_conflict_and_wrong_scope (test_collector.ParserTests.test_identity_conflict_and_wrong_scope) ... ok
+test_missing_mileage_and_malformed_vin_remain_unknown (test_collector.ParserTests.test_missing_mileage_and_malformed_vin_remain_unknown) ... ok
+test_operational_timestamp_does_not_generate_business_changes (test_collector.ParserTests.test_operational_timestamp_does_not_generate_business_changes) ... ok
+test_price_precision_and_invalid_values (test_collector.ParserTests.test_price_precision_and_invalid_values) ... ok
+test_price_reference_and_finance_terms_are_separate (test_collector.ParserTests.test_price_reference_and_finance_terms_are_separate) ... ok
+test_real_response_contract (test_collector.ParserTests.test_real_response_contract) ... ok
+test_real_server_caps_page_size (test_collector.ParserTests.test_real_server_caps_page_size) ... ok
+test_reservation_ui_switch_is_not_reservation (test_collector.ParserTests.test_reservation_ui_switch_is_not_reservation) ... ok
+
+----------------------------------------------------------------------
+Ran 37 tests in 0.125s
+
+OK

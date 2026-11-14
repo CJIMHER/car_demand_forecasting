@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel · Dirección en el móvil</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1D5FD6}a:hover{color:#174BA8}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #F6F5F1; font-family: Inter, system-ui, sans-serif; color: #14213D; overflow: hidden">
+  <header style="background: #0F1B2D; padding: 16px 20px; display: flex; align-items: center; gap: 12px">
+    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1D5FD6"></rect><path d="M7 9 H13 V14 H18 V19 H25" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"></path></svg>
+    <div style="display: flex; flex-direction: column">
+      <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 15px; font-weight: 600; color: #F3F1EA">Volkswagen Sevilla</span>
+      <span style="font-size: 12px; color: #BFCBDB">Datos de hoy, 07:30</span>
+    </div>
+  </header>
+
+  <main style="flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+    <div>
+      <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 24px; font-weight: 600; color: #14213D">Así está el negocio hoy</h1>
+      <p style="margin: 4px 0 0; font-size: 13px; color: #5B6675">Jueves 12 de noviembre · datos ficticios</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 12px; color: #5B6675">Stock total</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 28px; font-weight: 600">142</span>
+        <span style="font-size: 12px; color: #44505F">VN 96 · VO 46</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 12px; color: #5B6675">Antigüedad media</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 28px; font-weight: 600">74 días</span>
+        <span style="font-size: 12px; color: #8A5A00; font-weight: 600">Objetivo: 60</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 12px; color: #5B6675">Ventas del mes</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 28px; font-weight: 600">21</span>
+        <span style="font-size: 12px; color: #8A5A00; font-weight: 600">Previsto: 23–29</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 12px; color: #5B6675">Alertas abiertas</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 28px; font-weight: 600">5</span>
+        <span style="font-size: 12px; color: #44505F">2 nuevas hoy</span>
+      </div>
+    </div>
+
+    <section aria-labelledby="m-alertas" style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 16px; display: flex; flex-direction: column">
+      <h2 id="m-alertas" style="margin: 0 0 6px; font-size: 15px; font-weight: 600; color: #14213D">Lo que pide atención</h2>
+      <div style="display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid #EEF0F3">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="flex: none; margin-top: 4px"><circle cx="5" cy="5" r="5" fill="#F2A93B"></circle></svg>
+        <span style="font-size: 13px; color: #14213D">Ventas del mes por debajo de lo previsto: 21 frente a 23–29.</span>
+      </div>
+      <div style="display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid #EEF0F3">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="flex: none; margin-top: 4px"><circle cx="5" cy="5" r="5" fill="#F2A93B"></circle></svg>
+        <span style="font-size: 13px; color: #14213D">41 vehículos superan los 90 días en exposición.</span>
+      </div>
+      <div style="display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid #EEF0F3">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="flex: none; margin-top: 4px"><circle cx="5" cy="5" r="5" fill="#F2A93B"></circle></svg>
+        <span style="font-size: 13px; color: #14213D">ID.4 Pro: el coste por lead es 2,2 veces su media.</span>
+      </div>
+      <a href="Main.dc.html" style="margin-top: 6px; display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600; color: #1D5FD6; text-decoration: none">Ver el panel completo</a>
+    </section>
+  </main>
+
+  <nav aria-label="Secciones del panel" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #DCDFE3">
+    <a href="Main.dc.html" aria-current="page" style="display: flex; align-items: center; justify-content: center; min-height: 56px; font-size: 13px; font-weight: 700; color: #1D5FD6; text-decoration: none">Dirección</a>
+    <a href="Ventas.dc.html" style="display: flex; align-items: center; justify-content: center; min-height: 56px; font-size: 13px; font-weight: 500; color: #44505F; text-decoration: none">Ventas</a>
+    <a href="Marketing.dc.html" style="display: flex; align-items: center; justify-content: center; min-height: 56px; font-size: 13px; font-weight: 500; color: #44505F; text-decoration: none">Marketing</a>
+    <a href="Mercado.dc.html" style="display: flex; align-items: center; justify-content: center; min-height: 56px; font-size: 13px; font-weight: 500; color: #44505F; text-decoration: none">Mercado</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

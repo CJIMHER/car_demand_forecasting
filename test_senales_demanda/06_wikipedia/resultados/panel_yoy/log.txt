@@ -1,0 +1,93 @@
+Modelos elegibles: 46 de 50
+Excluidos:                    ceros_cat473 obs_YoY3_matric  primer_mes
+mg_zs                         0              38  2021-11-01
+toyota_yaris_cross            0              41  2021-08-01
+renault_arkana                0              45  2021-04-01
+citroen_c4                    0              50  2018-01-01
+
+=== Resumen por especificacion (panel) ===
+   cat   muestra objetivo   senal  modelos  mejora_MAE_mediana_%  %_modelos_mejora  CW_sig5_n  p_binom_vs_5%  BH10_n  %_coef_negativo  p_signo
+ cat47 sin_COVID    Y1_h1 GT_YoY1     39.0                -3.922            12.821        3.0          0.309     0.0           61.538    0.200
+ cat47 sin_COVID    Y1_h1 GT_YoY3     38.0                -6.401            15.789        2.0          0.573     0.0           60.526    0.256
+ cat47 sin_COVID    Y1_h1 GT_YoY6     36.0                -5.843            19.444        4.0          0.104     0.0           63.889    0.132
+ cat47 sin_COVID    Y3_h3 GT_YoY1     38.0                -7.565            34.211        8.0          0.000     1.0           63.158    0.143
+ cat47 sin_COVID    Y3_h3 GT_YoY3     37.0               -11.487            27.027        7.0          0.002     2.0           54.054    0.743
+ cat47 sin_COVID    Y3_h3 GT_YoY6     36.0                -5.970            33.333        6.0          0.008     0.0           63.889    0.132
+ cat47      todo    Y1_h1 GT_YoY1     44.0                -5.068             4.545        3.0          0.379     0.0           34.091    0.049
+ cat47      todo    Y1_h1 GT_YoY3     44.0                -3.848            18.182        1.0          0.895     1.0           72.727    0.004
+ cat47      todo    Y1_h1 GT_YoY6     44.0                -4.051            18.182        4.0          0.177     1.0           65.909    0.049
+ cat47      todo    Y3_h3 GT_YoY1     44.0                -1.466            36.364        4.0          0.177     0.0           50.000    1.000
+ cat47      todo    Y3_h3 GT_YoY3     44.0                -4.403            29.545        3.0          0.379     0.0           68.182    0.023
+ cat47      todo    Y3_h3 GT_YoY6     44.0                -3.743            25.000        5.0          0.067     0.0           56.818    0.451
+cat473 sin_COVID    Y1_h1 GT_YoY1     40.0                -2.199            30.000        2.0          0.601     0.0           42.500    0.430
+cat473 sin_COVID    Y1_h1 GT_YoY3     40.0                -1.992            22.500        2.0          0.601     1.0           35.000    0.081
+cat473 sin_COVID    Y1_h1 GT_YoY6     39.0                -2.134            25.641        4.0          0.129     0.0           30.769    0.024
+cat473 sin_COVID    Y3_h3 GT_YoY1     40.0                -4.649            25.000        6.0          0.014     2.0           40.000    0.268
+cat473 sin_COVID    Y3_h3 GT_YoY3     40.0                -5.940            27.500        5.0          0.048     1.0           37.500    0.154
+cat473 sin_COVID    Y3_h3 GT_YoY6     39.0                -2.735            33.333        4.0          0.129     2.0           38.462    0.200
+cat473      todo    Y1_h1 GT_YoY1     46.0                -8.484            10.870        7.0          0.008     1.0           21.739    0.000
+cat473      todo    Y1_h1 GT_YoY3     46.0                -0.895            30.435        6.0          0.026     0.0           58.696    0.302
+cat473      todo    Y1_h1 GT_YoY6     46.0                -2.188            28.261        7.0          0.008     0.0           56.522    0.461
+cat473      todo    Y3_h3 GT_YoY1     46.0                -0.902            43.478       10.0          0.000     2.0           41.304    0.302
+cat473      todo    Y3_h3 GT_YoY3     46.0                -3.036            32.609        8.0          0.002     0.0           56.522    0.461
+cat473      todo    Y3_h3 GT_YoY6     46.0                -2.879            39.130        9.0          0.000     0.0           56.522    0.461
+
+=== Referencia de surrogates conjunta (panel) ===
+   cat   senal objetivo   muestra  mejora_media_obs_%  p_sur_media  mejora_mediana_obs_%  p_sur_mediana  sur_media_p95_%
+cat473 GT_YoY3    Y3_h3      todo              -3.470        0.169                -3.036          0.627           -2.407
+cat473 GT_YoY3    Y3_h3 sin_COVID             -22.677        0.950                -5.940          0.945           -5.159
+cat473 GT_YoY6    Y3_h3      todo              -2.555        0.035                -2.879          0.458           -3.201
+cat473 GT_YoY6    Y3_h3 sin_COVID             -16.519        0.403                -2.735          0.353           -7.089
+ cat47 GT_YoY3    Y3_h3      todo              -5.851        0.542                -4.403          0.896           -2.812
+ cat47 GT_YoY3    Y3_h3 sin_COVID             -25.540        0.965               -11.487          1.000           -6.537
+
+=== Especificacion principal por modelo (ordenado por mejora, muestra completa) ===
+                    mejora_MAE_%              p_CW          coef_GT       
+muestra                sin_COVID    todo sin_COVID   todo sin_COVID   todo
+modelo                                                                    
+hyundai_i20               10.171  33.253     0.192  0.070    -1.125 -1.293
+seat_ibiza               -17.166  23.045     0.345  0.038     2.612  3.049
+hyundai_i30               -6.597  12.274     0.363  0.009     0.361 -1.389
+mazda_cx30                   NaN   9.945       NaN  0.009       NaN  0.472
+bmw_x1                     9.514   7.997     0.005  0.050     1.497  1.167
+renault_megane            13.496   7.302     0.007  0.039    -1.841 -1.760
+tesla_model3                 NaN   5.932       NaN  0.029       NaN  1.341
+skoda_fabia              -86.843   5.055     0.838  0.029     2.206  1.681
+toyota_corolla               NaN   3.922       NaN  0.021       NaN  1.242
+vw_tcross                    NaN   3.382       NaN  0.081       NaN -0.547
+toyota_rav4              -18.928   2.165     0.624  0.089     1.523  0.522
+seat_ateca                -5.282   1.862     0.813  0.430     0.372 -0.030
+citroen_c3_aircross        8.792   1.610     0.085  0.126    -1.703 -0.662
+peugeot_308                1.022   1.220     0.576  0.601    -0.478 -1.326
+vw_troc                    4.730   0.388     0.055  0.442     1.159  0.439
+seat_arona               -26.867  -0.348     0.742  0.219     0.692  0.514
+nissan_juke              -75.200  -1.267     0.962  0.129     0.837  0.571
+kia_ceed                  -4.098  -1.269     0.474  0.510     0.067  0.080
+dacia_duster              15.789  -1.837     0.003  0.059     1.166  0.557
+kia_xceed                    NaN  -1.997       NaN  0.794       NaN -0.054
+vw_golf                   -4.298  -2.275     0.563  0.544     1.392  0.306
+vw_polo                  -31.269  -2.360     0.909  0.337    -0.134 -0.182
+peugeot_2008              -0.339  -2.665     0.922  0.962     0.040 -0.104
+kia_stonic                 4.658  -3.406     0.018  0.087     0.618  0.262
+dacia_sandero            -33.079  -3.873     0.161  0.916     0.604  0.020
+skoda_karoq               -3.030  -4.017     0.444  0.211    -0.516 -0.560
+peugeot_3008              -0.770  -5.029     0.603  0.982     0.321  0.122
+opel_corsa                 3.650  -5.515     0.211  0.131    -0.199 -0.698
+hyundai_kona             -38.598  -5.940     0.973  0.923     0.280  0.011
+citroen_c3                -8.514  -5.966     0.997  0.446     0.117 -0.057
+peugeot_208               -8.491  -6.543     0.710  0.224     0.127 -0.291
+seat_leon                -91.058  -6.902     0.990  0.810     0.042 -0.635
+vw_tiguan                -11.612  -7.490     0.911  0.097    -0.398 -1.565
+ford_puma                    NaN  -7.823       NaN  0.799       NaN -0.126
+renault_clio             -96.111  -8.601     0.801  0.154     0.978  1.187
+nissan_qashqai          -240.120  -8.672     0.974  0.424     0.379  0.139
+toyota_yaris               8.619 -10.884     0.000  0.316    -0.556 -0.917
+volvo_xc40               -47.844 -11.463     0.995  0.888     0.371 -0.250
+kia_sportage             -12.282 -11.801     0.766  0.752    -0.459 -0.430
+kia_niro                  -2.756 -12.101     0.074  0.971    -0.406 -0.209
+ford_focus                -5.132 -13.082     0.665  0.887     0.272 -0.403
+toyota_chr               -28.870 -14.333     0.926  0.441    -0.152 -0.585
+mazda_cx5                -10.841 -18.745     0.972  0.448    -0.200 -0.508
+ford_kuga                -77.251 -23.271     0.120  0.735    -2.854 -1.592
+renault_captur            -2.771 -33.663     0.617  1.000    -0.261 -0.264
+hyundai_tucson             8.514 -35.819     0.051  0.813     0.575  0.373

@@ -1,0 +1,12 @@
+[Unit]
+Description=Scraper Volkswagen %i (proyecto cdf)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=cdf
+Group=cdf
+ExecStart=/opt/cdf/app/bin/run_scraper.sh %i
+TimeoutStartSec=3h
+Nice=10

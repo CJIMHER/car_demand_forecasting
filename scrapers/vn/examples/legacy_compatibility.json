@@ -1,0 +1,19 @@
+{
+  "source_version": "1.0.0",
+  "source_snapshot_day": "2026-11-08",
+  "tested_copy_of_delivered_database": true,
+  "production_server_accessed": false,
+  "legacy_config_without_fuel_codes_accepted": true,
+  "scope": "volkswagen-es-new-BQ-N-fuel-B-D-passenger-v1",
+  "schema_version": "1",
+  "database_bytes_unchanged_after_open_and_rejected_other_scope": true,
+  "database_sha256": "9caa2407df8cd2ae93fdbeaf94454717df2cdf5ac47c47962c8620151d82aa02",
+  "table_counts_unchanged": {
+    "runs": 1,
+    "vehicles": 4780,
+    "observations": 4780,
+    "events": 4780
+  },
+  "normalized_business_records_unchanged": 4780,
+  "old_data_included_in_delivery": false
+}

@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel · Jefe de ventas</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F6F5F1}
+a{color:#1D5FD6}a:hover{color:#174BA8}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #14213D; background: #F6F5F1; min-height: 100vh">
+  <header style="background: #0F1B2D; color: #F3F1EA">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 10px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1D5FD6"></rect><path d="M7 9 H13 V14 H18 V19 H25" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"></path></svg>
+        <div>
+          <div style="font-family: 'Space Grotesk', Inter, sans-serif; font-weight: 600; font-size: 16px; color: #F3F1EA">Stock · Demanda · Campañas</div>
+          <div style="font-size: 12px; color: #BFCBDB">Volkswagen Sevilla</div>
+        </div>
+      </div>
+      <nav aria-label="Secciones del panel" style="display: flex; flex-wrap: wrap; gap: 4px">
+        <a href="Main.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Dirección</a>
+        <a href="Ventas.dc.html" aria-current="page" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: rgba(255,255,255,0.14); color: #FFFFFF; font-weight: 600; font-size: 14px; text-decoration: none">Ventas</a>
+        <a href="Marketing.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Marketing</a>
+        <a href="Mercado.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; color: #BFCBDB; font-weight: 500; font-size: 14px; text-decoration: none">Mercado</a>
+      </nav>
+      <div style="margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 13px; color: #BFCBDB">
+        <span style="display: inline-flex; align-items: center; gap: 6px"><svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="4" fill="#3DBE8B"></circle></svg>Fuentes al día · 07:30</span>
+        <span style="padding: 6px 10px; border: 1px solid #2A3B55; border-radius: 999px; color: #F3F1EA">Jefe de ventas</span>
+      </div>
+    </div>
+  </header>
+  <div role="note" style="background: #FFF1D6; color: #6B4A00; font-size: 13px; text-align: center; padding: 6px 16px">Maqueta con datos ficticios: sirve para decidir qué se ve y cómo, no para leer cifras.</div>
+
+  <main style="max-width: 1280px; margin: 0 auto; padding: 32px 24px 48px; display: flex; flex-direction: column; gap: 24px">
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div>
+        <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 32px; font-weight: 600; color: #14213D">Qué mover primero</h1>
+        <p style="margin: 6px 0 0; font-size: 15px; color: #5B6675">Vehículos ordenados por riesgo de quedarse parados. Pulsa uno para ver por qué.</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px">
+        <div role="group" aria-label="Tipo de stock" style="display: inline-flex; padding: 4px; background: #E7E9EC; border-radius: 10px; gap: 4px">
+          <sc-for list="{{opciones}}" as="o" hint-placeholder-count="3">
+            <button type="button" aria-pressed="{{o.pressed}}" onClick="{{o.pick}}" style="min-height: 40px; padding: 0 16px; border: 0; border-radius: 8px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; background: {{o.bg}}; color: {{o.fg}}">{{o.label}}</button>
+          </sc-for>
+        </div>
+        <label for="solo-riesgo" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; color: #14213D; cursor: pointer">
+          <input id="solo-riesgo" type="checkbox" checked="{{soloRiesgo}}" onChange="{{toggleRiesgo}}" style="width: 18px; height: 18px; accent-color: #1D5FD6">
+          Solo los que tienen menos del 50 %
+        </label>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px">
+      <sc-for list="{{resumen}}" as="r" hint-placeholder-count="3">
+        <div style="background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 16px 20px; display: flex; align-items: baseline; gap: 12px">
+          <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 32px; font-weight: 600; color: #14213D">{{r.valor}}</span>
+          <span style="font-size: 14px; color: #44505F">{{r.label}}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+      <section aria-labelledby="t-lista" style="flex: 999 1 640px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px">
+        <h2 id="t-lista" style="margin: 0 0 12px; font-size: 17px; font-weight: 600; color: #14213D">Vehículos en stock, de más a menos riesgo</h2>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 620px; border-collapse: collapse; font-size: 14px">
+            <thead>
+              <tr style="text-align: left; color: #5B6675; font-size: 13px">
+                <th scope="col" style="padding: 8px 8px 8px 0; font-weight: 600">Vehículo</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Tipo</th>
+                <th scope="col" style="padding: 8px; font-weight: 600; text-align: right">Días</th>
+                <th scope="col" style="padding: 8px; font-weight: 600">Se vende en 90 días</th>
+                <th scope="col" style="padding: 8px; font-weight: 600; text-align: right">Precio frente a mercado</th>
+                <th scope="col" style="padding: 8px 0 8px 8px; font-weight: 600">Sugerencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{filas}}" as="v" hint-placeholder-count="8">
+                <tr style="border-top: 1px solid #EEF0F3; background: {{v.fondo}}">
+                  <td style="padding: 10px 8px 10px 0">
+                    <button type="button" onClick="{{v.pick}}" aria-pressed="{{v.pressed}}" style="display: block; min-height: 44px; padding: 0; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer">
+                      <span style="display: block; font-size: 14px; font-weight: 600; color: #1D5FD6">{{v.nombre}}</span>
+                      <span style="display: block; font-size: 12px; color: #5B6675">{{v.detalle}}</span>
+                    </button>
+                  </td>
+                  <td style="padding: 10px 8px; color: #44505F">{{v.tipo}}</td>
+                  <td style="padding: 10px 8px; text-align: right; color: #14213D">{{v.dias}}</td>
+                  <td style="padding: 10px 8px">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <div style="width: 80px; height: 8px; background: #F1F2F4; border-radius: 4px; overflow: hidden">
+                        <div style="height: 100%; width: {{v.pctAncho}}; background: {{v.colorP}}"></div>
+                      </div>
+                      <span style="font-weight: 600; color: #14213D">{{v.pTexto}}</span>
+                    </div>
+                  </td>
+                  <td style="padding: 10px 8px; text-align: right; color: #14213D">{{v.precio}}</td>
+                  <td style="padding: 10px 0 10px 8px"><span style="font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 999px; background: {{v.accionBg}}; color: {{v.accionFg}}">{{v.accion}}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin: 12px 0 0; font-size: 13px; color: #5B6675">«Se vende en 90 días»: de cada 100 coches parecidos que han llegado a esos días en exposición, cuántos se vendieron en los 90 siguientes. Es la base de la sugerencia, que decide el jefe de ventas.</p>
+      </section>
+
+      <section aria-labelledby="t-detalle" style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1px solid #DCDFE3; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <div>
+          <h2 id="t-detalle" style="margin: 0; font-size: 20px; font-weight: 600; color: #14213D">{{sel.nombre}}</h2>
+          <p style="margin: 4px 0 0; font-size: 13px; color: #5B6675">{{sel.tipo}} · {{sel.detalle}} · {{sel.dias}} días en exposición</p>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 44px; font-weight: 600; color: #14213D">{{sel.pTexto}}</span>
+          <span style="font-size: 14px; color: #44505F">de venderse en los próximos 90 días si no se hace nada distinto</span>
+        </div>
+        <svg viewBox="0 0 400 240" role="img" aria-label="Curva de salida del grupo de este vehículo, con el tramo de los próximos 90 días marcado" style="width: 100%; height: auto; display: block">
+          <rect x="{{curva.xA}}" y="20" width="{{curva.ancho}}" height="180" fill="#F2A93B" fill-opacity="0.16"></rect>
+          <line x1="40" y1="20" x2="380" y2="20" stroke="#EEF0F3"></line>
+          <line x1="40" y1="110" x2="380" y2="110" stroke="#EEF0F3"></line>
+          <line x1="40" y1="200" x2="380" y2="200" stroke="#9AA5B5"></line>
+          <text x="34" y="24" text-anchor="end" font-size="11" fill="#5B6675">100 %</text>
+          <text x="34" y="114" text-anchor="end" font-size="11" fill="#5B6675">50 %</text>
+          <text x="34" y="204" text-anchor="end" font-size="11" fill="#5B6675">0 %</text>
+          <path d="{{curva.d}}" fill="none" stroke="#1D5FD6" stroke-width="2.5" stroke-linejoin="round"></path>
+          <circle cx="{{curva.xA}}" cy="{{curva.yA}}" r="5" fill="#14213D"></circle>
+          <circle cx="{{curva.xB}}" cy="{{curva.yB}}" r="5" fill="#F2A93B" stroke="#14213D" stroke-width="1.5"></circle>
+          <text x="{{curva.xA}}" y="14" text-anchor="middle" font-size="11" fill="#14213D">hoy</text>
+          <text x="40" y="220" text-anchor="middle" font-size="11" fill="#5B6675">0</text>
+          <text x="153.3" y="220" text-anchor="middle" font-size="11" fill="#5B6675">100</text>
+          <text x="266.7" y="220" text-anchor="middle" font-size="11" fill="#5B6675">200</text>
+          <text x="380" y="220" text-anchor="middle" font-size="11" fill="#5B6675">300 días</text>
+        </svg>
+        <p style="margin: 0; font-size: 13px; color: #5B6675">Línea azul: qué parte de los coches parecidos sigue sin venderse según pasan los días. Zona naranja: los próximos 90 días de este coche.</p>
+        <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: #14213D">
+          <li>{{sel.mediana}}</li>
+          <li>{{sel.similares}}</li>
+          <li>{{sel.leads}}</li>
+        </ul>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px">
+          <button type="button" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 8px; background: #1D5FD6; color: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Pedir campaña a marketing</button>
+          <button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #C9CED6; border-radius: 8px; background: #FFFFFF; color: #14213D; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Revisar precio</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  state = { tipo: 'todo', soloRiesgo: false, sel: 'tiguan' };
+
+  renderVals() {
+    const { tipo, soloRiesgo } = this.state;
+    const vehiculos = [
+      { id: 'id4', nombre: 'ID.4 Pro', detalle: 'Eléctrico · 286 CV · blanco', tipo: 'VN', dias: 131, p: 0.29, precio: '+4,8 %', accion: 'Revisar precio', similares: '6 similares en Sevilla, de media un 4,8 % más baratos.', leads: 'Leads de ID.4 en 14 días: 5, un 40 % menos.' },
+      { id: 'golfvo', nombre: 'Golf 2.0 TDI Life', detalle: '2022 · 48.000 km', tipo: 'VO', dias: 104, p: 0.38, precio: '+6,2 %', accion: 'Revisar precio', similares: '14 similares en Sevilla (año ±1, km ±25 %), con precio mediano un 6,2 % más bajo.', leads: 'Leads de Golf de ocasión en 14 días: 9, un 10 % menos.' },
+      { id: 'tiguan', nombre: 'Tiguan 1.5 TSI Life', detalle: '150 CV · DSG · gris', tipo: 'VN', dias: 112, p: 0.41, precio: '+2,1 %', accion: 'Campaña', similares: '9 similares en Sevilla, de media un 2,1 % más baratos.', leads: 'Leads de Tiguan en 14 días: 11, un 20 % menos.' },
+      { id: 'troc', nombre: 'T-Roc 1.0 TSI Style', detalle: '115 CV · manual · azul', tipo: 'VN', dias: 96, p: 0.48, precio: '+0,5 %', accion: 'Campaña', similares: '21 similares en Sevilla, con el precio en la mediana.', leads: 'Leads de T-Roc en 14 días: 17, un 5 % menos.' },
+      { id: 'polovo', nombre: 'Polo 1.0 TSI Life', detalle: '2021 · 61.000 km', tipo: 'VO', dias: 77, p: 0.55, precio: '−1,0 %', accion: 'Mantener', similares: '18 similares en Sevilla, con el precio un 1 % por debajo de la mediana.', leads: 'Leads de Polo de ocasión en 14 días: 12, estables.' },
+      { id: 'taigovo', nombre: 'Taigo 1.0 TSI R-Line', detalle: '2023 · 22.000 km', tipo: 'VO', dias: 59, p: 0.63, precio: '+1,2 %', accion: 'Mantener', similares: '7 similares en Sevilla, de media un 1,2 % más baratos.', leads: 'Leads de Taigo de ocasión en 14 días: 6, estables.' },
+      { id: 'golf', nombre: 'Golf 1.5 eTSI Life', detalle: '150 CV · DSG · negro', tipo: 'VN', dias: 64, p: 0.72, precio: '−0,8 %', accion: 'Mantener', similares: '15 similares en Sevilla, con el precio un 0,8 % por debajo de la mediana.', leads: 'Leads de Golf en 14 días: 24, un 12 % más.' },
+      { id: 'tcross', nombre: 'T-Cross 1.0 TSI Advance', detalle: '95 CV · manual · blanco', tipo: 'VN', dias: 38, p: 0.86, precio: '−1,5 %', accion: 'Mantener', similares: '26 similares en Sevilla, con el precio un 1,5 % por debajo de la mediana.', leads: 'Leads de T-Cross en 14 días: 31, un 18 % más.' }
+    ];
+    const resumenes = {
+      todo: [['7', 'con menos del 50 % de venderse en 90 días'], ['41', 'llevan más de 90 días'], ['5', 'tienen ya una campaña activa']],
+      VN: [['4', 'con menos del 50 % de venderse en 90 días'], ['26', 'llevan más de 90 días'], ['4', 'tienen ya una campaña activa']],
+      VO: [['3', 'con menos del 50 % de venderse en 90 días'], ['15', 'llevan más de 90 días'], ['1', 'tiene ya una campaña activa']]
+    };
+    const acciones = {
+      'Campaña': { bg: '#E3ECFC', fg: '#174BA8' },
+      'Revisar precio': { bg: '#FFF1D6', fg: '#8A5A00' },
+      'Mantener': { bg: '#EEF0F3', fg: '#44505F' }
+    };
+    const pct = (x) => Math.round(x * 100) + ' %';
+
+    const visibles = vehiculos.filter((v) => (tipo === 'todo' || v.tipo === tipo) && (!soloRiesgo || v.p < 0.5));
+    const selId = visibles.some((v) => v.id === this.state.sel) ? this.state.sel : (visibles[0] ? visibles[0].id : null);
+    const actual = vehiculos.find((v) => v.id === selId) || vehiculos[2];
+
+    const filas = visibles.map((v) => ({
+      ...v,
+      dias: String(v.dias),
+      pTexto: pct(v.p),
+      pctAncho: Math.round(v.p * 100) + '%',
+      colorP: v.p < 0.5 ? '#F2A93B' : '#1D5FD6',
+      accionBg: acciones[v.accion].bg,
+      accionFg: acciones[v.accion].fg,
+      fondo: v.id === selId ? '#EEF4FD' : 'transparent',
+      pressed: v.id === selId ? 'true' : 'false',
+      pick: () => this.setState({ sel: v.id })
+    }));
+
+    // Curva de supervivencia del grupo del vehículo: Weibull con forma 1,3, escala elegida
+    // para que 1 − S(a+90)/S(a) sea exactamente la probabilidad mostrada.
+    const k = 1.3;
+    const a = actual.dias;
+    const H = -Math.log(1 - actual.p);
+    const lambda = Math.pow((Math.pow(a + 90, k) - Math.pow(a, k)) / H, 1 / k);
+    const S = (t) => Math.exp(-Math.pow(t / lambda, k));
+    const X = (t) => 40 + Math.min(t, 300) * (340 / 300);
+    const Y = (s) => 200 - s * 180;
+    let d = 'M ' + X(0).toFixed(1) + ' ' + Y(1).toFixed(1);
+    for (let t = 10; t <= 300; t += 10) {
+      d += ' H ' + X(t).toFixed(1) + ' V ' + Y(S(t)).toFixed(1);
+    }
+    const mediana = Math.round(lambda * Math.pow(Math.log(2), 1 / k));
+
+    const opciones = [['todo', 'Todo'], ['VN', 'Nuevos (VN)'], ['VO', 'Ocasión (VO)']].map(([id, label]) => ({
+      label,
+      pressed: tipo === id ? 'true' : 'false',
+      bg: tipo === id ? '#FFFFFF' : 'transparent',
+      fg: tipo === id ? '#14213D' : '#44505F',
+      pick: () => this.setState({ tipo: id })
+    }));
+
+    return {
+      opciones,
+      soloRiesgo,
+      toggleRiesgo: () => this.setState({ soloRiesgo: !this.state.soloRiesgo }),
+      resumen: resumenes[tipo].map(([valor, label]) => ({ valor, label })),
+      filas,
+      sel: {
+        nombre: actual.nombre,
+        detalle: actual.detalle,
+        tipo: actual.tipo === 'VN' ? 'Nuevo' : 'Ocasión',
+        dias: String(a),
+        pTexto: pct(actual.p),
+        mediana: 'La mitad de los coches de su grupo se vende antes de ' + mediana + ' días; este lleva ' + a + '.',
+        similares: actual.similares,
+        leads: actual.leads
+      },
+      curva: {
+        d,
+        xA: X(a).toFixed(1),
+        yA: Y(S(a)).toFixed(1),
+        xB: X(a + 90).toFixed(1),
+        yB: Y(S(a + 90)).toFixed(1),
+        ancho: (X(a + 90) - X(a)).toFixed(1)
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>
