@@ -5,6 +5,7 @@ Variables de entorno:
   PGHOST, PGUSER (cdf_panel), PGPASSWORD, PGDATABASE   conexión (o PANEL_DATABASE_URL)
   PANEL_SESION_DIAS    caducidad de la sesión por inactividad (30 por defecto)
   PANEL_PROXY          nombre del proxy del que se aceptan cabeceras X-Forwarded-For (caddy)
+  PANEL_EJEMPLO_VISIBLE_PARA  roles que ven las vistas con datos de ejemplo (tecnico por defecto)
   CDF_CONCESIONARIO    ruta de config/concesionario.yaml (opcional)
 """
 
@@ -24,7 +25,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
-from panel import formato, mercado, permisos
+from panel import contrato, direccion, formato, marketing, mercado, permisos, ventas
 from panel import seguridad as seg
 
 AQUI = Path(__file__).resolve().parent
@@ -61,13 +62,15 @@ class Prohibido(Exception):
 
 def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = None,
               hoy: Callable[[], date] | None = None, sesion_dias: int | None = None,
-              proxy: str | None = None) -> FastAPI:
+              proxy: str | None = None, ejemplo_para: str | None = None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.dsn = dsn if dsn is not None else os.environ.get("PANEL_DATABASE_URL", "")
     app.state.conc = concesionario or cargar_concesionario()
     app.state.hoy = hoy or formato.hoy
     app.state.sesion_dias = sesion_dias or int(os.environ.get("PANEL_SESION_DIAS") or 30)
     app.state.proxy = seg.Proxy(proxy if proxy is not None else os.environ.get("PANEL_PROXY"))
+    app.state.ejemplo_para = permisos.roles_ejemplo(
+        ejemplo_para if ejemplo_para is not None else os.environ.get("PANEL_EJEMPLO_VISIBLE_PARA"))
     plantillas = Jinja2Templates(directory=str(AQUI / "templates"))
     plantillas.env.globals.update(f=formato, TEXTO_DESACTIVADA=permisos.TEXTO_DESACTIVADA)
     app.mount("/static", StaticFiles(directory=str(AQUI / "static")), name="static")
@@ -95,6 +98,15 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         request.state.usuario = u
         return u
 
+    def modos_de(request: Request, pg) -> dict:
+        """Origen de las tablas del contrato, una vez por petición."""
+        if not hasattr(request.state, "modos"):
+            request.state.modos = contrato.modos(pg)
+        return request.state.modos
+
+    def estados_de(request: Request, pg) -> dict[str, str]:
+        return contrato.estados(modos_de(request, pg)) if pg is not None else {}
+
     def poner_cookie(resp: Response, nombre: str, valor: str, max_age: int | None, samesite: str) -> None:
         # Sin Domain (cookie solo de este host), Secure, HttpOnly
         resp.set_cookie(nombre, valor, max_age=max_age, path="/", secure=True, httponly=True, samesite=samesite)
@@ -105,7 +117,8 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         conc = app.state.conc
         contexto = {"request": request, "csrf": csrf, "conc": conc, "usuario": usuario,
                     "rol": permisos.ROLES.get(usuario["rol"]) if usuario else None,
-                    "navegacion": permisos.navegacion(usuario["rol"]) if usuario else [],
+                    "navegacion": (permisos.navegacion(usuario["rol"], estados_de(request, pg), app.state.ejemplo_para)
+                                   if usuario else []),
                     "cabecera": mercado.estado_cabecera(pg, app.state.hoy()) if (usuario and pg) else None,
                     **ctx}
         resp = plantillas.TemplateResponse(request, plantilla, contexto, status_code=status)
@@ -274,7 +287,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
     @app.get("/")
     def inicio(request: Request, pg=Depends(bd)):
         u = exigir(request, pg, None)
-        return redirigir(permisos.inicio(u["rol"]))
+        return redirigir(permisos.inicio(u["rol"], estados_de(request, pg), app.state.ejemplo_para))
 
     @app.get("/mercado")
     def vista_mercado(request: Request, zona: str = "provincia", tipo: str = "VN", pg=Depends(bd)):
@@ -284,15 +297,36 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         ctx = {"m": mercado.datos(pg, app.state.conc, tipo, zona, app.state.hoy()), "vista": "mercado"}
         return pintar(request, "_mercado.html" if es_htmx(request) else "mercado.html", ctx, pg=pg, usuario=u)
 
-    def pendiente(clave: str):
-        def vista(request: Request, pg=Depends(bd)):
-            u = exigir(request, pg, clave)
+    def vista_contrato(request: Request, pg, clave: str, plantilla: str, parcial: str, ctx: Callable[[], dict]):
+        """Dirección, Ventas y Marketing: abiertas según sus datos (permisos.visible); si no, «Se activa…»."""
+        u = exigir(request, pg, clave)
+        estados = estados_de(request, pg)
+        if not permisos.visible(u["rol"], clave, estados, app.state.ejemplo_para):
+            if es_htmx(request):
+                raise Redireccion(permisos.POR_CLAVE[clave].ruta)
             return pintar(request, "pendiente.html", {"vista": clave, "titulo": permisos.POR_CLAVE[clave].titulo},
                           pg=pg, usuario=u)
-        return vista
+        contexto = {"vista": clave, "banda_ejemplo": estados.get(clave) == "ejemplo", **ctx()}
+        return pintar(request, parcial if es_htmx(request) else plantilla, contexto, pg=pg, usuario=u)
 
-    for clave in ("direccion", "ventas", "marketing"):
-        app.add_api_route(permisos.POR_CLAVE[clave].ruta, pendiente(clave), methods=["GET"])
+    @app.get("/direccion")
+    def vista_direccion(request: Request, tipo: str = "todo", pg=Depends(bd)):
+        tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
+        return vista_contrato(request, pg, "direccion", "direccion.html", "_direccion.html", lambda: {
+            "d": direccion.datos(pg, app.state.conc, modos_de(request, pg), tipo, app.state.hoy())})
+
+    @app.get("/ventas")
+    def vista_ventas(request: Request, tipo: str = "todo", riesgo: str = "", v: str = "", pg=Depends(bd)):
+        tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
+        return vista_contrato(request, pg, "ventas", "ventas.html", "_ventas.html", lambda: {
+            "d": ventas.datos(pg, app.state.conc, modos_de(request, pg), tipo, riesgo == "1", v[:40] or None,
+                              app.state.hoy())})
+
+    @app.get("/marketing")
+    def vista_marketing(request: Request, orden: str = "venta", pg=Depends(bd)):
+        orden = orden if orden in ("venta", "gasto") else "venta"
+        return vista_contrato(request, pg, "marketing", "marketing.html", "_marketing.html", lambda: {
+            "d": marketing.datos(pg, app.state.conc, modos_de(request, pg), orden, app.state.hoy())})
 
     @app.get("/estado-fuentes")
     def estado(request: Request, pg=Depends(bd)):

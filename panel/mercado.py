@@ -72,12 +72,14 @@ def variacion(anuncios: int, hace7: int | None, motivo: str, n_minimo_pct: int) 
     return {"texto": texto, "porcentaje": porcentaje, "motivo": None, "clase": clase}
 
 
-def nuestros(propios: int | None, anuncios: int, n_minimo_pct: int) -> dict:
+def nuestros(propios: int | None, anuncios: int, n_minimo_pct: int, con_peso: bool = True) -> dict:
     """Anuncios propios del modelo y, atenuado, su peso sobre el total del modelo si este tiene al
-    menos `n_minimo_pct` anuncios. 0 es «0»; NULL (fila anterior a la columna) es «—»."""
+    menos `n_minimo_pct` anuncios (solo en la provincia propia: fuera, solo las unidades).
+    0 es «0»; NULL (fila anterior a la columna) es «—»."""
     if propios is None:
         return {"texto": fmt.GUION, "peso": None, "motivo": "sin cifra hasta el próximo precálculo"}
-    peso = fmt.porcentaje(propios / anuncios * 100, 0) if anuncios >= n_minimo_pct and anuncios else None
+    peso = (fmt.porcentaje(propios / anuncios * 100, 0)
+            if con_peso and anuncios >= n_minimo_pct and anuncios else None)
     return {"texto": fmt.miles(propios), "peso": peso, "motivo": None}
 
 
@@ -131,7 +133,7 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
                FROM panel_mercado_modelo WHERE dia = %s AND tipo = %s AND zona = %s
                ORDER BY anuncios DESC, modelo""", (dia, tipo, zona)):
         modelos.append({
-            "modelo": modelo, "anuncios": fmt.miles(n), "nuestros": nuestros(propios_m, n, n_pct),
+            "modelo": modelo, "anuncios": fmt.miles(n), "nuestros": nuestros(propios_m, n, n_pct, con_peso=zona == "provincia"),
             "variacion": variacion(n, hace7, MOTIVO_HACE7, conc.n_minimo_porcentaje),
             "altas": fmt.miles(altas7) if ventana_ok else fmt.GUION,
             "ausencias": fmt.miles(ausencias7) if ventana_ok else fmt.GUION,
@@ -159,8 +161,9 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
 
     notas = [f"Frente a hace 7 días: diferencia en número de anuncios; al lado, atenuado, el porcentaje, "
              f"solo si hace 7 días había al menos {n_pct} anuncios.",
-             f"Nuestros: anuncios propios en ese modelo; al lado, atenuado, su peso sobre el total del "
-             f"modelo, solo si el modelo tiene al menos {n_pct} anuncios.",
+             (f"Nuestros: anuncios propios en ese modelo; al lado, atenuado, su peso sobre el total del "
+              f"modelo, solo si el modelo tiene al menos {n_pct} anuncios." if zona == "provincia" else
+              "Nuestros: anuncios propios en ese modelo."),
              f"El precio y los días son medianas de los anuncios publicados {'hoy' if es_hoy else 'ese día'}.",
              "«≥ N»: parte de esos anuncios ya estaban publicados en la primera captura o tras un día sin "
              f"captura, así que llevan al menos N días. Con menos de {n_min} anuncios, la cifra va atenuada con su n."]

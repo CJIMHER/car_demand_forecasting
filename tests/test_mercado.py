@@ -199,6 +199,32 @@ def test_modelo_normalizado(pg, datos):
     assert modelos == {"T-Roc": 4, "Sin modelo": 1}
 
 
+def test_modelo_sin_la_marca_delante_y_rehacer_el_historico(pg, datos, monkeypatch):
+    """«Volkswagen T-Cross» se muestra «T-Cross» (marca de config/concesionario.yaml). Rehacer todo el
+    histórico (make precalcular, sin argumentos) sustituye las filas viejas sin duplicar modelos."""
+    import dataclasses
+    from ingesta.concesionario import cargar
+    conc = cargar()
+    for n in range(3):
+        capturar(datos, "vo", d(n).isoformat(), [
+            coche("B1", modelo="Volkswagen T-Cross"), coche("B2", modelo="T-Cross"),
+            coche("B3", modelo="VOLKSWAGEN  Golf Variant"), coche("B4", modelo="Golf Variant"),
+            coche("B5", modelo="Volkswagen")], PERMISIVO)
+    sv.cargar(pg, dia=d(2))
+    # Filas como las dejaba la versión anterior (sin quitar la marca): con otra marca configurada
+    am.precalcular(pg, hasta=d(2), conc=dataclasses.replace(conc, marca="Otra"))
+    viejos = {m for (m,) in pg.execute("SELECT DISTINCT modelo FROM panel_mercado_modelo")}
+    assert "Volkswagen T-Cross" in viejos and "T-Cross" in viejos
+    am.precalcular(pg, hasta=d(2), conc=conc)                         # make precalcular: todo el histórico
+    for n in range(3):
+        modelos = dict(pg.execute("SELECT modelo, anuncios FROM panel_mercado_modelo WHERE dia = %s AND zona = "
+                                  "'espana' AND tipo = 'VO'", (d(n),)).fetchall())
+        assert modelos == {"T-Cross": 2, "Golf Variant": 2, "Volkswagen": 1}   # solo la marca: se deja
+    assert pg.execute("SELECT count(*) FROM panel_mercado_modelo WHERE modelo ILIKE 'volkswagen %'").fetchone()[0] == 0
+    assert am.normalizar_modelo("volkswagen   ID.4", "Volkswagen") == "ID.4"
+    assert am.normalizar_modelo("Volkswagenwagen", "Volkswagen") == "Volkswagenwagen"
+
+
 def test_recalcular_un_dia_lo_sustituye(pg, datos):
     plan(datos, "vo", {0: ["A", "B"], 1: ["A", "B", "C"]})
     precalcular(pg, d(1))

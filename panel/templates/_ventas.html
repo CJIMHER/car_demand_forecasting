@@ -1,0 +1,107 @@
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos %}
+<div id="ventas" class="vista">
+  <div class="vista-cabecera">
+    <div>
+      <h1>Qué mover primero</h1>
+      <p class="subtitulo">Vehículos ordenados por riesgo de quedarse parados. Pulsa uno para ver por qué.</p>
+    </div>
+    <div class="selectores">
+      {{ segmentos("Tipo de stock", d.tipos, "#ventas") }}
+      <a class="casilla" role="checkbox" aria-checked="{{ 'true' if d.solo_riesgo else 'false' }}" href="{{ d.url_riesgo }}" hx-get="{{ d.url_riesgo }}" hx-target="#ventas" hx-swap="outerHTML" hx-push-url="true"><span class="casilla-caja" aria-hidden="true"></span>Solo los que tienen menos del 50 %</a>
+    </div>
+  </div>
+
+  <div class="resumen"{{ attrs("resumen", d.resumen) }}>
+    {% if d.resumen.hay %}
+    {% for n, texto in d.resumen.tarjetas %}
+    <div class="resumen-tarjeta"><span class="resumen-valor">{{ n }}</span><span class="resumen-texto">{{ texto }}</span></div>
+    {% endfor %}
+    {% else %}
+    <div class="resumen-tarjeta">{{ sin_datos() }}</div>
+    {% endif %}
+    {{ marca(d.resumen) }}
+  </div>
+
+  <div class="dos-columnas">
+    <section aria-labelledby="t-lista" class="tarjeta tarjeta-ancha"{{ attrs("lista", d.lista) }}>
+      <h2 id="t-lista">Vehículos en stock, de más a menos riesgo</h2>
+      {{ marca(d.lista) }}
+      {% if d.lista.hay %}
+      <div class="tabla-scroll">
+        <table class="tabla tabla-movil tabla-ventas">
+          <thead>
+            <tr>
+              <th scope="col" class="izq">Vehículo</th>
+              <th scope="col" class="izq">Tipo</th>
+              <th scope="col">Días</th>
+              <th scope="col" class="izq">Se vende en 90 días</th>
+              <th scope="col">Precio frente a mercado</th>
+              <th scope="col" class="izq">Sugerencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in d.lista.filas %}
+            <tr{% if v.elegido %} class="elegido"{% endif %}>
+              <th scope="row" class="izq">
+                <a class="vehiculo" href="{{ v.url }}" hx-get="{{ v.url }}" hx-target="#ventas" hx-swap="outerHTML" hx-push-url="true"{% if v.elegido %} aria-current="true"{% endif %}>
+                  <span class="vehiculo-nombre">{{ v.nombre }}</span>
+                  <span class="vehiculo-detalle">{{ v.detalle }} · {{ v.stock_id }}</span>
+                </a>
+              </th>
+              <td data-etiqueta="Tipo" class="izq c-tipo linea2">{{ v.tipo }}</td>
+              <td data-etiqueta="Días" class="c-dias">{{ v.dias }}</td>
+              <td data-etiqueta="En 90 días" class="izq c-prob">
+                <span class="prob">
+                  <svg class="prob-barra" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect class="pista" width="100" height="8" rx="2"></rect><rect class="relleno{% if v.riesgo %} viejo{% endif %}" width="{{ v.p_ancho }}" height="8" rx="2"></rect></svg>
+                  <strong>{{ v.p }}</strong>
+                </span>
+                <span class="n">{{ v.p_intervalo }}</span>
+              </td>
+              <td data-etiqueta="Precio vs mercado" class="c-precio linea2">{{ v.precio }}</td>
+              <td data-etiqueta="Sugerencia" class="izq c-sugerencia linea2"><span class="chip chip-{{ v.sugerencia_clase }}">{{ v.sugerencia }}</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="izq">Ningún vehículo con este filtro.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="nota">«Se vende en 90 días»: de cada 100 coches parecidos que han llegado a esos días en exposición, cuántos se vendieron en los 90 siguientes; al lado, su intervalo (del percentil 10 al 90). Es la base de la sugerencia, que decide el jefe de ventas.</p>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+
+    <section aria-labelledby="t-detalle" class="tarjeta tarjeta-estrecha"{{ attrs("detalle", d.detalle) }}>
+      {% if d.detalle.hay %}
+      {% set v = d.detalle.v %}
+      <div>
+        <h2 id="t-detalle" class="titulo-detalle">{{ v.nombre }}</h2>
+        <p class="nota">{{ v.tipo_largo }} · {{ v.detalle }} · {{ v.stock_id }} · {{ v.dias }} días en exposición</p>
+      </div>
+      {{ marca(d.detalle) }}
+      <div class="detalle-prob">
+        <span class="detalle-valor">{{ d.detalle.p_texto }}</span>
+        <span class="detalle-texto">de venderse en los próximos 90 días si no se hace nada distinto (entre {{ d.detalle.intervalo }})</span>
+      </div>
+      {% if d.detalle.serie %}
+      <div class="grafico" role="img" aria-label="Curva de salida del grupo de este vehículo, con el tramo de los próximos 90 días marcado" data-curva='{{ d.detalle.serie|tojson }}'></div>
+      <p class="nota">Línea azul: qué parte de los coches parecidos sigue sin venderse según pasan los días (banda: del percentil 10 al 90). Zona naranja: los próximos 90 días de este coche.</p>
+      <p class="nota">{{ d.detalle.base_curva }}</p>
+      {% else %}
+      <p class="sin-datos">Sin curva de su grupo todavía</p>
+      {% endif %}
+      <ul class="puntos">
+        {% for p in d.detalle.puntos %}<li>{{ p }}</li>{% endfor %}
+      </ul>
+      <div class="acciones">
+        <button type="button" class="boton-accion" disabled aria-describedby="acciones-nota">Pedir campaña a marketing</button>
+        <button type="button" class="boton-accion secundario" disabled aria-describedby="acciones-nota">Revisar precio</button>
+      </div>
+      <p class="nota" id="acciones-nota">Estos dos botones se activarán cuando esté listo su circuito.</p>
+      {% else %}
+      <h2 id="t-detalle">Detalle del vehículo</h2>
+      {{ marca(d.detalle) }}
+      {% if d.detalle.filtrado %}<p class="nota">Ningún vehículo con este filtro.</p>{% else %}{{ sin_datos() }}{% endif %}
+      {% endif %}
+    </section>
+  </div>
+</div>

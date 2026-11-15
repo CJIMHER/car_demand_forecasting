@@ -303,6 +303,27 @@ make estado                                   # panel_mercado · precalculo · o
 Por último, entrar con el usuario técnico, cambiar la contraseña y abrir Mercado y «Estado de las
 fuentes», en el ordenador y en el móvil.
 
+### 7.7 Datos de ejemplo de Dirección, Ventas y Marketing (sesión 2)
+
+Hasta que se conecten Walcu, Meta, GA4 y los modelos, estas tres vistas no tienen datos y aparecen
+desactivadas («Se activa al conectar sus datos»). Para verlas con datos de ejemplo, marcados como
+tales (`docs/contrato_panel.md`):
+
+```bash
+echo "PANEL_PERMITE_EJEMPLO=1" >> /opt/cdf/.env      # sin esto, make ejemplo-* se niega
+# Opcional: roles que ven las vistas con datos de ejemplo (por defecto, solo tecnico)
+# echo "PANEL_EJEMPLO_VISIBLE_PARA=tecnico,direccion" >> /opt/cdf/.env
+make deploy                                          # migración 0005; el panel lee la variable nueva
+make precalcular                                     # Mercado: modelos sin la marca delante (rehace el histórico)
+make ejemplo-cargar                                  # filas origen = 'ejemplo' en las tablas del contrato
+```
+
+Con el usuario técnico se ven las tres vistas con la banda «Datos de ejemplo» y la etiqueta en cada
+bloque. Dirección, ventas y marketing siguen viéndolas desactivadas salvo que estén en
+`PANEL_EJEMPLO_VISIBLE_PARA`. Para quitarlas: `make ejemplo-borrar` (también pide
+`PANEL_PERMITE_EJEMPLO=1`). Cuando una fuente escribe sus primeras filas reales, los bloques que la
+leen dejan de mostrar las de ejemplo sin hacer nada más.
+
 ## 8. Día a día
 
 ```bash
@@ -321,6 +342,11 @@ cdf-estado             # los scrapers, como hasta ahora
 - **Mercado dice «Todavía no hay datos»**: falta el precálculo; `make precalcular` (o esperar a las 09:10).
 - **«Nuestros» sale con «—» en todos los modelos** justo después de desplegar la migración 0004: las
   filas son anteriores a la columna; `make precalcular` las rehace (o el cron de las 09:10, solo 8 días).
+- **Dirección, Ventas o Marketing salen desactivadas para el usuario técnico**: no hay datos (ni reales
+  ni de ejemplo); `make ejemplo-cargar` (7.7). Para el resto de roles es lo esperado mientras sean de ejemplo.
+- **«make ejemplo-cargar» dice que falta PANEL_PERMITE_EJEMPLO=1**: añádelo al `.env` (7.7).
+- **En Mercado sigue saliendo «Volkswagen T-Cross»** tras desplegar: las filas son del precálculo
+  anterior; `make precalcular` rehace el histórico.
 - **Un usuario bloqueado** tras 5 intentos: espera 15 minutos o, si ha olvidado la contraseña,
   `make usuario-restablecer USUARIO=...`.
 

@@ -170,6 +170,143 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .recuadro { margin: 0; padding: 12px; background: var(--fondo); border-radius: 8px; font-size: 13px; color: var(--gris-oscuro); }
 .grafico { width: 100%; height: 240px; }
 
+/* ------------------------------------------------------------------ Dirección, Ventas y Marketing */
+/* Datos de ejemplo: banda arriba de la vista y etiqueta en cada bloque que los lee */
+.banda-ejemplo { background: var(--aviso-fondo); color: var(--aviso-texto); font-size: 13px; text-align: center; padding: 8px 16px; }
+.etiqueta-ejemplo {
+  align-self: flex-start; display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+  background: var(--aviso-fondo); color: var(--aviso-texto); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+}
+.sin-datos { margin: 0; font-size: 14px; color: var(--gris); font-style: italic; }
+.tarjeta-cabeza { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; }
+.h2-grande { font-size: 20px; font-weight: 600; }
+.seccion { display: flex; flex-direction: column; gap: 12px; }
+
+.kpi-cabeza { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.insignia { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.insignia-neutro { background: var(--borde-suave); color: var(--gris-oscuro); }
+.insignia-aviso { background: var(--aviso-fondo); color: var(--marron); }
+.insignia-info { background: #E3ECFC; color: var(--azul-oscuro); }
+
+.grafico-ventas { height: 260px; }
+.leyenda { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--gris-oscuro); }
+.leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+
+.alertas { list-style: none; margin: 0; padding: 0; }
+.alerta { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--borde-suave); }
+.alerta > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.alerta .punto { width: 10px; height: 10px; margin-top: 5px; }
+.punto-aviso { background: var(--ambar); }
+.punto-info { background: var(--azul); }
+.alerta-texto { font-size: 14px; color: var(--tinta); overflow-wrap: anywhere; }
+.alerta-pie { font-size: 12px; color: var(--gris); }
+.nueva { font-size: 11px; font-weight: 700; color: var(--azul-oscuro); white-space: nowrap; }
+
+.tramo { display: grid; grid-template-columns: 110px minmax(0, 1fr) 40px; align-items: center; gap: 12px; }
+.tramo-etiqueta { font-size: 14px; color: var(--gris-oscuro); }
+.tramo-n { font-size: 14px; font-weight: 600; text-align: right; }
+.barra-svg { width: 100%; height: 22px; display: block; }
+.pista { fill: #F1F2F4; }
+.relleno { fill: var(--azul); }
+.relleno.viejo { fill: var(--ambar); }
+
+.tarjeta-oscura { background: var(--azul-noche); border-color: var(--azul-noche); color: var(--barra-claro); }
+.tarjeta-oscura h2 { color: var(--barra-claro); }
+.tarjeta-oscura .kpi-valor { color: var(--barra-claro); font-size: 40px; }
+.tarjeta-oscura .sin-datos { color: var(--barra-texto); }
+.oscura-sub { margin: 0; font-size: 14px; color: var(--barra-texto); }
+.oscura-texto { margin: 0; font-size: 14px; color: var(--barra-claro); }
+.boton-enlace {
+  margin-top: auto; align-self: flex-start; display: inline-flex; align-items: center; min-height: var(--toque);
+  padding: 0 16px; border-radius: 8px; background: var(--azul); color: var(--blanco); font-size: 14px; font-weight: 600;
+  text-decoration: none;
+}
+.boton-enlace:hover { background: var(--azul-oscuro); color: var(--blanco); }
+
+/* Ventas */
+.casilla {
+  display: inline-flex; align-items: center; gap: 8px; min-height: var(--toque); font-size: 14px; color: var(--tinta);
+  text-decoration: none;
+}
+.casilla-caja { width: 18px; height: 18px; border: 2px solid var(--gris); border-radius: 4px; background: var(--blanco); flex: none; }
+.casilla[aria-checked="true"] .casilla-caja { background: var(--azul); border-color: var(--azul); box-shadow: inset 0 0 0 3px var(--blanco); }
+.resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: stretch; }
+.resumen > .etiqueta-ejemplo { grid-column: 1 / -1; }
+.resumen-tarjeta {
+  background: var(--blanco); border: 1px solid var(--borde); border-radius: var(--radio); padding: 16px 20px;
+  display: flex; align-items: baseline; gap: 12px;
+}
+.resumen-valor { font-family: var(--fuente-titulo); font-size: 32px; font-weight: 600; }
+.resumen-texto { font-size: 14px; color: var(--gris-oscuro); }
+.tabla tbody tr.elegido { background: #EEF4FD; }
+.vehiculo { display: flex; flex-direction: column; justify-content: center; min-height: var(--toque); text-decoration: none; }
+.vehiculo-nombre { font-size: 14px; font-weight: 600; color: var(--azul); }
+.vehiculo-detalle { font-size: 12px; font-weight: 400; color: var(--gris); }
+.prob { display: inline-flex; align-items: center; gap: 8px; }
+.prob-barra { width: 80px; height: 8px; display: block; flex: none; }
+.c-prob .n { display: block; }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.chip-campana { background: #E3ECFC; color: var(--azul-oscuro); }
+.chip-revisar_precio { background: var(--aviso-fondo); color: var(--marron); }
+.chip-mantener { background: var(--borde-suave); color: var(--gris-oscuro); }
+.titulo-detalle { font-size: 20px; }
+.detalle-prob { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.detalle-valor { font-family: var(--fuente-titulo); font-size: 44px; font-weight: 600; }
+.detalle-texto { font-size: 14px; color: var(--gris-oscuro); }
+.puntos { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.boton-accion {
+  min-height: var(--toque); padding: 0 16px; border: 0; border-radius: 8px; background: var(--azul); color: var(--blanco);
+  font: inherit; font-size: 14px; font-weight: 600;
+}
+.boton-accion.secundario { border: 1px solid #C9CED6; background: var(--blanco); color: var(--tinta); }
+.boton-accion:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Marketing */
+.recomendaciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.reco { border-top-width: 4px; }
+.reco-aumentar { border-top-color: var(--azul); }
+.reco-mantener { border-top-color: var(--eje); }
+.reco-reducir_cambiar { border-top-color: var(--ambar); }
+.reco-titulo { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gris-oscuro); }
+.reco-aumentar .reco-titulo { color: var(--azul-oscuro); }
+.reco-reducir_cambiar .reco-titulo { color: var(--marron); }
+.reco-modelo { font-size: 17px; font-weight: 600; }
+.reco-motivo { margin: 4px 0 0; font-size: 14px; color: var(--gris-oscuro); }
+.campana-nombre { display: block; font-weight: 600; color: var(--tinta); }
+.campana-nota { display: block; font-size: 12px; font-weight: 400; color: var(--gris); }
+.tabla tbody tr.aviso { background: #FFF8EA; }
+.fuerte { font-weight: 600; }
+.tabla td.c-salud { white-space: normal; min-width: 150px; }
+.fallo { display: block; margin-top: 6px; font-size: 12px; color: var(--aviso-texto); max-width: 280px; }
+.chip-salud-bien { background: #E3F4EC; color: #1F6E4F; }
+.chip-salud-vigilar { background: var(--aviso-fondo); color: var(--marron); }
+.chip-salud-revisar { background: #FBE3DC; color: #9A3412; }
+.chip-salud-sin_datos, .chip-salud-ninguno { background: var(--borde-suave); color: var(--gris-oscuro); }
+.atencion { display: grid; grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr) 36px; align-items: center; gap: 0 6px; }
+.atencion-modelo { font-size: 14px; }
+.atencion-barra { width: 100%; height: 18px; display: block; }
+.atencion-barra.neg { border-right: 1px solid var(--eje); }
+.atencion-texto { font-size: 14px; font-weight: 600; text-align: right; }
+.semanas, .motivos, .pasadas { list-style: none; margin: 0; padding: 0; }
+.semana, .pasada { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--borde-suave); }
+.semana-cabeza, .pasada-cabeza { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 12px; }
+.semana-nombre { font-weight: 600; }
+.semana-indice { font-size: 12px; color: var(--gris); overflow-wrap: anywhere; }
+.motivos { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--gris-oscuro); }
+.motivo-tipo { font-weight: 600; color: var(--tinta); }
+.chip-nivel-favorable { background: #E3ECFC; color: var(--azul-oscuro); }
+.chip-nivel-normal { background: var(--borde-suave); color: var(--gris-oscuro); }
+.chip-nivel-poco_favorable { background: var(--aviso-fondo); color: var(--marron); }
+.pasada-cifras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pasada-cifras > div { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; font-size: 14px; }
+.pasada-cifras strong { font-family: var(--fuente-titulo); font-size: 22px; }
+.pasada-etiqueta { font-size: 12px; color: var(--gris); }
+.chip-veredicto-por_encima { background: #E3ECFC; color: var(--azul-oscuro); }
+.chip-veredicto-normal { background: var(--borde-suave); color: var(--gris-oscuro); }
+.chip-veredicto-por_debajo { background: var(--aviso-fondo); color: var(--marron); }
+
 /* ------------------------------------------------------------------ formularios */
 .formulario { max-width: 440px; margin: 24px auto; }
 .formulario h1 { font-family: var(--fuente-titulo); font-size: 26px; font-weight: 600; }
@@ -212,7 +349,8 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
   /* Tablas por modelo y por concesionario: cada fila en dos líneas, sin desplazamiento horizontal.
      Arriba el nombre y las cifras principales; debajo, atenuado y con etiquetas, el resto. */
   .tabla-movil { min-width: 0; display: block; }
-  .tabla-movil thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .tabla-movil thead { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .tabla-movil thead tr, .tabla-movil thead th { display: block; }  /* sin ancho de tabla: no empuja la página */
   .tabla-movil tbody { display: block; }
   .tabla-movil tbody tr {
     display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr)); column-gap: 8px;
@@ -232,6 +370,37 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
     content: attr(data-etiqueta); display: block; font-size: 11px; font-weight: 500; color: var(--gris);
   }
   .tabla-movil tbody tr.propio { padding-left: 8px; }
+
+  /* Dirección en el móvil (Movil.dc.html): las alertas antes que el gráfico */
+  .orden-movil .bloque-alertas { order: -1; }
+  .tramo { grid-template-columns: 84px minmax(0, 1fr) 32px; gap: 8px; }
+  .tramo-etiqueta { font-size: 13px; }
+  .detalle-valor { font-size: 36px; }
+  .grafico-ventas { height: 220px; }
+  .resumen { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .resumen-tarjeta { flex-direction: column; gap: 2px; padding: 10px; }
+  .resumen-valor { font-size: 24px; }
+  .resumen-texto { font-size: 12px; }
+  .casilla { font-size: 13px; }
+
+  /* Ventas: dos líneas por vehículo. Arriba vehículo, probabilidad y días; debajo tipo, precio y sugerencia */
+  .tabla-ventas tbody tr { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 0.6fr); }
+  .tabla-ventas tbody th { order: 0; align-self: center; font-size: 14px; }
+  .tabla-ventas .c-prob { order: 1; text-align: left; }
+  .tabla-ventas .c-dias { order: 2; }
+  .tabla-ventas .c-tipo { order: 3; }
+  .tabla-ventas .c-precio { order: 4; }
+  .tabla-ventas .c-sugerencia { order: 5; text-align: right; }
+  .tabla-ventas .prob-barra { width: 48px; }
+  .vehiculo-nombre { font-size: 14px; }
+
+  /* Campañas: nombre a todo el ancho, cifras en cuatro columnas y la salud debajo */
+  .tabla-campanas tbody tr { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tabla-campanas tbody th { grid-column: 1 / -1; }
+  .tabla-campanas tbody td { text-align: left; }
+  .tabla-campanas tbody td.c-salud { grid-column: 1 / -1; min-width: 0; }
+  .fallo { max-width: none; }
+  .atencion { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) 32px; }
 
   .nav-movil {
     display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;

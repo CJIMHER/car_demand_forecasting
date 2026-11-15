@@ -17,7 +17,8 @@ PYTHON ?= .venv/bin/python
 
 .PHONY: help comprobar-entorno deploy migrar cargar comprobar recuento concesionarios remarcar-propio \
         estado copia restaurar-prueba test hora logs ps psql precalcular panel-deploy panel-rol \
-        panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev
+        panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
+        ejemplo-cargar ejemplo-borrar
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -79,6 +80,18 @@ panel-logs: ## Registros del panel y de Caddy
 
 precalcular: ## Precálculo del panel; sin argumentos rehace todo el histórico, DIA=AAAA-MM-DD solo ese día
 	$(JOBS) python -m analitica.mercado $${DIA:+--dia $$DIA}
+
+# Datos de ejemplo de Dirección, Ventas y Marketing (docs/contrato_panel.md). Solo con
+# PANEL_PERMITE_EJEMPLO=1 en el .env; solo tocan las filas origen = 'ejemplo' de las tablas del contrato.
+ejemplo-cargar: ## Rellena las tablas del contrato con datos de ejemplo (requiere PANEL_PERMITE_EJEMPLO=1)
+	@set -a; . $(ENV_FILE); set +a; \
+	test "$${PANEL_PERMITE_EJEMPLO:-}" = 1 || { echo "No se cargan datos de ejemplo: falta PANEL_PERMITE_EJEMPLO=1 en $(ENV_FILE)."; exit 1; }; \
+	$(COMPOSE) exec -T -u cdf -e PANEL_PERMITE_EJEMPLO=1 jobs python -m panel.ejemplo cargar
+
+ejemplo-borrar: ## Quita los datos de ejemplo (requiere PANEL_PERMITE_EJEMPLO=1)
+	@set -a; . $(ENV_FILE); set +a; \
+	test "$${PANEL_PERMITE_EJEMPLO:-}" = 1 || { echo "No se borran datos de ejemplo: falta PANEL_PERMITE_EJEMPLO=1 en $(ENV_FILE)."; exit 1; }; \
+	$(COMPOSE) exec -T -u cdf -e PANEL_PERMITE_EJEMPLO=1 jobs python -m panel.ejemplo borrar
 
 usuario-alta: ## Alta en el panel: make usuario-alta USUARIO=ana NOMBRE="Ana" ROL=ventas (pide la contraseña)
 	@test -n "$(USUARIO)" -a -n "$(NOMBRE)" -a -n "$(ROL)" || \

@@ -35,6 +35,9 @@ class Concesionario:
     provincias_comunidad: tuple[str, ...]
     n_minimo_medianas: int            # por debajo, precio y días se muestran atenuados
     n_minimo_porcentaje: int          # variación a 7 días: porcentaje solo si hace 7 días había al menos estos
+    objetivo_antiguedad_dias: int = 60  # Dirección: antigüedad media del stock frente a este objetivo
+    modelos_vn: tuple[str, ...] = ()  # modelos de la marca (datos de ejemplo del panel)
+    modelos_vo: tuple[str, ...] = ()
 
 
 def ruta() -> Path:
@@ -64,4 +67,11 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         provincias_comunidad=provincias,
         n_minimo_medianas=int(panel.get("n_minimo_medianas", 5)),
         n_minimo_porcentaje=int(panel.get("n_minimo_porcentaje", 10)),
+        objetivo_antiguedad_dias=int(panel.get("objetivo_antiguedad_dias", 60)),
+        modelos_vn=_lista((cfg.get("modelos") or {}).get("VN")),
+        modelos_vo=_lista((cfg.get("modelos") or {}).get("VO")),
     )
+
+
+def _lista(valor) -> tuple[str, ...]:
+    return tuple(str(v).strip() for v in (valor or []) if str(v).strip())

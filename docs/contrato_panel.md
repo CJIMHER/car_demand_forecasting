@@ -1,0 +1,321 @@
+# Contrato de datos del panel
+
+Qué tablas lee cada vista del panel, qué significa cada columna y quién la rellenará. Conectar
+una fuente consiste en escribir filas reales en estas tablas, sin tocar las vistas. Las tablas
+se crean en la migración `0005` (`infra/migraciones/versions/0005_contrato_panel.py`). La
+correspondencia entre bloques y tablas está en `panel/contrato.py`.
+
+Mercado no entra en este contrato: lee `panel_mercado_*`, que el precálculo de las 09:10 rellena
+siempre con datos reales (ver `analitica/README.md`).
+
+## Reglas comunes
+
+- **Columnas de todas las tablas**: `dia`, `origen` y `calculado_at`.
+  - `dia`: día de cálculo, o el día del dato cuando el grano es diario (leads, gasto).
+  - `origen`: `'real'` o `'ejemplo'`.
+  - `calculado_at`: cuándo se escribió la fila.
+- **El origen va en la clave.** Una fila real y una de ejemplo del mismo día conviven sin pisarse.
+- **Tablas derivadas**, como `panel_mercado_*`:
+  - quien las rellena sustituye sus filas;
+  - la regla «nada se sobrescribe» es para las tablas de hechos;
+  - el panel solo las lee: `cdf_panel` tiene SELECT y nada más.
+- **Sin datos personales**:
+  - vehículos, por número de stock;
+  - leads, solo agregados por día, modelo y campaña;
+  - ninguna columna con nombre, teléfono, correo ni identificador de cliente. Una prueba lo comprueba.
+- **Salidas de modelo**: llevan siempre `_p10`, `_p50` y `_p90`, `modelo_version` y `n`, el número de casos en que se apoya. Nunca un punto solo.
+  - La base exige p10 ≤ p50 ≤ p90.
+  - Las reglas (recomendaciones, alertas) llevan su versión en `modelo_version`, o en `regla` en el caso de las alertas.
+- **Unidades**:
+  - importes en céntimos de euro (`_cents`);
+  - probabilidades entre 0 y 1;
+  - porcentajes en tanto por cien (`_pct`, y las medidas con `unidad = '%'`);
+  - días, enteros.
+
+## Un bloque no mezcla orígenes
+
+Cada bloque de una vista lee una o varias tablas (`panel/contrato.py`, `BLOQUES`). Su origen se
+decide así:
+
+1. **real** si cualquiera de sus tablas tiene alguna fila real;
+2. si no, **ejemplo** si alguna tiene filas de ejemplo;
+3. si no, ninguno: el bloque dice «Sin datos todavía», nunca un cero.
+
+Después, todas las tablas del bloque se leen solo con ese origen. En consecuencia:
+
+- En cuanto entra la primera fila real de una tabla, sus filas de ejemplo dejan de mostrarse. Lo
+  mismo pasa con las filas de ejemplo de las demás tablas del mismo bloque.
+- Si un bloque lee dos tablas y solo una tiene ya filas reales, la parte que falta dice «Sin datos
+  todavía». No se completa con ejemplo.
+  - Ejemplo: entran los leads de Walcu antes que el gasto de Meta. Las tarjetas y la tabla de
+    campañas de Marketing pasan a reales y dicen «Sin datos todavía» hasta que llegue Meta.
+- Las filas de ejemplo no hace falta borrarlas para conectar una fuente. `make ejemplo-borrar` las
+  quita cuando se quiera.
+
+**Etiquetas y estado de la vista:**
+
+- Todo bloque leído con origen ejemplo lleva la etiqueta «Datos de ejemplo».
+- Una vista con algún bloque de ejemplo lleva una banda arriba que lo dice.
+- Estado de la vista (`permisos.py`):
+
+| Estado | Cuándo | Quién la ve |
+| --- | --- | --- |
+| `real` | Algún bloque real y ninguno de ejemplo | Todos los roles con permiso |
+| `ejemplo` | Algún bloque de ejemplo | Solo los roles de `PANEL_EJEMPLO_VISIBLE_PARA` (por defecto, `tecnico`). Los demás la ven desactivada, con «Se activa al conectar sus datos» |
+| `vacia` | Sin filas | Desactivada para todos |
+
+## Bloques de cada vista
+
+| Vista | Bloque | Tablas |
+| --- | --- | --- |
+| Dirección | Tarjeta de stock, tarjeta de antigüedad, stock por días en exposición | `panel_stock_vehiculo` |
+| Dirección | Tarjeta de ventas del mes, gráfico de ventas acumuladas | `panel_ventas_mes` |
+| Dirección | Tarjeta de alertas abiertas, alertas de hoy | `panel_alertas` |
+| Dirección | Tarjeta del mercado | `panel_mercado_dia`. Siempre real: fuera del contrato |
+| Ventas | Resumen y lista de vehículos | `panel_riesgo_vehiculo` |
+| Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
+| Marketing | Tarjetas de 28 días | `panel_campana_dia` y `panel_leads_dia` |
+| Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_leads_dia` y `panel_campana_salud` |
+| Marketing | Recomendación por modelo | `panel_recomendacion_modelo` |
+| Marketing | Atención frente a sus rivales | `panel_atencion_relativa` |
+| Marketing | Cuándo lanzar una campaña general | `panel_semana_campana` |
+| Marketing | Qué dieron las campañas pasadas | `panel_campana_resultado` |
+
+El panel muestra de cada tabla el último `dia` con el origen del bloque. Sobre esas filas solo
+hace recuentos, sumas, medias y cocientes; ningún modelo se ajusta al servir una página.
+
+## Tablas
+
+Hitos según `docs/desarrollo.md`.
+
+| Fuente | Hito |
+| --- | --- |
+| Walcu | 1 |
+| Meta, GA4 y Google Trends | 2 |
+| Supervivencia | 3 |
+| Alertas y reglas | 4 |
+| Predicción de ventas | 5 |
+
+### panel_stock_vehiculo · stock propio
+
+- **Grano**: día × vehículo (número de stock).
+- **Fuente**: Walcu (`stock_interno_snapshot`), hito 1. Los vehículos `new`, `demo` y `km0` son VN; `used`, VO.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `stock_id` | texto | Número de stock de Walcu (`stock_number`) |
+| `tipo` | VN / VO | |
+| `modelo`, `version` | texto | Del catálogo de versiones, sin la marca delante |
+| `dias_exposicion` | días | Días en stock ese día |
+| `precio_cents` | céntimos | Precio de venta publicado |
+
+- **La rellena**: la carga de Walcu, una vez al día.
+- **Comparación con el mes anterior**: Dirección compara con el último día del mes anterior que haya en la tabla. Si no lo hay, no compara.
+
+### panel_ventas_mes · ventas del mes frente a la banda prevista
+
+- **Grano**: día de cálculo × tipo (`VN`, `VO`, `todo`) × día del mes.
+- **Fuente**: Walcu para las ventas reales. La banda la da la referencia sencilla del hito 4 (ritmo del mismo mes en años anteriores con su error empírico) y la sustituye el modelo del hito 5.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `ventas_acumuladas` | ventas | Ventas confirmadas en Walcu del día 1 al `dia_mes`. NULL en los días que aún no han pasado |
+| `previsto_p10`, `_p50`, `_p90` | ventas | Ventas acumuladas previstas a ese día del mes |
+| `modelo_version`, `n` | | Versión de la referencia o modelo; `n` = meses de histórico en que se apoya |
+
+- **La fila `todo` la escribe el modelo**: los percentiles no se suman, así que el panel no suma VN + VO.
+- **«Lo normal: 8 de cada 10 meses caen aquí»** es la banda p10–p90.
+
+### panel_alertas · alertas abiertas
+
+- **Grano**: día × alerta abierta ese día.
+- **Fuente**: motor de alertas, hito 4 (`docs/diseno.md`, Señales y alertas).
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `alerta_id`, `regla` | texto | Identificador y regla que la dispara |
+| `tema` | ventas, stock, campanas, mercado, datos | Lo que se muestra antes del destinatario |
+| `tipo` | VN / VO / NULL | NULL: afecta a los dos. El selector de Dirección filtra por aquí |
+| `destinatarios` | roles | `direccion`, `ventas` (jefe de ventas), `marketing`, `tecnico` |
+| `nivel` | aviso / info | Punto ámbar o azul |
+| `texto` | texto | El motivo en una frase, con los números que la disparan |
+| `abierta_desde` | fecha | «Nuevas hoy»: `abierta_desde = dia` |
+| `stock_id`, `campana_id`, `modelo` | texto | Lo que cita la alerta, para enlazarlo con Ventas y Marketing |
+
+### panel_riesgo_vehiculo · riesgo de cada vehículo en stock
+
+- **Grano**: día × vehículo.
+- **Fuente**: modelo de supervivencia (hito 3, `analitica/supervivencia/probabilidad.py`), con el stock de Walcu, los comparables del stock externo y los leads.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `stock_id`, `tipo`, `modelo`, `version`, `detalle`, `dias_exposicion` | | Copia de lo que el modelo usó, para que la vista no mezcle tablas. `detalle`: motor, cambio y color en VN; año y km en VO |
+| `grupo` | texto | Celda de la curva (clave de `panel_curva_grupo`) |
+| `p_venta90_p10`, `_p50`, `_p90` | 0–1 | P(venta en los próximos 90 días \| lleva `dias_exposicion` días) = 1 − S(a+90)/S(a) |
+| `precio_mercado_pct` | % | Nuestro precio frente a la mediana de los similares del stock externo. Positivo: más caro. NULL si no hay similares |
+| `similares_n` | coches | Similares publicados en la provincia |
+| `campana_activa` | sí/no | El modelo tiene una campaña activa |
+| `sugerencia` | campana, revisar_precio, mantener | Regla sobre la probabilidad y el precio. Decide el jefe de ventas |
+| `leads_14`, `leads_14_previos` | leads | Leads del modelo en los 14 días anteriores y en los 14 previos a esos |
+| `modelo_version`, `n` | | `n` = episodios de la curva de su grupo |
+
+### panel_curva_grupo · curva de salida de cada grupo
+
+- **Grano**: día × grupo.
+- **Fuente**: modelo de supervivencia, hito 3 (Kaplan-Meier con entrada tardía y caída jerárquica).
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `descripcion` | texto | Cómo se nombra el grupo («T-Roc nuevos») |
+| `t_dias` | días | Puntos de la curva |
+| `s_p10`, `s_p50`, `s_p90` | 0–1 | Proporción que sigue sin venderse en cada punto |
+| `mediana_p10`, `_p50`, `_p90` | días | Días hasta que se vende la mitad. NULL si la curva no baja del 50 % |
+| `n`, `n_ventas` | | Episodios y ventas confirmadas |
+| `modelo_version` | | |
+
+### panel_leads_dia · leads agregados
+
+- **Grano**: día × modelo × campaña (NULL: sin campaña).
+- **Fuente**: Walcu (`leads_agg`), hito 1. La campaña se cruza con Meta en el hito 2.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `leads`, `citas`, `ventas` | número | Citas y ventas cuentan el día en que ocurren, atribuidas a la campaña del lead |
+
+Nada que identifique a una persona: el agregado se hace antes de guardar.
+
+### panel_campana_dia · gasto por campaña
+
+- **Grano**: día × campaña.
+- **Fuente**: Meta Marketing API, hito 2.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `campana_id`, `titulo` | texto | Identificador y nombre de la campaña en Meta |
+| `tipo_campana` | modelo / general | De un modelo (`modelo` obligatorio) o de marca |
+| `inicio` | fecha | Primer día de la campaña: de aquí salen sus días de vida |
+| `gasto_cents` | céntimos | |
+| `impresiones`, `clics` | número | |
+
+**Cifras de Marketing:**
+
+- **Ventana**: 28 días que acaban en el último `dia` con gasto.
+- **Leads, citas y ventas atribuidas**: las de `panel_leads_dia` con campaña.
+- **Coste por lead**: gasto / leads. Se compara con los 28 días anteriores.
+- **Coste por venta**: gasto / ventas.
+- **Campaña activa**: tiene gasto el último día.
+
+### panel_campana_salud · salud de cada campaña
+
+- **Grano**: día × campaña × eslabón.
+- **Fuente**: modelo de salud de campañas, hito 4. Necesita el historial de Meta.
+
+**Qué significa:**
+
+- Cada eslabón tiene una medida, que se compara con su referencia: la distribución de esa medida en
+  campañas anteriores **con los mismos días de vida**.
+- El estado sale de la probabilidad de que la campaña esté peor que esa referencia:
+  - **vigilar** desde 0,7;
+  - **revisar** desde 0,9;
+  - **bien** por debajo;
+  - **sin datos suficientes** con menos de 7 días de vida o sin referencia (n pequeño).
+- Los umbrales son del modelo: van en su configuración, no en el panel.
+- **Estado de la campaña en el panel**: el peor de sus eslabones con datos. Si ninguno tiene datos, «sin datos suficientes».
+- **Eslabones que fallan**: se listan los que están en vigilar o revisar, con sus cifras.
+
+**Eslabones y medidas:**
+
+| Eslabón | Medida | Unidad | Mejor |
+| --- | --- | --- | --- |
+| entrega | Coste por mil impresiones | € | bajo |
+| anuncio | Clics por impresión | % | alto |
+| web | Leads por clic | % | alto |
+| calidad_lead | Citas por lead | % | alto |
+| stock | Unidades del modelo en stock | uds | alto |
+
+**Columnas:**
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `dias_vida` | días | Días desde el inicio de la campaña |
+| `medida`, `unidad`, `mejor` | | Qué se mide, en qué unidad y si es mejor alto o bajo |
+| `valor` | | La medida de la campaña |
+| `ref_p10`, `_p50`, `_p90` | | La referencia a los mismos días de vida |
+| `prob_peor` | 0–1 | Probabilidad de estar peor que la referencia |
+| `estado` | bien, vigilar, revisar, sin_datos | |
+| `modelo_version`, `n` | | `n` = campañas anteriores de la referencia |
+
+### panel_recomendacion_modelo · recomendación por modelo
+
+- **Grano**: día × modelo.
+- **Fuente**: reglas en YAML del hito 4. Combinan coste por venta, stock envejecido, atención relativa y tendencia de leads.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `accion` | aumentar, mantener, reducir, cambiar | «Cambiar» es cambiar la creatividad, no el presupuesto |
+| `motivo` | texto | Una frase con las cifras que la justifican |
+| `modelo_version`, `n` | | Versión de las reglas; `n` = días de datos en que se apoyan |
+
+No lleva intervalo porque es una decisión, no una cifra. Las cifras en que se apoya están en las demás tablas.
+
+### panel_atencion_relativa · atención frente a los rivales
+
+- **Grano**: día × modelo.
+- **Fuente**: Google Trends (`gt_relativo`), hito 2.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `mes` | fecha | Mes de la señal |
+| `relativo_puntos` | puntos | 100 × (YoY3 del modelo − media del YoY3 de su conjunto de competidores) |
+| `n_competidores` | | Competidores con dato (mínimo 2) |
+
+No es salida de un modelo, así que no lleva intervalo. Es una señal direccional: la nota de la vista lo dice.
+
+### panel_semana_campana · cuándo lanzar una campaña general
+
+- **Grano**: día × semana (lunes), las seis siguientes.
+- **Fuente**: estacionalidad del modelo de ventas (hito 5) más reglas de calendario.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `nivel` | favorable, normal, poco_favorable | |
+| `indice_p10`, `_p50`, `_p90` | veces | Ventas esperadas de la semana frente a una semana media |
+| `motivos` | JSON | Lista de `{tipo, texto}`. Tipos: estacionalidad, calendario, stock_envejecido, atencion, presion_competencia |
+| `modelo_version`, `n` | | `n` = años de histórico |
+
+Es orientativo: describe cómo viene cada semana y no mide el efecto de lanzar en una u otra.
+
+### panel_campana_resultado · qué dieron las campañas pasadas
+
+- **Grano**: día × campaña terminada.
+- **Fuente**: referencia sin campaña del modelo de ventas, hito 5. El efecto medido con grupo de control llega en el hito 6.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `titulo`, `inicio`, `fin`, `gasto_cents` | | |
+| `leads`, `ventas` | número | Observados durante la campaña |
+| `leads_sin_p10`, `_p50`, `_p90` y `ventas_sin_p10`, `_p50`, `_p90` | número | Lo esperado en esas fechas sin campaña |
+| `veredicto_leads`, `veredicto_ventas` | por_encima, normal, por_debajo | Por encima de p90, entre p10 y p90, o por debajo de p10 |
+| `modelo_version`, `n` | | |
+
+Es una comparación con un modelo, no un experimento.
+
+## Datos de ejemplo
+
+`make ejemplo-cargar` rellena todas las tablas del contrato con filas `origen = 'ejemplo'`
+(`panel/ejemplo.py`). `make ejemplo-borrar` las quita.
+
+**Límites:**
+
+- Solo funcionan con `PANEL_PERMITE_EJEMPLO=1` en el `.env`. El Makefile lo comprueba antes de llamar a docker y el programa, otra vez.
+- Solo tocan filas de ejemplo de estas tablas. Nunca tocan las tablas de hechos, las `panel_mercado_*` ni las filas reales.
+
+**Cómo son los datos:**
+
+- **Deterministas**: el mismo día da las mismas filas.
+- **Coherentes entre vistas**:
+  - las alertas citan vehículos de Ventas por número de stock y campañas de Marketing;
+  - los leads de Ventas suman lo mismo que los de Marketing;
+  - el stock de Dirección es el de Ventas.
+- **Modelos**: los de la marca configurada (`config/concesionario.yaml`, `modelos`).
+- **Cifras de modelo**: se escriben tal cual, con p10–p90, versión `ejemplo` y su n. No se ajusta nada.

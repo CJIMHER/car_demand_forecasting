@@ -85,6 +85,8 @@ services:
       PGUSER: cdf_panel
       PGPASSWORD: ${PANEL_DB_PASSWORD:-}
       PANEL_SESION_DIAS: ${PANEL_SESION_DIAS:-30}
+      # Roles que ven las vistas con datos de ejemplo (docs/contrato_panel.md)
+      PANEL_EJEMPLO_VISIBLE_PARA: ${PANEL_EJEMPLO_VISIBLE_PARA:-tecnico}
       PANEL_PROXY: caddy
     # Sin privilegios: usuario panel (UID 10001) de la imagen, sistema de ficheros de solo lectura
     read_only: true

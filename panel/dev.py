@@ -2,8 +2,10 @@
 
 Levanta un Postgres 16 local y desechable (paquete pgserver, el mismo de las pruebas), aplica las
 migraciones, escribe 60 días de capturas sintéticas con el código real de los scrapers (huecos y
-una fuente que empieza más tarde, como en tests/escenario_mercado.py), las carga, precalcula y
-crea un usuario de prueba por rol. El panel se conecta como cdf_panel, igual que en producción.
+una fuente que empieza más tarde, como en tests/escenario_mercado.py), las carga, precalcula,
+carga los datos de ejemplo de Dirección, Ventas y Marketing (panel/ejemplo.py) y crea un usuario
+de prueba por rol. Con datos de ejemplo, esas tres vistas solo las ve el rol de
+PANEL_EJEMPLO_VISIBLE_PARA (por defecto, tecnico). El panel se conecta como cdf_panel, igual que en producción.
 
 Solo para ver el panel antes de desplegar: nada de esto toca el servidor ni datos reales. Las
 cookies del panel son Secure: Chrome y Firefox las aceptan en http://localhost.
@@ -43,7 +45,7 @@ def preparar(base: Path, fin: date | None = None, dias: int = 60) -> str:
     from analitica import mercado as am
     from ingesta import scrapers_vw as sv
     from ingesta.concesionario import cargar as cargar_concesionario
-    from panel import rol_bd, usuarios
+    from panel import ejemplo, rol_bd, usuarios
 
     srv = pgserver.get_server(str(base / "pg"), cleanup_mode="stop")
     admin = srv.get_uri()
@@ -63,6 +65,7 @@ def preparar(base: Path, fin: date | None = None, dias: int = 60) -> str:
     with psycopg.connect(url, autocommit=True) as pg:
         sv.cargar(pg, dia=fin)
         am.precalcular(pg, hasta=fin, conc=conc)
+        ejemplo.cargar(pg, fin, conc)
         for rol, (nombre, clave) in USUARIOS.items():
             usuarios.alta(pg, rol, nombre, rol, clave)
         pg.execute("UPDATE panel_usuarios SET cambiar_clave = false")

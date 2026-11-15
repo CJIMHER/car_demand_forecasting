@@ -3,12 +3,14 @@
 // 1. make panel-dev                       (en otra terminal: panel en http://localhost:8000)
 // 2. "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
 //      --remote-debugging-port=9333 --user-data-dir=$(mktemp -d) about:blank &
-// 3. node tests/navegador/capturas.mjs 9333 docs/capturas direccion prueba-direccion-local
+// 3. node tests/navegador/capturas.mjs 9333 docs/capturas tecnico prueba-tecnico-local
 //
-// Entra con el formulario de acceso, comprueba el gráfico y el cambio de zona con htmx, y a 390 px
-// en cada zona y tipo que el documento no desborda el ancho y que todos los datos de cada fila
-// (modelos y concesionarios) están en pantalla.
-// Guarda Mercado a 1440 px y a 390 px. Sale con código 1 si algo falla o si hay errores de CSP.
+// Entra con el formulario de acceso (con tecnico: con datos de ejemplo, Dirección, Ventas y
+// Marketing solo las ve ese rol), comprueba los gráficos y el cambio de zona con htmx, y a 390 px,
+// en cada zona y tipo de Mercado y en cada vista y filtro de Dirección, Ventas y Marketing, que el
+// documento no desborda el ancho y que todas las celdas de cada fila de las tablas están en pantalla.
+// Guarda Mercado, Dirección, Ventas y Marketing a 1440 px y a 390 px. Sale con código 1 si algo
+// falla o si hay errores de CSP.
 import fs from "node:fs";
 const [puerto, salida, usuario, clave] = process.argv.slice(2);
 const BASE = "http://localhost:8000";
@@ -27,6 +29,7 @@ const cdp = (method, params = {}) => new Promise(r => { const i = ++id; pend.set
 const espera = ms => new Promise(r => setTimeout(r, ms));
 const evalua = async expr => (await cdp("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true })).result?.result?.value;
 await cdp("Page.enable"); await cdp("Runtime.enable"); await cdp("Log.enable");
+await cdp("Network.enable"); await cdp("Network.setCacheDisabled", { cacheDisabled: true });  // siempre el CSS recién servido
 async function ir(url) { await cdp("Page.navigate", { url }); await espera(1500); }
 async function tamano(ancho, movil) {
   await cdp("Emulation.setDeviceMetricsOverride", { width: ancho, height: movil ? 844 : 900, deviceScaleFactor: movil ? 2 : 1, mobile: movil });
@@ -59,7 +62,7 @@ const resultados = [];
 for (const zona of ["provincia", "comunidad", "espana"]) for (const tipo of ["VN", "VO"]) {
   await ir(`${BASE}/mercado?zona=${zona}&tipo=${tipo}`);
   resultados.push(JSON.parse(await evalua(`(() => {
-    const ancho = window.innerWidth, doc = document.documentElement;
+    const ancho = 390  /* innerWidth crece si algo desborda (emulación móvil) */, doc = document.documentElement;
     const tablas = {"tabla-modelos": 8, "tabla-concesionarios": 5};
     const malas = [], cuenta = {};
     for (const [clase, n] of Object.entries(tablas)) {
@@ -76,19 +79,53 @@ for (const zona of ["provincia", "comunidad", "espana"]) for (const tipo of ["VN
                            desborda: doc.scrollWidth > ancho, filas: cuenta, filasConDatosFuera: malas});
   })()`)));
 }
+// Dirección, Ventas y Marketing: nada desborda y las celdas de sus tablas están dentro de la pantalla
+const VISTAS = ["/direccion", "/direccion?tipo=VN", "/ventas", "/ventas?tipo=VO&riesgo=1", "/marketing",
+                "/marketing?orden=gasto"];
+for (const ruta of VISTAS) {
+  await ir(`${BASE}${ruta}`);
+  resultados.push(JSON.parse(await evalua(`(() => {
+    const ancho = 390  /* innerWidth crece si algo desborda (emulación móvil) */, doc = document.documentElement, malas = [];
+    for (const tr of document.querySelectorAll('.tabla-movil tbody tr')) {
+      for (const c of tr.children) { const r = c.getBoundingClientRect();
+        if (r.width > 0 && (r.left < 0 || r.right > ancho + 0.5)) malas.push(tr.children[0].textContent.trim().slice(0, 40)); }
+    }
+    const fuera = [...document.querySelectorAll('.tarjeta, .kpi, .resumen-tarjeta')].filter(e => {
+      const r = e.getBoundingClientRect(); return r.width > 0 && (r.left < 0 || r.right > ancho + 0.5); }).length;
+    return JSON.stringify({ruta: ${JSON.stringify(ruta)}, scrollWidth: doc.scrollWidth, desborda: doc.scrollWidth > ancho,
+      filas: {"tabla-modelos": 1}, tarjetasFuera: fuera, filasConDatosFuera: malas,
+      graficos: document.querySelectorAll('[data-ventas] canvas, [data-curva] canvas').length,
+      etiquetas: document.querySelectorAll('.etiqueta-ejemplo').length, banda: !!document.querySelector('.banda-ejemplo')});
+  })()`)));
+}
 for (const r of resultados) console.log("móvil 390:", JSON.stringify(r));
 const comprobacion = JSON.stringify({
   desborda: resultados.some(r => r.desborda),
   filas: Math.min(...resultados.map(r => r.filas["tabla-modelos"])),
   sinConcesionariosEnProvincia: resultados.some(r => r.zona === "provincia" && r.filas["tabla-concesionarios"] === 0),
   filasConDatosFuera: resultados.flatMap(r => r.filasConDatosFuera),
+  tarjetasFuera: resultados.reduce((n, r) => n + (r.tarjetasFuera || 0), 0),
+  sinBanda: resultados.filter(r => r.ruta && !r.banda).map(r => r.ruta),
+  sinGrafico: resultados.filter(r => r.ruta && /direccion|ventas/.test(r.ruta) && r.graficos === 0).map(r => r.ruta),
 });
 await ir(`${BASE}/mercado`); await espera(800);
 await captura("mercado_movil_390.png");
+for (const v of ["direccion", "ventas", "marketing"]) {
+  await tamano(390, true); await ir(`${BASE}/${v}`); await espera(800);
+  await captura(`${v}_movil_390.png`);
+}
+await tamano(1440, false);
+for (const v of ["direccion", "ventas", "marketing"]) {
+  await ir(`${BASE}/${v}`); await espera(800);
+  await captura(`${v}_escritorio_1440.png`);
+}
+await tamano(390, true); await ir(`${BASE}/mercado`); await espera(500);
 const zonas = await evalua(`JSON.stringify([...document.querySelectorAll('.segmento, .nav-movil-item, .boton-salir')].filter(e => getComputedStyle(e).display !== 'none').map(e => Math.round(e.getBoundingClientRect().height)))`);
 console.log("altos de zonas táctiles (px):", zonas);
 console.log("errores de consola/CSP:", errores.length ? errores : "ninguno");
 const c = JSON.parse(comprobacion);
-const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.sinConcesionariosEnProvincia || c.filasConDatosFuera.length > 0;
+const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.sinConcesionariosEnProvincia ||
+  c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0;
+console.log("comprobación:", comprobacion);
 console.log(mal ? "RESULTADO: FALLA" : "RESULTADO: correcto");
 ws.close(); process.exit(mal ? 1 : 0);

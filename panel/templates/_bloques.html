@@ -1,0 +1,9 @@
+{#- Bloques de las vistas del contrato: marca «Datos de ejemplo» y «Sin datos todavía». -#}
+{% macro attrs(nombre, b) -%} data-bloque="{{ nombre }}" data-origen="{{ b.origen or '' }}"{%- endmacro %}
+{% macro marca(b) -%}{% if b.origen == 'ejemplo' %}<span class="etiqueta-ejemplo">Datos de ejemplo</span>{% endif %}{%- endmacro %}
+{% macro sin_datos() -%}<p class="sin-datos">Sin datos todavía</p>{%- endmacro %}
+{% macro segmentos(etiqueta, opciones, objetivo) -%}
+<div role="group" aria-label="{{ etiqueta }}" class="segmentos">
+  {% for o in opciones %}<a class="segmento" href="{{ o.url }}" hx-get="{{ o.url }}" hx-target="{{ objetivo }}" hx-swap="outerHTML" hx-push-url="true"{% if o.activa %} aria-current="true"{% endif %}>{{ o.etiqueta }}</a>{% endfor %}
+</div>
+{%- endmacro %}

@@ -66,6 +66,20 @@ def test_con_panel_dominio_sin_contrasena_del_rol_falla(tmp_path):
     assert " up " not in f" {docker} "
 
 
+@sin_make
+@pytest.mark.parametrize("orden", ["cargar", "borrar"])
+def test_ejemplo_se_niega_sin_panel_permite_ejemplo(tmp_path, orden):
+    for i, extra in enumerate(("", "PANEL_PERMITE_EJEMPLO=\n", "PANEL_PERMITE_EJEMPLO=0\n", "PANEL_PERMITE_EJEMPLO=si\n")):
+        d = tmp_path / f"caso{i}"
+        d.mkdir()
+        r, docker = _make(d, f"ejemplo-{orden}", extra)
+        assert r.returncode != 0 and "PANEL_PERMITE_EJEMPLO=1" in r.stdout + r.stderr
+        assert docker == ""                                         # ni se llega a llamar a docker
+    r, docker = _make(tmp_path, f"ejemplo-{orden}", "PANEL_PERMITE_EJEMPLO=1\n")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"exec -T -u cdf -e PANEL_PERMITE_EJEMPLO=1 jobs python -m panel.ejemplo {orden}" in docker
+
+
 def test_deploy_llama_a_panel_deploy():
     makefile = (RAIZ / "Makefile").read_text()
     deploy = makefile.split("\ndeploy:", 1)[1].split("\n\n", 1)[0]
@@ -90,6 +104,8 @@ def test_panel_sin_privilegios_y_sin_secretos_ajenos():
     assert "env_file" not in PANEL                              # ni Telegram, ni bucket, ni frase de copias
     env = PANEL["environment"]
     assert env["PGUSER"] == "cdf_panel" and env["PANEL_PROXY"] == "caddy"
+    assert env["PANEL_EJEMPLO_VISIBLE_PARA"] == "${PANEL_EJEMPLO_VISIBLE_PARA:-tecnico}"
+    assert "PANEL_PERMITE_EJEMPLO" not in env                    # el panel nunca escribe datos de ejemplo
     assert set(PANEL["networks"]) == {"cdf_net", "cdf_web"} and CADDY["networks"] == ["cdf_web"]
     dockerfile = (RAIZ / "panel/Dockerfile").read_text()
     assert re.search(r"^USER panel$", dockerfile, re.M)
@@ -110,7 +126,8 @@ def test_caddy_https_para_panel_dominio():
 def test_variables_nuevas_en_env_example_sin_valor():
     lineas = (RAIZ / ".env.example").read_text().splitlines()
     variables = dict(l.split("=", 1) for l in lineas if re.match(r"^[A-Z_]+=", l))
-    for v in ("PANEL_DOMINIO", "PANEL_DB_PASSWORD", "PANEL_SESION_DIAS"):
+    for v in ("PANEL_DOMINIO", "PANEL_DB_PASSWORD", "PANEL_SESION_DIAS", "PANEL_PERMITE_EJEMPLO",
+              "PANEL_EJEMPLO_VISIBLE_PARA"):
         assert v in variables and variables[v] == "", v
 
 

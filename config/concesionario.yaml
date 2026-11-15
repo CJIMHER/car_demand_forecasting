@@ -39,3 +39,11 @@ panel:
   # «Frente a hace 7 días» muestra la diferencia en anuncios; el porcentaje, atenuado, solo si hace
   # 7 días había al menos estos anuncios
   n_minimo_porcentaje: 10
+  # Dirección: antigüedad media del stock propio frente a este objetivo (días)
+  objetivo_antiguedad_dias: 60
+
+# Modelos de la marca, de más a menos habituales. Hoy solo los usan los datos de ejemplo del panel
+# (make ejemplo-cargar); el catálogo de versiones llega con Walcu.
+modelos:
+  VN: [T-Roc, T-Cross, Tiguan, Golf, Polo, Taigo, ID.4, ID.3, Tayron, Passat]
+  VO: [Golf, Polo, T-Roc, Tiguan, T-Cross, Taigo, Passat, Touran]

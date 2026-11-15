@@ -622,13 +622,20 @@ def test_sin_cifra_de_hace_7_dias_no_cambia(app, pg, personas):
 # ================================================================== nuestros y por concesionario
 
 def test_columna_nuestros(app, pg, personas):
-    _poner_mercado(pg, HOY, [("Uno", 12, 10, 3), ("Dos", 7, 9, 2), ("Tres", 3, 3, 0), ("Cuatro", 10, 10, 10)])
-    pg.execute("INSERT INTO panel_mercado_modelo (dia, tipo, zona, modelo, anuncios, propios, n_precio) "
-               "VALUES (%s, 'VO', 'espana', 'Antigua', 1, NULL, 0)", (HOY,))   # fila anterior a la columna
-    html = dentro(app, "ventas").get("/mercado?zona=espana&tipo=VO").text
+    modelos = [("Uno", 12, 10, 3), ("Dos", 7, 9, 2), ("Tres", 3, 3, 0), ("Cuatro", 10, 10, 10)]
+    for zona in ("provincia", "espana"):
+        _poner_mercado(pg, HOY, modelos, zona=zona)
+        pg.execute("INSERT INTO panel_mercado_modelo (dia, tipo, zona, modelo, anuncios, propios, n_precio) "
+                   "VALUES (%s, 'VO', %s, 'Antigua', 1, NULL, 0)", (HOY, zona))   # fila anterior a la columna
+    cl = dentro(app, "ventas")
+    html = cl.get("/mercado?zona=provincia&tipo=VO").text
     assert _celdas(html, columna=2) == {"Uno": "3 25 %", "Dos": "2", "Tres": "0", "Cuatro": "10 100 %", "Antigua": "—"}
     assert '<th scope="col">Nuestros</th>' in html
     assert "su peso sobre el total del modelo, solo si el modelo tiene al menos 10 anuncios" in html
+    # Fuera de la provincia propia, solo las unidades
+    html = cl.get("/mercado?zona=espana&tipo=VO").text
+    assert _celdas(html, columna=2) == {"Uno": "3", "Dos": "2", "Tres": "0", "Cuatro": "10", "Antigua": "—"}
+    assert "su peso sobre el total del modelo" not in html and "Nuestros: anuncios propios en ese modelo." in html
 
 
 def test_bloque_por_concesionario(app, pg, personas):

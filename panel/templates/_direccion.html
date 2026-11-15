@@ -1,0 +1,103 @@
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos %}
+<div id="direccion" class="vista">
+  <div class="vista-cabecera">
+    <div>
+      <h1>Así está el negocio hoy</h1>
+      <p class="subtitulo">{{ d.fecha[:1]|upper }}{{ d.fecha[1:] }} · comparado con lo previsto para estas alturas del mes</p>
+    </div>
+    <div class="selectores">{{ segmentos("Tipo de stock", d.tipos, "#direccion") }}</div>
+  </div>
+
+  {% set nombres = ["stock", "antiguedad", "ventas_kpi", "alertas_kpi"] %}
+  {% set vacias = ["Stock total", "Antigüedad media", "Ventas del mes", "Alertas abiertas"] %}
+  <div class="kpis">
+    {% for k in d.kpis %}
+    <div class="kpi"{{ attrs(nombres[loop.index0], k) }}>
+      {% if k.hay %}
+      <div class="kpi-cabeza">
+        <span class="kpi-etiqueta">{{ k.etiqueta }}</span>
+        {% if k.badge %}<span class="insignia insignia-{{ k.tono }}">{{ k.badge }}</span>{% endif %}
+      </div>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-sub">{{ k.sub }}</span>
+      {% else %}
+      <span class="kpi-etiqueta">{{ vacias[loop.index0] }}</span>
+      {{ sin_datos() }}
+      {% endif %}
+      {{ marca(k) }}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="dos-columnas orden-movil">
+    <section aria-labelledby="t-ventas" class="tarjeta tarjeta-ancha"{{ attrs("ventas_mes", d.ventas_mes) }}>
+      <div class="tarjeta-cabeza">
+        <h2 id="t-ventas">Ventas acumuladas del mes frente a lo previsto</h2>
+        {% if d.ventas_mes.hay %}<span class="nota">{{ d.ventas_mes.rango }}</span>{% endif %}
+      </div>
+      {{ marca(d.ventas_mes) }}
+      {% if d.ventas_mes.hay %}
+      <div class="grafico grafico-ventas" role="img" aria-label="{{ d.ventas_mes.resumen }}" data-ventas='{{ d.ventas_mes.serie|tojson }}'></div>
+      <div class="leyenda">
+        <span><svg width="18" height="4" viewBox="0 0 18 4" aria-hidden="true"><rect width="18" height="4" rx="2" fill="#14213D"></rect></svg>Real</span>
+        <span><svg width="18" height="4" viewBox="0 0 18 4" aria-hidden="true"><line x1="0" y1="2" x2="18" y2="2" stroke="#1D5FD6" stroke-width="2" stroke-dasharray="5 3"></line></svg>Previsto</span>
+        <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#1D5FD6" fill-opacity="0.18"></rect></svg>Lo normal: 8 de cada 10 meses caen aquí</span>
+      </div>
+      <p class="nota">{{ d.ventas_mes.resumen }} La banda va del percentil 10 al 90 de la previsión (n = {{ d.ventas_mes.n }} meses).</p>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+
+    <section aria-labelledby="t-alertas" class="tarjeta tarjeta-estrecha bloque-alertas"{{ attrs("alertas", d.alertas) }}>
+      <h2 id="t-alertas">Alertas de hoy</h2>
+      {{ marca(d.alertas) }}
+      {% if d.alertas.hay %}
+      <ul class="alertas">
+        {% for a in d.alertas.filas %}
+        <li class="alerta">
+          <span class="punto punto-{{ a.nivel }}" aria-hidden="true"></span>
+          <div>
+            <span class="alerta-texto">{{ a.texto }}{% if a.nueva %} <span class="nueva">Nueva hoy</span>{% endif %}</span>
+            <span class="alerta-pie">{{ a.pie }}</span>
+          </div>
+        </li>
+        {% else %}
+        <li class="alerta"><span class="alerta-texto">Ninguna alerta abierta.</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+  </div>
+
+  <div class="dos-columnas">
+    <section aria-labelledby="t-edad" class="tarjeta tarjeta-ancha"{{ attrs("edad", d.edad) }}>
+      <div class="tarjeta-cabeza">
+        <h2 id="t-edad">Stock por días en exposición</h2>
+        <span class="nota">Vehículos</span>
+      </div>
+      {{ marca(d.edad) }}
+      {% if d.edad.hay %}
+      {% for e in d.edad.tramos %}
+      <div class="tramo">
+        <span class="tramo-etiqueta">{{ e.etiqueta }}</span>
+        <svg class="barra-svg" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"><rect class="pista" width="100" height="22" rx="3"></rect><rect class="relleno{% if e.viejo %} viejo{% endif %}" width="{{ e.ancho }}" height="22" rx="3"></rect></svg>
+        <span class="tramo-n">{{ e.n }}</span>
+      </div>
+      {% endfor %}
+      <p class="nota">En naranja, lo que ya supera los 90 días: ahí están casi todas las alertas de stock.</p>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+
+    <section aria-labelledby="t-mercado" class="tarjeta tarjeta-estrecha tarjeta-oscura" data-bloque="mercado" data-origen="real">
+      <h2 id="t-mercado">El mercado en {{ d.mercado.provincia }}</h2>
+      {% if d.mercado.hay %}
+      <p class="oscura-sub">Stock {{ d.mercado.marca }} publicado por otros concesionarios · {{ d.mercado.dia }}</p>
+      <div class="kpi-valor">{{ d.mercado.valor }}</div>
+      <p class="oscura-sub">{{ d.mercado.sub }}</p>
+      <p class="oscura-texto">Nuestro peso en lo publicado: <strong>{{ d.mercado.peso }}</strong></p>
+      {% else %}
+      <p class="sin-datos">Sin datos todavía</p>
+      {% endif %}
+      <a class="boton-enlace" href="/mercado">Ver el mercado</a>
+    </section>
+  </div>
+</div>

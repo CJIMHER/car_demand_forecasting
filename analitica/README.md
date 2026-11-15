@@ -11,6 +11,10 @@ Lee `stock_externo_snapshot`, `eventos_externos` y `scraper_runs` y rellena las 
 el nombre que publica la web, el más reciente si cambia) y `panel_mercado_capturas` (por scraper y día: captura completa o no, hora, anuncios y anuncios sin
 provincia). Recalcular un día sustituye ese día; las tablas de hechos no se tocan.
 
+El modelo es el que da el scraper sin la marca delante («T-Cross», no «Volkswagen T-Cross»; la marca
+sale de `config/concesionario.yaml`). Tras cambiar la normalización, `make precalcular` rehace el
+histórico y sustituye las filas viejas, sin duplicar modelos.
+
 - `python -m analitica.mercado` (`make precalcular`): todo el histórico.
 - `--ultimos 8` (cron): los 8 últimos días, para recoger cargas tardías.
 - `--dia AAAA-MM-DD` (`make precalcular DIA=...`): un día.

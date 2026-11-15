@@ -24,6 +24,8 @@ Reglas (cada una con su prueba en tests/test_mercado.py):
 - Días publicado: mediana (inferior) de D − primer día visto de los publicados en D. Si algún
   anuncio en la mitad inferior (edad ≤ mediana) no tiene alta observada, su edad real puede ser
   mayor y la mediana es una cota inferior («≥ N»).
+- Modelo: el del scraper sin espacios sobrantes ni la marca delante («T-Cross», no «Volkswagen
+  T-Cross»), con la ortografía más frecuente entre las que solo cambian en mayúsculas.
 - Precio mediano: de los publicados en D con precio (mediana estadística: media de los dos
   centrales si el número es par).
 
@@ -77,11 +79,15 @@ Clave = tuple[str, str]  # (fuente, id_anuncio)
 
 # --------------------------------------------------------------------------- utilidades
 
-def normalizar_modelo(valor) -> str:
-    """Modelo tal como lo da el scraper, sin espacios sobrantes; vacío → «Sin modelo»."""
+def normalizar_modelo(valor, marca: str | None = None) -> str:
+    """Modelo tal como lo da el scraper, sin espacios sobrantes y sin la marca delante
+    («Volkswagen T-Cross» → «T-Cross»; la marca sale de config/concesionario.yaml); vacío → «Sin modelo»."""
     if valor is None:
         return SIN_MODELO
     texto = re.sub(r"\s+", " ", str(valor)).strip()
+    if marca:
+        sin_marca = re.sub(rf"^{re.escape(marca.strip())}\s+", "", texto, flags=re.IGNORECASE).strip()
+        texto = sin_marca or texto
     return texto or SIN_MODELO
 
 
@@ -120,7 +126,7 @@ class Hechos:
         # Ortografía de cada modelo: la más frecuente entre las que solo cambian en mayúsculas.
         variantes: dict[str, Counter] = defaultdict(Counter)
         for modelo, n in pg.execute("SELECT modelo, count(*) FROM stock_externo_snapshot GROUP BY modelo"):
-            m = normalizar_modelo(modelo)
+            m = normalizar_modelo(modelo, conc.marca)
             variantes[m.casefold()][m] += n
         self.modelos = {k: sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[0][0] for k, c in variantes.items()}
         self.primero: dict[Clave, date] = {
@@ -153,7 +159,7 @@ class Hechos:
         return nombres[i - 1] if i else dealer_id
 
     def modelo(self, valor) -> str:
-        m = normalizar_modelo(valor)
+        m = normalizar_modelo(valor, self.conc.marca)
         return self.modelos.get(m.casefold(), m)
 
     def valido(self, dia: date, tipo: str) -> bool:

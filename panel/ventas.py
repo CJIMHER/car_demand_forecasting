@@ -1,0 +1,119 @@
+"""Vista «Ventas» (docs/prototipo/Ventas.dc.html): vehículos en stock ordenados por riesgo.
+
+Lee panel_riesgo_vehiculo y panel_curva_grupo (contrato). Las probabilidades, curvas y medianas
+llegan ya calculadas, con su p10–p90, su versión de modelo y su n; aquí solo se ordenan y se escriben.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+import psycopg
+
+from ingesta.concesionario import Concesionario
+from panel import contrato
+from panel import formato as fmt
+from panel import negocio as ng
+
+SUGERENCIAS = {"campana": "Campaña", "revisar_precio": "Revisar precio", "mantener": "Mantener"}
+COLS = ("stock_id", "tipo", "modelo", "version", "detalle", "dias_exposicion", "grupo", "p_venta90_p10",
+        "p_venta90_p50", "p_venta90_p90", "precio_mercado_pct", "similares_n", "campana_activa", "sugerencia",
+        "leads_14", "leads_14_previos", "modelo_version", "n")
+
+
+def _fila(v: dict) -> dict:
+    p50 = float(v["p_venta90_p50"])
+    nombre = f"{v['modelo']} {v['version']}" if v["version"] else v["modelo"]
+    return {
+        "stock_id": v["stock_id"], "nombre": nombre, "detalle": v["detalle"] or "", "tipo": v["tipo"],
+        "tipo_largo": "Nuevo" if v["tipo"] == "VN" else "Ocasión", "dias": fmt.miles(v["dias_exposicion"]),
+        "dias_n": v["dias_exposicion"], "p": fmt.porcentaje(p50 * 100, 0),
+        "p_intervalo": ng.intervalo_pct(float(v["p_venta90_p10"]), float(v["p_venta90_p90"])),
+        "p_ancho": round(p50 * 100, 1), "riesgo": p50 < 0.5,
+        "precio": ng.signo_pct(None if v["precio_mercado_pct"] is None else float(v["precio_mercado_pct"])),
+        "sugerencia": SUGERENCIAS[v["sugerencia"]], "sugerencia_clase": v["sugerencia"],
+    }
+
+
+def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, solo_riesgo: bool,
+          sel: str | None, hoy: date) -> dict:
+    org = contrato.origenes(modos, "ventas")
+    extra = "&riesgo=1" if solo_riesgo else ""
+    base = {"tipo": tipo, "solo_riesgo": solo_riesgo, "tipos": ng.selector_tipo("/ventas", tipo, "#ventas", extra),
+            "url_riesgo": f"/ventas?tipo={tipo}{'' if solo_riesgo else '&riesgo=1'}", "origenes": org}
+
+    def leer(origen):
+        dia = ng.ultimo_dia(pg, "panel_riesgo_vehiculo", origen)
+        if dia is None:
+            return None, []
+        cur = pg.execute(f"""SELECT {', '.join(COLS)} FROM panel_riesgo_vehiculo WHERE origen = %s AND dia = %s
+                             ORDER BY p_venta90_p50, dias_exposicion DESC, stock_id""", (origen, dia))
+        return dia, [dict(zip(COLS, f)) for f in cur]
+
+    # Resumen y lista (misma tabla, mismo origen)
+    dia, todos = leer(org["lista"])
+    del_tipo = [v for v in todos if tipo == "todo" or v["tipo"] == tipo]
+    if todos:
+        resumen = ng.bloque(org["resumen"], tarjetas=[
+            (sum(1 for v in del_tipo if float(v["p_venta90_p50"]) < 0.5), "con menos del 50 % de venderse en 90 días"),
+            (sum(1 for v in del_tipo if v["dias_exposicion"] > 90), "llevan más de 90 días"),
+            (sum(1 for v in del_tipo if v["campana_activa"]), "tienen ya una campaña activa"),
+        ])
+    else:
+        resumen = ng.bloque(org["resumen"], hay=False)
+    visibles = [v for v in del_tipo if not solo_riesgo or float(v["p_venta90_p50"]) < 0.5]
+    elegido = next((v for v in visibles if v["stock_id"] == sel), visibles[0] if visibles else None)
+    filas = []
+    for v in visibles:
+        f = _fila(v)
+        f["elegido"] = elegido is not None and v["stock_id"] == elegido["stock_id"]
+        f["url"] = f"/ventas?tipo={tipo}{extra}&v={v['stock_id']}"
+        filas.append(f)
+    lista = ng.bloque(org["lista"], hay=bool(todos), filas=filas, n_total=len(del_tipo))
+
+    # Detalle del vehículo elegido con la curva de su grupo
+    detalle = ng.bloque(org["detalle"], hay=False)
+    if org["detalle"] != org["lista"]:   # el bloque de detalle es real y la lista no (o al revés): se relee
+        _, otros = leer(org["detalle"])
+        otros = [v for v in otros if (tipo == "todo" or v["tipo"] == tipo)
+                 and (not solo_riesgo or float(v["p_venta90_p50"]) < 0.5)]
+        elegido = next((v for v in otros if v["stock_id"] == sel), otros[0] if otros else None)
+    if elegido is not None:
+        dia_c = ng.ultimo_dia(pg, "panel_curva_grupo", org["detalle"])
+        curva = pg.execute(
+            """SELECT descripcion, t_dias, s_p10, s_p50, s_p90, mediana_p10, mediana_p50, mediana_p90, n, n_ventas,
+                      modelo_version FROM panel_curva_grupo WHERE origen = %s AND dia = %s AND grupo = %s""",
+            (org["detalle"], dia_c, elegido["grupo"])).fetchone() if dia_c else None
+        f = _fila(elegido)
+        a = elegido["dias_exposicion"]
+        puntos = []
+        if curva:
+            desc, t, s10, s50, s90, m10, m50, m90, n, n_ventas, version = curva
+            if m50 is None:
+                puntos.append(f"Más de la mitad de su grupo ({desc}) sigue sin venderse a los {t[-1]} días.")
+            else:
+                puntos.append(f"La mitad de los coches de su grupo ({desc}) se vende antes de "
+                              f"{fmt.miles(m50)} días ({fmt.miles(m10)}–{fmt.miles(m90)}); este lleva {fmt.miles(a)}.")
+            serie = {"t": list(t), "p10": [float(x) for x in s10], "p50": [float(x) for x in s50],
+                     "p90": [float(x) for x in s90], "a": a, "b": a + 90}
+            base_curva = f"Curva de {fmt.miles(n)} coches parecidos, {fmt.miles(n_ventas)} ya vendidos · modelo {version}"
+        else:
+            serie, base_curva = None, None
+        precio, similares = elegido["precio_mercado_pct"], elegido["similares_n"]
+        if not similares:
+            puntos.append(f"Sin similares publicados en {conc.provincia}.")
+        elif abs(float(precio)) < 0.5:
+            puntos.append(f"{similares} similares en {conc.provincia}, con el precio en la mediana.")
+        else:
+            puntos.append(f"{similares} similares en {conc.provincia}, de media un "
+                          f"{fmt.decimal(abs(float(precio)))} % más {'baratos' if precio > 0 else 'caros'}.")
+        if elegido["leads_14"] is not None:
+            cambio = ng.cambio(elegido["leads_14"], elegido["leads_14_previos"])
+            puntos.append(f"Leads de {elegido['modelo']} en 14 días: {fmt.miles(elegido['leads_14'])}"
+                          + (f", {cambio}." if cambio else "."))
+        detalle = ng.bloque(org["detalle"], v=f, puntos=puntos, serie=serie, base_curva=base_curva,
+                            p_texto=f["p"], intervalo=f["p_intervalo"], n=elegido["n"],
+                            version=elegido["modelo_version"])
+    elif todos:
+        detalle = ng.bloque(org["detalle"], hay=False, filtrado=True)
+    return {**base, "resumen": resumen, "lista": lista, "detalle": detalle, "dia": dia}

@@ -48,6 +48,9 @@
     </div>
   </header>
 
+  {% if banda_ejemplo %}
+  <div class="banda-ejemplo" role="note"><strong>Datos de ejemplo.</strong> Las fuentes de esta vista aún no están conectadas: los bloques marcados «Datos de ejemplo» muestran cifras inventadas para ver cómo será, no para decidir.</div>
+  {% endif %}
   <main class="contenido">
     {% block contenido %}{% endblock %}
   </main>

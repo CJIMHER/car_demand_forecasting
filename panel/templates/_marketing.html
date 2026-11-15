@@ -1,0 +1,161 @@
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos %}
+<div id="marketing" class="vista">
+  <div class="vista-cabecera">
+    <div>
+      <h1>Dónde invertir esta semana</h1>
+      <p class="subtitulo">Meta Ads cruzado con los leads, citas y ventas de Walcu · últimos 28 días{% if d.kpis.hay %} ({{ d.kpis.desde }}–{{ d.kpis.hasta }}){% endif %}</p>
+    </div>
+  </div>
+
+  <div class="kpis"{{ attrs("kpis", d.kpis) }}>
+    {% if d.kpis.hay %}
+    {% for k in d.kpis.tarjetas %}
+    <div class="kpi{% if k.sin_dato %} sin-dato{% endif %}">
+      <span class="kpi-etiqueta">{{ k.etiqueta }}</span>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-sub">{{ k.sub }}</span>
+      {{ marca(d.kpis) }}
+    </div>
+    {% endfor %}
+    {% else %}
+    {% for e in ["Inversión", "Leads", "Coste por lead", "Coste por venta"] %}
+    <div class="kpi"><span class="kpi-etiqueta">{{ e }}</span>{{ sin_datos() }}</div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <section aria-labelledby="t-reco" class="seccion"{{ attrs("recomendacion", d.recomendacion) }}>
+    <div class="tarjeta-cabeza"><h2 id="t-reco" class="h2-grande">Recomendación por modelo</h2>{{ marca(d.recomendacion) }}</div>
+    {% if d.recomendacion.hay %}
+    <div class="recomendaciones">
+      {% for col in d.recomendacion.columnas %}
+      <div class="tarjeta reco reco-{{ col.clave }}">
+        <span class="reco-titulo">{{ col.titulo }}</span>
+        {% for i in col.elementos %}
+        <div>
+          <div class="reco-modelo">{{ i.modelo }}{% if i.accion %} <span class="chip chip-revisar_precio">{{ i.accion }}</span>{% endif %}</div>
+          <p class="reco-motivo">{{ i.motivo }}</p>
+        </div>
+        {% else %}
+        <p class="nota">Ningún modelo.</p>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    <p class="nota">Son sugerencias; decide marketing. Cada una combina cuatro cosas: coste real por venta, stock envejecido, atención frente a los rivales y tendencia de los leads.</p>
+    {% else %}{{ sin_datos() }}{% endif %}
+  </section>
+
+  <div class="dos-columnas">
+    <section aria-labelledby="t-campanas" class="tarjeta tarjeta-ancha"{{ attrs("campanas", d.campanas) }}>
+      <div class="tarjeta-cabeza">
+        <h2 id="t-campanas">Campañas: del gasto a la venta</h2>
+        {% if d.campanas.hay %}{{ segmentos("Ordenar campañas", d.campanas.ordenes, "#marketing") }}{% endif %}
+      </div>
+      {{ marca(d.campanas) }}
+      {% if d.campanas.hay %}
+      <div class="tabla-scroll">
+        <table class="tabla tabla-movil tabla-campanas">
+          <thead>
+            <tr>
+              <th scope="col" class="izq">Campaña</th>
+              <th scope="col">Gasto</th>
+              <th scope="col">Leads</th>
+              <th scope="col">Citas</th>
+              <th scope="col">Ventas</th>
+              <th scope="col">€ / lead</th>
+              <th scope="col">€ / cita</th>
+              <th scope="col">€ / venta</th>
+              <th scope="col" class="izq">Salud</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in d.campanas.filas %}
+            <tr{% if c.alerta %} class="aviso"{% endif %}>
+              <th scope="row" class="izq">
+                <span class="campana-nombre">{{ c.nombre }}</span>
+                <span class="campana-nota">{{ c.nota }}</span>
+              </th>
+              <td data-etiqueta="Gasto">{{ c.gasto }}</td>
+              <td data-etiqueta="Leads"{% if not d.campanas.hay_leads %} title="Sin datos todavía"{% endif %}>{{ c.leads }}</td>
+              <td data-etiqueta="Citas">{{ c.citas }}</td>
+              <td data-etiqueta="Ventas">{{ c.ventas }}</td>
+              <td data-etiqueta="€ / lead">{{ c.cpl }}</td>
+              <td data-etiqueta="€ / cita">{{ c.cpc }}</td>
+              <td data-etiqueta="€ / venta" class="fuerte">{{ c.cpv }}</td>
+              <td data-etiqueta="Salud" class="izq c-salud"{% if c.titulo_salud %} title="{{ c.titulo_salud }}"{% endif %}>
+                <span class="chip chip-salud-{{ c.estado or 'ninguno' }}">{{ c.estado_texto }}</span>
+                {% for t in c.fallos %}<span class="fallo">{{ t }}</span>{% endfor %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="izq">Ninguna campaña con gasto en estos 28 días.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if not d.campanas.hay_leads %}<p class="nota motivo">Leads, citas y ventas: sin datos todavía.</p>{% endif %}
+      <p class="nota">Salud: cada medida de la campaña (entrega, anuncio, web, calidad del lead y stock) se compara con su referencia en campañas anteriores con los mismos días de vida, y el estado sale de la probabilidad de que vaya peor que esa referencia, con el n de campañas en que se apoya.</p>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+
+    <section aria-labelledby="t-atencion" class="tarjeta tarjeta-estrecha"{{ attrs("atencion", d.atencion) }}>
+      <div>
+        <h2 id="t-atencion">Atención frente a sus rivales</h2>
+        <p class="nota">Búsquedas en Google del modelo frente a su segmento, en puntos{% if d.atencion.hay %} · {{ d.atencion.mes }}{% endif %}</p>
+      </div>
+      {{ marca(d.atencion) }}
+      {% if d.atencion.hay %}
+      {% for m in d.atencion.filas %}
+      <div class="atencion">
+        <span class="atencion-modelo">{{ m.modelo }}</span>
+        <svg class="atencion-barra neg" viewBox="0 0 100 18" preserveAspectRatio="none" aria-hidden="true"><rect class="relleno viejo" x="{{ 100 - m.neg }}" width="{{ m.neg }}" height="18"></rect></svg>
+        <svg class="atencion-barra pos" viewBox="0 0 100 18" preserveAspectRatio="none" aria-hidden="true"><rect class="relleno" width="{{ m.pos }}" height="18"></rect></svg>
+        <span class="atencion-texto">{{ m.texto }}</span>
+      </div>
+      {% endfor %}
+      <p class="nota">Es una señal direccional: la única externa que ha anticipado algo las matriculaciones. Anticipa poco, así que se usa como pista, no como orden.</p>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+  </div>
+
+  <div class="dos-columnas">
+    <section aria-labelledby="t-semanas" class="tarjeta tarjeta-ancha"{{ attrs("semanas", d.semanas) }}>
+      <h2 id="t-semanas">Cuándo lanzar una campaña general</h2>
+      {{ marca(d.semanas) }}
+      {% if d.semanas.hay %}
+      <ul class="semanas">
+        {% for s in d.semanas.filas %}
+        <li class="semana">
+          <div class="semana-cabeza"><span class="semana-nombre">{{ s.semana }}</span><span class="chip chip-nivel-{{ s.nivel }}">{{ s.nivel_texto }}</span></div>
+          <ul class="motivos">
+            {% for m in s.motivos %}<li><span class="motivo-tipo">{{ m.tipo }}:</span> {{ m.texto }}</li>{% endfor %}
+          </ul>
+          <span class="semana-indice">{{ s.indice }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="nota">Orientativo: describe cómo viene cada semana; no mide el efecto de lanzar en una u otra.</p>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+
+    <section aria-labelledby="t-pasadas" class="tarjeta tarjeta-estrecha"{{ attrs("pasadas", d.pasadas) }}>
+      <h2 id="t-pasadas">Qué dieron las campañas pasadas</h2>
+      {{ marca(d.pasadas) }}
+      {% if d.pasadas.hay %}
+      <ul class="pasadas">
+        {% for c in d.pasadas.filas %}
+        <li class="pasada">
+          <div class="pasada-cabeza"><span class="campana-nombre">{{ c.nombre }}</span><span class="campana-nota">{{ c.fechas }} · {{ c.gasto }}</span></div>
+          <div class="pasada-cifras">
+            <div><span class="pasada-etiqueta">Leads</span><strong>{{ c.leads }}</strong><span class="n">sin campaña: {{ c.leads_sin }}</span><span class="chip chip-veredicto-{{ c.veredicto_leads }}">{{ c.veredicto_leads_texto }}</span></div>
+            <div><span class="pasada-etiqueta">Ventas</span><strong>{{ c.ventas }}</strong><span class="n">sin campaña: {{ c.ventas_sin }}</span><span class="chip chip-veredicto-{{ c.veredicto_ventas }}">{{ c.veredicto_ventas_texto }}</span></div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="nota">«Sin campaña»: lo esperado si no se hubiera lanzado, con su intervalo (del percentil 10 al 90). Por encima o por debajo, si lo observado queda fuera del intervalo. Es una comparación con un modelo, no un experimento.</p>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+  </div>
+</div>

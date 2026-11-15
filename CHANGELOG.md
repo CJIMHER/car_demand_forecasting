@@ -1,5 +1,45 @@
 # Cambios
 
+## 2026-11-15 · Hito 1b, sesión 2: contrato de datos y vistas Dirección, Ventas y Marketing (rama hito-1b)
+
+- Encargo guardado en `docs/hitos/hito_1b_sesion_2.md`.
+- Contrato de datos del panel en `docs/contrato_panel.md`, con la migración `0005`. Son 12 tablas
+  `panel_*` (stock, ventas del mes, alertas, riesgo por vehículo, curvas de grupo, leads, gasto por
+  campaña, salud de campañas, recomendación, atención relativa, semanas y campañas pasadas).
+  - Todas llevan `dia`, `origen` ('real' o 'ejemplo') y `calculado_at`.
+  - Ninguna tiene datos personales.
+  - Las salidas de modelo llevan p10/p50/p90, `modelo_version` y `n`.
+  - `cdf_panel` solo puede leerlas.
+- `panel/contrato.py`: un bloque no mezcla orígenes.
+  - Si cualquiera de sus tablas tiene una fila real, el bloque solo lee filas reales.
+  - Si no, lee las de ejemplo; sin filas, dice «Sin datos todavía».
+- `panel/permisos.py`: una vista con algún bloque de ejemplo solo la ven los roles de
+  `PANEL_EJEMPLO_VISIBLE_PARA` (por defecto, `tecnico`). Los demás la ven desactivada; sin datos,
+  está desactivada para todos.
+- Vistas nuevas, con banda «Datos de ejemplo» arriba y la etiqueta en cada bloque de ejemplo:
+  - **Dirección**: selector VN, VO o Todo; tarjetas; ventas acumuladas con la banda p10–p90;
+    alertas con tema y destinatario; stock por días en exposición; tarjeta del mercado con datos
+    reales.
+  - **Ventas**: vehículos por riesgo con su intervalo, filtros y detalle con la curva de su grupo.
+    Los botones están desactivados.
+  - **Marketing**: tarjetas de 28 días, recomendación por modelo, campañas con su salud, atención
+    frente a los rivales, cuándo lanzar una campaña general y qué dieron las campañas pasadas.
+  - En el móvil, sin desplazamiento horizontal.
+- `panel/ejemplo.py` y `make ejemplo-cargar` / `make ejemplo-borrar`: datos de ejemplo deterministas
+  y coherentes entre vistas, con los modelos de `config/concesionario.yaml`.
+  - Solo funcionan con `PANEL_PERMITE_EJEMPLO=1`.
+  - Nunca tocan tablas de hechos, `panel_mercado_*` ni filas reales.
+  - `make panel-dev` los carga.
+- `config/concesionario.yaml`: `panel.objetivo_antiguedad_dias` (60) y `modelos` de la marca.
+- Mercado:
+  - el modelo sale sin la marca delante: se quita en el precálculo, y `make precalcular` rehace el
+    histórico sin duplicar modelos;
+  - fuera de la provincia propia, «Nuestros» muestra solo las unidades.
+- `.env.example`: `PANEL_PERMITE_EJEMPLO` y `PANEL_EJEMPLO_VISIBLE_PARA`, sin valor. El compose pasa
+  la segunda al panel; la primera, nunca.
+- Pruebas: `tests/test_contrato_panel.py`, Makefile `ejemplo-*` y marca en el precálculo.
+  `tests/navegador/capturas.mjs` revisa las tres vistas a 390 px y hace sus capturas.
+
 ## 2026-11-15 · Hito 1b: «Nuestros» y «Por concesionario» en Mercado (rama hito-1b)
 
 - Tabla por modelo: columna «Nuestros» (anuncios del concesionario propio y, atenuado, su peso sobre
