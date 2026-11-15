@@ -20,13 +20,13 @@ from pathlib import Path
 import psycopg
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
 from panel import contrato, direccion, formato, marketing, mercado, permisos, ventas
 from panel import seguridad as seg
+from panel.estaticos import Estaticos, Huellas
 
 AQUI = Path(__file__).resolve().parent
 LOG = logging.getLogger("panel")
@@ -62,7 +62,8 @@ class Prohibido(Exception):
 
 def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = None,
               hoy: Callable[[], date] | None = None, sesion_dias: int | None = None,
-              proxy: str | None = None, ejemplo_para: str | None = None) -> FastAPI:
+              proxy: str | None = None, ejemplo_para: str | None = None,
+              estaticos: Path | None = None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.dsn = dsn if dsn is not None else os.environ.get("PANEL_DATABASE_URL", "")
     app.state.conc = concesionario or cargar_concesionario()
@@ -72,8 +73,9 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
     app.state.ejemplo_para = permisos.roles_ejemplo(
         ejemplo_para if ejemplo_para is not None else os.environ.get("PANEL_EJEMPLO_VISIBLE_PARA"))
     plantillas = Jinja2Templates(directory=str(AQUI / "templates"))
-    plantillas.env.globals.update(f=formato, TEXTO_DESACTIVADA=permisos.TEXTO_DESACTIVADA)
-    app.mount("/static", StaticFiles(directory=str(AQUI / "static")), name="static")
+    huellas = Huellas(estaticos or AQUI / "static")   # `estaticos`: otra carpeta, solo en pruebas
+    plantillas.env.globals.update(f=formato, TEXTO_DESACTIVADA=permisos.TEXTO_DESACTIVADA, estatico=huellas.url)
+    app.mount("/static", Estaticos(huellas), name="static")
 
     # ------------------------------------------------------------------ utilidades
 
@@ -148,8 +150,9 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         for clave, valor in CABECERAS.items():
             resp.headers.setdefault(clave, valor)
         if request.url.path.startswith("/static/"):
-            resp.headers["Cache-Control"] = "public, max-age=86400"
-        else:
+            # Con la huella vigente, un año e immutable; sin ella, revalidar (panel/estaticos.py)
+            resp.headers["Cache-Control"] = huellas.cache_control(request.url.path, request.query_params.get("v"))
+        else:   # HTML y respuestas parciales de htmx: nunca se guardan (huellas viejas, equipos compartidos)
             resp.headers["Cache-Control"] = "no-store"
             resp.headers["Vary"] = "Cookie, HX-Request"
         return resp
@@ -325,10 +328,11 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
                               app.state.hoy(), mostrar)})
 
     @app.get("/marketing")
-    def vista_marketing(request: Request, orden: str = "venta", pg=Depends(bd)):
+    def vista_marketing(request: Request, tipo: str = "todo", orden: str = "venta", pg=Depends(bd)):
+        tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
         orden = orden if orden in ("venta", "gasto") else "venta"
         return vista_contrato(request, pg, "marketing", "marketing.html", "_marketing.html", lambda: {
-            "d": marketing.datos(pg, app.state.conc, modos_de(request, pg), orden, app.state.hoy())})
+            "d": marketing.datos(pg, app.state.conc, modos_de(request, pg), orden, app.state.hoy(), tipo)})
 
     @app.get("/estado-fuentes")
     def estado(request: Request, pg=Depends(bd)):

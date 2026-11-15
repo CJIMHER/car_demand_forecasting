@@ -2,7 +2,8 @@
 
 Qué tablas lee cada vista del panel, qué significa cada columna y quién la rellenará. Conectar
 una fuente consiste en escribir filas reales en estas tablas, sin tocar las vistas. Las tablas
-se crean en la migración `0005` (`infra/migraciones/versions/0005_contrato_panel.py`). La
+se crean en la migración `0005` (`infra/migraciones/versions/0005_contrato_panel.py`); la `0006`
+(`0006_marketing_por_tipo.py`) añade el ámbito de las campañas y el tipo VN/VO de Marketing. La
 correspondencia entre bloques y tablas está en `panel/contrato.py`.
 
 Mercado no entra en este contrato: lee `panel_mercado_*`, que el precálculo de las 09:10 rellena
@@ -21,7 +22,7 @@ siempre con datos reales (ver `analitica/README.md`).
   - el panel solo las lee: `cdf_panel` tiene SELECT y nada más.
 - **Sin datos personales**:
   - vehículos, por número de stock;
-  - leads, solo agregados por día, modelo y campaña;
+  - leads, solo agregados por día, modelo, tipo (VN/VO) y campaña;
   - ninguna columna con nombre, teléfono, correo ni identificador de cliente. Una prueba lo comprueba.
 - **Salidas de modelo**: llevan siempre `_p10`, `_p50` y `_p90`, `modelo_version` y `n`, el número de casos en que se apoya. Nunca un punto solo.
   - La base exige p10 ≤ p50 ≤ p90.
@@ -77,9 +78,24 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Marketing | Tarjetas de 28 días | `panel_campana_dia` y `panel_leads_dia` |
 | Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_leads_dia` y `panel_campana_salud` |
 | Marketing | Recomendación por modelo | `panel_recomendacion_modelo` |
-| Marketing | Atención frente a sus rivales | `panel_atencion_relativa` |
+| Marketing | Atención frente a sus rivales (Todo y VN) | `panel_atencion_relativa` |
+| Marketing | Ocasión: dónde hay stock que mover (solo VO) | `panel_riesgo_vehiculo`, la misma tabla que Ventas |
 | Marketing | Cuándo lanzar una campaña general | `panel_semana_campana` |
 | Marketing | Qué dieron las campañas pasadas | `panel_campana_resultado` |
+
+**Marketing por tipo.** La vista tiene el selector Todo / Nuevos (VN) / Ocasión (VO):
+
+| Bloque | Todo | VN o VO |
+| --- | --- | --- |
+| Tarjetas | Todas las campañas | Solo las del ámbito elegido, sin las generales; lo dicen («sin la campaña general») |
+| Campañas | Todas, con todos sus leads | Las del ámbito y las generales. De una general: los leads, citas y ventas de ese tipo, y «—» en coste por lead, cita y venta, con la nota «gasto común a VN y VO» |
+| Recomendación | Las de VN y VO, cada una con su etiqueta | Las del tipo |
+| Atención / Ocasión | Atención | VN: atención. VO: en su lugar, el stock de ocasión por modelo |
+| Semanas | `tipo = 'todo'` | `tipo` elegido |
+| Campañas pasadas | Filas `tipo = 'todo'` | Las del ámbito (fila `todo`) y las generales (fila del tipo) |
+
+El gasto es siempre de la campaña: nunca se reparte entre VN y VO con ninguna regla. Una campaña de
+ámbito VN o VO se muestra con todos sus leads en cualquier vista; solo las generales se parten por tipo.
 
 El panel muestra de cada tabla el último `dia` con el origen del bloque. Sobre esas filas solo
 hace recuentos, sumas, medias y cocientes; ningún modelo se ajusta al servir una página.
@@ -175,11 +191,12 @@ Hitos según `docs/desarrollo.md`.
 
 ### panel_leads_dia · leads agregados
 
-- **Grano**: día × modelo × campaña (NULL: sin campaña).
+- **Grano**: día × modelo × tipo × campaña (NULL: sin campaña).
 - **Fuente**: Walcu (`leads_agg`), hito 1. La campaña se cruza con Meta en el hito 2.
 
 | Columna | Unidad | Significado |
 | --- | --- | --- |
+| `tipo` | VN / VO | Tipo del vehículo por el que pregunta el lead (no el ámbito de la campaña) |
 | `leads`, `citas`, `ventas` | número | Citas y ventas cuentan el día en que ocurren, atribuidas a la campaña del lead |
 
 Nada que identifique a una persona: el agregado se hace antes de guardar.
@@ -192,7 +209,8 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 | Columna | Unidad | Significado |
 | --- | --- | --- |
 | `campana_id`, `titulo` | texto | Identificador y nombre de la campaña en Meta |
-| `tipo_campana` | modelo / general | De un modelo (`modelo` obligatorio) o de marca |
+| `tipo_campana` | modelo / general | De un modelo (`modelo` obligatorio) o sin modelo concreto |
+| `ambito` | VN / VO / general | A qué stock va dirigida; general: a los dos. El gasto no se reparte entre VN y VO |
 | `inicio` | fecha | Primer día de la campaña: de aquí salen sus días de vida |
 | `gasto_cents` | céntimos | |
 | `impresiones`, `clics` | número | |
@@ -200,7 +218,8 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 **Cifras de Marketing:**
 
 - **Ventana**: 28 días que acaban en el último `dia` con gasto.
-- **Leads, citas y ventas atribuidas**: las de `panel_leads_dia` con campaña.
+- **Leads, citas y ventas atribuidas**: las de `panel_leads_dia` con campaña. En VN o VO, las de
+  las campañas de ese ámbito; de una general, solo las del tipo elegido.
 - **Coste por lead**: gasto / leads. Se compara con los 28 días anteriores.
 - **Coste por venta**: gasto / ventas.
 - **Campaña activa**: tiene gasto el último día.
@@ -213,7 +232,7 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 **Qué significa:**
 
 - Cada eslabón tiene una medida, que se compara con su referencia: la distribución de esa medida en
-  campañas anteriores **con los mismos días de vida**.
+  campañas anteriores **de su mismo ámbito** (VN, VO o general) **con los mismos días de vida**.
 - El estado sale de la probabilidad de que la campaña esté peor que esa referencia:
   - **vigilar** desde 0,7;
   - **revisar** desde 0,9;
@@ -247,7 +266,7 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 
 ### panel_recomendacion_modelo · recomendación por modelo
 
-- **Grano**: día × modelo.
+- **Grano**: día × tipo × modelo. `tipo` VN: por modelo del stock nuevo; VO: del stock de ocasión.
 - **Fuente**: reglas en YAML del hito 4. Combinan coste por venta, stock envejecido, atención relativa y tendencia de leads.
 
 | Columna | Unidad | Significado |
@@ -273,7 +292,8 @@ No es salida de un modelo, así que no lleva intervalo. Es una señal direcciona
 
 ### panel_semana_campana · cuándo lanzar una campaña general
 
-- **Grano**: día × semana (lunes), las seis siguientes.
+- **Grano**: día × tipo (`todo`, VN, VO) × semana (lunes), las seis siguientes. El índice es la
+  venta esperada de ese tipo.
 - **Fuente**: estacionalidad del modelo de ventas (hito 5) más reglas de calendario.
 
 | Columna | Unidad | Significado |
@@ -287,12 +307,16 @@ Es orientativo: describe cómo viene cada semana y no mide el efecto de lanzar e
 
 ### panel_campana_resultado · qué dieron las campañas pasadas
 
-- **Grano**: día × campaña terminada.
+- **Grano**: día × campaña terminada × tipo.
+  - Toda campaña tiene una fila `tipo = 'todo'` con todos sus leads y ventas.
+  - Las de ámbito general tienen además una fila VN y otra VO, con los leads y ventas de ese tipo y
+    lo esperado sin campaña para ese tipo. La base no admite filas VN o VO en una campaña que no sea general.
 - **Fuente**: referencia sin campaña del modelo de ventas, hito 5. El efecto medido con grupo de control llega en el hito 6.
 
 | Columna | Unidad | Significado |
 | --- | --- | --- |
-| `titulo`, `inicio`, `fin`, `gasto_cents` | | |
+| `titulo`, `ambito`, `inicio`, `fin`, `gasto_cents` | | El gasto, entero en todas las filas: no se reparte |
+| `tipo` | todo / VN / VO | |
 | `leads`, `ventas` | número | Observados durante la campaña |
 | `leads_sin_p10`, `_p50`, `_p90` y `ventas_sin_p10`, `_p50`, `_p90` | número | Lo esperado en esas fechas sin campaña |
 | `veredicto_leads`, `veredicto_ventas` | por_encima, normal, por_debajo | Por encima de p90, entre p10 y p90, o por debajo de p10 |
@@ -315,7 +339,8 @@ Es una comparación con un modelo, no un experimento.
 - **Deterministas**: el mismo día da las mismas filas.
 - **Coherentes entre vistas**:
   - las alertas citan vehículos de Ventas por número de stock y campañas de Marketing;
-  - los leads de Ventas suman lo mismo que los de Marketing;
+  - los leads de Ventas suman lo mismo que los de Marketing (por modelo y tipo);
+  - hay campañas de VN, de VO y generales, y estas con leads de los dos tipos;
   - el stock de Dirección es el de Ventas.
 - **Modelos**: los de la marca configurada (`config/concesionario.yaml`, `modelos`).
 - **Cifras de modelo**: se escriben tal cual, con p10–p90, versión `ejemplo` y su n. No se ajusta nada.

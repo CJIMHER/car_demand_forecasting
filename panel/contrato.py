@@ -48,6 +48,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "recomendacion": ("panel_recomendacion_modelo",),
         "campanas": ("panel_campana_dia", "panel_leads_dia", "panel_campana_salud"),
         "atencion": ("panel_atencion_relativa",),
+        "ocasion": ("panel_riesgo_vehiculo",),      # solo en VO: stock de ocasión que mover
         "semanas": ("panel_semana_campana",),
         "pasadas": ("panel_campana_resultado",),
     },

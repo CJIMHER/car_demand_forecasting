@@ -10,7 +10,7 @@
 // en cada zona y tipo de Mercado y en cada vista y filtro de Dirección, Ventas y Marketing, que el
 // documento no desborda el ancho y que todas las celdas de cada fila de las tablas están en pantalla.
 // En Ventas, tras pulsar un vehículo de mitad de lista, comprueba que su detalle queda en pantalla
-// (1440 y 390 px). Guarda Mercado, Dirección, Ventas y Marketing a 1440 px y a 390 px. Sale con código 1 si algo
+// (1440 y 390 px). Guarda Mercado, Dirección, Ventas y Marketing (Todo, VN y VO) a 1440 px y a 390 px. Sale con código 1 si algo
 // falla o si hay errores de CSP.
 import fs from "node:fs";
 const [puerto, salida, usuario, clave] = process.argv.slice(2);
@@ -30,7 +30,7 @@ const cdp = (method, params = {}) => new Promise(r => { const i = ++id; pend.set
 const espera = ms => new Promise(r => setTimeout(r, ms));
 const evalua = async expr => (await cdp("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true })).result?.result?.value;
 await cdp("Page.enable"); await cdp("Runtime.enable"); await cdp("Log.enable");
-await cdp("Network.enable"); await cdp("Network.setCacheDisabled", { cacheDisabled: true });  // siempre el CSS recién servido
+await cdp("Network.enable"); await cdp("Network.setCacheDisabled", { cacheDisabled: false });  // caché activada, como un usuario: los estáticos llevan huella
 async function ir(url) { await cdp("Page.navigate", { url }); await espera(1500); }
 async function tamano(ancho, movil) {
   await cdp("Emulation.setDeviceMetricsOverride", { width: ancho, height: movil ? 844 : 900, deviceScaleFactor: movil ? 2 : 1, mobile: movil });
@@ -83,7 +83,7 @@ for (const zona of ["provincia", "comunidad", "espana"]) for (const tipo of ["VN
 }
 // Dirección, Ventas y Marketing: nada desborda y las celdas de sus tablas están dentro de la pantalla
 const VISTAS = ["/direccion", "/direccion?tipo=VN", "/ventas", "/ventas?tipo=VO&riesgo=1", "/marketing",
-                "/marketing?orden=gasto"];
+                "/marketing?orden=gasto", "/marketing?tipo=VN", "/marketing?tipo=VO&orden=gasto"];
 for (const ruta of VISTAS) {
   await ir(`${BASE}${ruta}`);
   resultados.push(JSON.parse(await evalua(`(() => {
@@ -103,6 +103,24 @@ for (const ruta of VISTAS) {
       etiquetas: document.querySelectorAll('.etiqueta-ejemplo').length, banda: !!document.querySelector('.banda-ejemplo')});
   })()`)));
 }
+// Escritorio (1440 px): ninguna celda de una tabla se sale de su tarjeta (p. ej. la tabla estrecha de VO)
+const escritorio = [];
+await tamano(1440, false);
+for (const ruta of VISTAS) {
+  await ir(`${BASE}${ruta}`);
+  escritorio.push(JSON.parse(await evalua(`(() => {
+    const malas = [];
+    for (const t of document.querySelectorAll('.tabla')) {
+      const caja = (t.closest('.tabla-scroll') || t.closest('.tarjeta') || t).getBoundingClientRect();
+      for (const c of t.querySelectorAll('th, td')) { const r = c.getBoundingClientRect();
+        if (r.width > 0 && (r.left < caja.left - 0.5 || r.right > caja.right + 0.5)) { malas.push(c.textContent.trim().slice(0, 30)); break; } }
+    }
+    return JSON.stringify({ruta: ${JSON.stringify(ruta)}, celdasFuera: malas,
+      desborda: document.documentElement.scrollWidth > document.documentElement.clientWidth});
+  })()`)));
+}
+for (const r of escritorio) console.log("escritorio 1440:", JSON.stringify(r));
+await tamano(390, true);
 // Ventas: tras pulsar un vehículo de mitad de lista (fila 13 de 25), su detalle queda dentro de la
 // pantalla: en escritorio, el panel fijo a la vista; en el móvil, la fila que se abre bajo el vehículo.
 const detalles = [];
@@ -132,17 +150,20 @@ const comprobacion = JSON.stringify({
   tarjetasFuera: resultados.reduce((n, r) => n + (r.tarjetasFuera || 0), 0),
   sinBanda: resultados.filter(r => r.ruta && !r.banda).map(r => r.ruta),
   sinGrafico: resultados.filter(r => r.ruta && /direccion|ventas/.test(r.ruta) && r.graficos === 0).map(r => r.ruta),
+  escritorioFuera: escritorio.filter(r => r.celdasFuera.length || r.desborda).map(r => r.ruta),
   detalleFuera: detalles.filter(d => !d.dentro || !d.deEse || !d.curva || d.scrollY === 0).map(d => d.ancho),
 });
 await ir(`${BASE}/mercado`); await espera(800);
 await captura("mercado_movil_390.png");
-for (const v of ["direccion", "ventas", "marketing"]) {
-  await tamano(390, true); await ir(`${BASE}/${v}`); await espera(800);
+const PAGINAS = {direccion: "direccion", ventas: "ventas", marketing: "marketing",
+                 marketing_vn: "marketing?tipo=VN", marketing_vo: "marketing?tipo=VO"};
+for (const [v, ruta] of Object.entries(PAGINAS)) {
+  await tamano(390, true); await ir(`${BASE}/${ruta}`); await espera(800);
   await captura(`${v}_movil_390.png`);
 }
 await tamano(1440, false);
-for (const v of ["direccion", "ventas", "marketing"]) {
-  await ir(`${BASE}/${v}`); await espera(800);
+for (const [v, ruta] of Object.entries(PAGINAS)) {
+  await ir(`${BASE}/${ruta}`); await espera(800);
   await captura(`${v}_escritorio_1440.png`);
 }
 await tamano(390, true); await ir(`${BASE}/mercado`); await espera(500);
@@ -151,7 +172,7 @@ console.log("altos de zonas táctiles (px):", zonas);
 console.log("errores de consola/CSP:", errores.length ? errores : "ninguno");
 const c = JSON.parse(comprobacion);
 const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.sinConcesionariosEnProvincia ||
-  c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0 || c.detalleFuera.length > 0;
+  c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.escritorioFuera.length > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0 || c.detalleFuera.length > 0;
 console.log("comprobación:", comprobacion);
 console.log(mal ? "RESULTADO: FALLA" : "RESULTADO: correcto");
 ws.close(); process.exit(mal ? 1 : 0);

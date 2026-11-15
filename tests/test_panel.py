@@ -418,8 +418,7 @@ def test_cabeceras_de_seguridad_y_nada_de_terceros(app, pg, datos, personas):
         assert p.scripts_en_linea == 0 and p.estilos == 0 and p.eventos == 0, r.url
         assert "http://" not in r.text and "https://" not in r.text
     css = anonimo.get("/static/css/panel.css").text
-    assert "@import" not in css and all(u.startswith(("../", "/")) or u.startswith('"../')
-                                        for u in re.findall(r"url\(([^)]+)\)", css))
+    assert "@import" not in css and all(u.startswith('"/static/') for u in re.findall(r"url\(([^)]+)\)", css))
 
 
 def test_htmx_devuelve_solo_la_vista(app, pg, datos, personas):

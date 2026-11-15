@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, timedelta
+from decimal import Decimal
 
 import psycopg
 import pytest
@@ -17,6 +18,7 @@ from ingesta.concesionario import cargar as cargar_concesionario
 from panel import contrato, ejemplo, permisos, usuarios
 from panel.app import crear_app
 from panel.permisos import ROLES
+from sinteticos import RAIZ
 from test_panel import CLAVE, FICTICIO, HOY, Enlaces, _con_datos, dentro
 
 VISTAS = {"direccion": "/direccion", "ventas": "/ventas", "marketing": "/marketing"}
@@ -93,8 +95,9 @@ def test_todas_las_tablas_llevan_dia_origen_y_calculado_at(pg):
         assert "origen = ANY (ARRAY['real'::text, 'ejemplo'::text])" in checks, t
         assert re.search(r"(PRIMARY KEY|UNIQUE NULLS NOT DISTINCT) \(origen, dia", checks), t
     # El origen forma parte de la clave: una fila real y una de ejemplo del mismo día conviven
-    pg.execute("INSERT INTO panel_recomendacion_modelo (dia, origen, modelo, accion, motivo, modelo_version, n) "
-               "VALUES (%s, 'ejemplo', 'Golf', 'mantener', 'x', 'v', 1), (%s, 'real', 'Golf', 'mantener', 'x', 'v', 1)",
+    pg.execute("INSERT INTO panel_recomendacion_modelo (dia, origen, tipo, modelo, accion, motivo, modelo_version, n) "
+               "VALUES (%s, 'ejemplo', 'VN', 'Golf', 'mantener', 'x', 'v', 1), "
+               "(%s, 'real', 'VN', 'Golf', 'mantener', 'x', 'v', 1)",
                (HOY, HOY))
 
 
@@ -187,10 +190,10 @@ def test_ejemplo_determinista_y_coherente_entre_vistas(conc):
             assert al["campana_id"] in campanas
     assert any(al["stock_id"] for al in a["panel_alertas"]) and any(al["campana_id"] for al in a["panel_alertas"])
     assert {f["campana_id"] for f in a["panel_campana_salud"]} <= campanas
-    # Leads de Ventas = suma de los de Marketing
-    for v in list(riesgo.values())[:20]:
-        suma = sum(f["leads"] for f in a["panel_leads_dia"]
-                   if f["modelo"] == v["modelo"] and HOY - timedelta(days=14) <= f["dia"] < HOY)
+    # Leads de Ventas = suma de los de Marketing del mismo modelo y tipo
+    for v in riesgo.values():
+        suma = sum(f["leads"] for f in a["panel_leads_dia"] if f["modelo"] == v["modelo"] and f["tipo"] == v["tipo"]
+                   and HOY - timedelta(days=14) <= f["dia"] < HOY)
         assert v["leads_14"] == suma
     # Modelos de la marca configurada
     modelos = set(conc.modelos_vn) | set(conc.modelos_vo)
@@ -201,8 +204,27 @@ def test_ejemplo_determinista_y_coherente_entre_vistas(conc):
     for f in a["panel_campana_resultado"]:
         assert f["veredicto_ventas"] == ejemplo._veredicto(f["ventas"], f["ventas_sin_p10"], f["ventas_sin_p90"])
     # Seis semanas, desde el lunes siguiente
-    semanas = [f["semana"] for f in a["panel_semana_campana"]]
-    assert len(semanas) == 6 and all(s.weekday() == 0 for s in semanas) and semanas[0] > HOY
+    for tipo in ("todo", "VN", "VO"):
+        semanas = [f["semana"] for f in a["panel_semana_campana"] if f["tipo"] == tipo]
+        assert len(semanas) == 6 and all(s.weekday() == 0 for s in semanas) and semanas[0] > HOY, tipo
+    # Ámbitos: campañas de VN, de VO y una general con leads de los dos tipos
+    ambito = {f["campana_id"]: f["ambito"] for f in a["panel_campana_dia"]}
+    assert set(ambito.values()) == {"VN", "VO", "general"}
+    tipos_de = {}
+    for f in a["panel_leads_dia"]:
+        if f["campana_id"]:
+            tipos_de.setdefault(f["campana_id"], set()).add(f["tipo"])
+    for cid, tipos in tipos_de.items():
+        assert tipos == ({"VN", "VO"} if ambito[cid] == "general" else {ambito[cid]}), cid
+    assert {f["tipo"] for f in a["panel_recomendacion_modelo"]} == {"VN", "VO"}
+    # Campañas pasadas: una fila «todo» por campaña; las generales, además VN y VO, que suman «todo»
+    res = {(f["campana_id"], f["tipo"]): f for f in a["panel_campana_resultado"]}
+    for (cid, tipo), f in res.items():
+        if f["ambito"] == "general" and tipo == "todo":
+            for col in ("leads", "ventas", "leads_sin_p50", "ventas_sin_p50"):
+                assert f[col] == res[(cid, "VN")][col] + res[(cid, "VO")][col], (cid, col)
+        assert (cid, "todo") in res
+    assert {f["ambito"] for f in a["panel_campana_resultado"]} == {"VN", "VO", "general"}
 
 
 def _huella(pg, tabla):
@@ -249,14 +271,18 @@ def test_cada_bloque_de_ejemplo_lleva_su_etiqueta_y_la_vista_la_banda(pg, datos,
     _con_datos(pg, datos, conc)                                        # mercado real para la tarjeta de Dirección
     ejemplo.cargar(pg, HOY, conc)
     cl = dentro(app_con(panel_url), "tecnico")
-    esperados = {v: set(contrato.BLOQUES[v]) for v in VISTAS}
     for vista, ruta in VISTAS.items():
-        for url in (ruta, ruta + ("?tipo=VO" if vista != "marketing" else "?orden=gasto")):
+        for url in (ruta, ruta + "?tipo=VO", ruta + ("?tipo=VN" if vista != "marketing" else "?tipo=VN&orden=gasto")):
             html = cl.get(url).text
             assert BANDA in html, url
             b = bloques(html)
-            assert esperados[vista] <= set(b), (url, esperados[vista] - set(b))
-            for nombre in esperados[vista]:
+            # Marketing: «Atención frente a sus rivales» en Todo y VN; en VO, en su lugar, el stock de ocasión
+            esperados = set(contrato.BLOQUES[vista]) - ({"atencion"} if "VO" in url else {"ocasion"}
+                                                        if vista == "marketing" else set())
+            assert esperados <= set(b), (url, esperados - set(b))
+            if vista == "marketing":
+                assert ("ocasion" in b) == ("VO" in url) and ("atencion" in b) != ("VO" in url), url
+            for nombre in esperados:
                 origen, trozo = b[nombre]
                 assert origen == "ejemplo" and ETIQUETA in trozo, (url, nombre)
                 assert "Sin datos todavía" not in trozo, (url, nombre)
@@ -394,7 +420,8 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     camp = b["campanas"][1]
     for estado in ("Bien", "Vigilar", "Revisar", "Sin datos suficientes"):
         assert f">{estado}</span>" in camp, estado
-    assert "De modelo (" in camp and "General ·" in camp and "días de vida" in camp
+    assert "Nuevos (VN) · " in camp and "Ocasión (VO) · " in camp and "General (VN y VO) · " in camp
+    assert "días de vida" in camp and "gasto común" not in camp           # en Todo, la general con sus costes
     # El diagnóstico va en su propia fila, a todo el ancho; en «Salud» queda solo el estado
     assert re.search(r'<tr class="fila-diagnostico">\s*<td colspan="9"><p class="diagnostico">Dónde falla: el anuncio\. '
                      r"Clics por impresión: [\d,]+ %, frente a [\d,]+ % de referencia \([\d,]+–[\d,]+ %\) en "
@@ -404,6 +431,7 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     salud = re.findall(r'<td data-etiqueta="Salud"[^>]*>(.*?)</td>', camp, re.S)
     assert salud and all(re.fullmatch(r'\s*<span class="chip [^"]+">[^<]+</span>\s*', c) for c in salud)
     assert "se compara con su referencia en campañas anteriores con los mismos días de vida" in camp
+    assert "La referencia son campañas anteriores de su mismo ámbito (VN, VO o general)." in camp
     # Recomendación, atención, semanas y campañas pasadas
     for accion in ("Aumentar", "Mantener", "Reducir o cambiar"):
         assert f'<span class="reco-titulo">{accion}</span>' in b["recomendacion"][1]
@@ -414,7 +442,7 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     for motivo in ("Estacionalidad:", "Calendario:", "Stock envejecido:", "Atención:", "Presión de otros concesionarios:"):
         assert motivo in sem, motivo
     pas = b["pasadas"][1]
-    assert pas.count('class="pasada"') == 4 and "sin campaña:" in pas
+    assert pas.count('class="pasada"') == 6 and "sin campaña:" in pas
     for v in ("Por encima de lo esperado", "Dentro de lo normal"):
         assert v in pas
     # Ordenar por gasto
@@ -425,6 +453,141 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
         if ini <= f["dia"] <= fin:
             gastos[f["titulo"]] = gastos.get(f["titulo"], 0) + f["gasto_cents"]
     assert nombres == sorted(gastos, key=lambda n: -gastos[n])
+
+
+# ================================================================== Marketing por tipo
+
+def _filas_campanas(html: str) -> list[dict]:
+    salida = []
+    for ambito, fila in re.findall(r'<tr(?: class="aviso")? data-ambito="([^"]+)">(.*?)</tr>', html, re.S):
+        celdas = dict(re.findall(r'<td data-etiqueta="([^"]+)"[^>]*>\s*(.*?)\s*</td>', fila, re.S))
+        salida.append({"ambito": ambito, "nombre": re.search(r'class="campana-nombre">([^<]+)<', fila).group(1),
+                       "nota": re.search(r'class="campana-nota">([^<]+)<', fila).group(1), **celdas})
+    return salida
+
+
+def _kpi(html: str, etiqueta_inicio: str) -> tuple[str, str]:
+    m = re.search(r'<span class="kpi-etiqueta">' + etiqueta_inicio + r'[^<]*</span>\s*<span class="kpi-valor">([^<]+)'
+                  r'</span>\s*<span class="kpi-sub">([^<]*)</span>', html)
+    return m.group(1), m.group(2)
+
+
+@pytest.mark.parametrize("tipo", ["todo", "VN", "VO"])
+def test_marketing_selector_cuadra_con_las_filas(pg, panel_url, personas, con_ejemplo, tipo):
+    from panel import formato as fmt
+    filas = ejemplo.generar(HOY, con_ejemplo)
+    cl = dentro(app_con(panel_url), "tecnico")
+    html = cl.get(f"/marketing?tipo={tipo}").text
+    b = bloques(html)
+    assert re.search(r'aria-current="true">' + {"todo": "Todo", "VN": "Nuevos \\(VN\\)",
+                                                 "VO": "Ocasión \\(VO\\)"}[tipo] + "<", html)
+    fin = max(f["dia"] for f in filas["panel_campana_dia"])
+    ini = fin - timedelta(days=27)
+    ambito = {f["campana_id"]: f["ambito"] for f in filas["panel_campana_dia"]}
+    titulo = {f["campana_id"]: f["titulo"] for f in filas["panel_campana_dia"]}
+    gasto = {}
+    for f in filas["panel_campana_dia"]:
+        if ini <= f["dia"] <= fin:
+            gasto[f["campana_id"]] = gasto.get(f["campana_id"], 0) + f["gasto_cents"] / 100
+    def leads(cid, de_tipo=None):
+        return sum(f["leads"] for f in filas["panel_leads_dia"] if f["campana_id"] == cid and ini <= f["dia"] <= fin
+                   and (de_tipo is None or f["tipo"] == de_tipo))
+    # Filas: en VN o VO, las de ese ámbito y las generales; de una general, solo los leads del tipo
+    visibles = {cid for cid in gasto if tipo == "todo" or ambito[cid] in (tipo, "general")}
+    tabla = _filas_campanas(b["campanas"][1])
+    assert {f["nombre"] for f in tabla} == {titulo[c] for c in visibles}
+    por_nombre = {f["nombre"]: f for f in tabla}
+    for cid in visibles:
+        f = por_nombre[titulo[cid]]
+        comun = tipo != "todo" and ambito[cid] == "general"
+        assert f["ambito"] == ambito[cid]
+        assert f["Gasto"] == f"{fmt.miles(gasto[cid])} €"                 # el gasto, entero: no se reparte
+        assert f["Leads"] == fmt.miles(leads(cid, tipo if comun else None)), cid
+        if comun:
+            assert (f["€ / lead"], f["€ / cita"], f["€ / venta"]) == ("—", "—", "—"), cid
+            assert "gasto común a VN y VO" in f["nota"]
+        else:
+            assert f["€ / lead"] == f"{fmt.miles(gasto[cid] / leads(cid))} €" and "gasto común" not in f["nota"]
+    # Tarjetas: en VN o VO, solo las campañas de ese ámbito, y lo dicen
+    de_tarjetas = {cid for cid in gasto if tipo == "todo" or ambito[cid] == tipo}
+    g = sum(gasto[c] for c in de_tarjetas)
+    l = sum(leads(c) for c in de_tarjetas)
+    valor, sub = _kpi(b["kpis"][1], "Inversión")
+    assert valor == f"{fmt.miles(g)} €"
+    assert _kpi(b["kpis"][1], "Leads")[0] == fmt.miles(l)
+    assert _kpi(b["kpis"][1], "Coste por lead")[0] == f"{fmt.miles(g / l)} €"
+    # …y cuadran con las filas de la tabla que no son generales
+    assert g == pytest.approx(sum(float(f["Gasto"][:-2].replace(".", "")) for f in tabla
+                                  if tipo == "todo" or f["ambito"] == tipo), abs=len(tabla))
+    if tipo == "todo":
+        assert "sin la campaña general" not in html
+    else:
+        assert "sin la campaña general" in sub and "Solo las campañas de" in html
+        assert "Campaña general (VN y VO): leads, citas y ventas solo de " + tipo in b["campanas"][1]
+    # Recomendación: VN o VO, del stock de ese tipo; Todo, las dos con su etiqueta
+    reco = b["recomendacion"][1]
+    esperadas = [f for f in filas["panel_recomendacion_modelo"] if tipo == "todo" or f["tipo"] == tipo]
+    assert reco.count('class="reco-modelo"') == len(esperadas)
+    etiquetas = re.findall(r'<span class="chip chip-tipo">(V[NO])</span>', reco)
+    assert sorted(etiquetas) == (sorted(f["tipo"] for f in esperadas) if tipo == "todo" else [])
+    # Semanas con la venta esperada del tipo elegido
+    sem = [f for f in filas["panel_semana_campana"] if f["tipo"] == tipo]
+    texto = b["semanas"][1]
+    for f in sem:
+        assert f"{fmt.decimal(f['indice_p50'], 2)} veces una semana media" in texto
+    assert ("Ventas esperadas:" in texto) == (tipo == "todo")
+    # Campañas pasadas: las generales en los tres, con los leads y ventas del tipo elegido
+    res = [f for f in filas["panel_campana_resultado"]
+           if (tipo == "todo" and f["tipo"] == "todo")
+           or (tipo != "todo" and ((f["ambito"] == tipo and f["tipo"] == "todo") or (f["ambito"] == "general"
+                                                                                     and f["tipo"] == tipo)))]
+    pas = b["pasadas"][1]
+    assert pas.count('class="pasada"') == len(res)
+    assert sum(f["ambito"] == "general" for f in res) == 2
+    for f in res:
+        assert f'<strong>{fmt.miles(f["leads"])}</strong>' in pas
+    if tipo != "todo":
+        assert f'<span class="pasada-etiqueta">Leads {tipo}</span>' in pas and "(gasto común a VN y VO)" in pas
+
+
+def test_marketing_atencion_en_todo_y_vn_y_ocasion_en_vo(pg, panel_url, personas, con_ejemplo):
+    from panel import formato as fmt
+    filas = ejemplo.generar(HOY, con_ejemplo)
+    cl = dentro(app_con(panel_url), "tecnico")
+    for tipo in ("todo", "VN"):
+        b = bloques(cl.get(f"/marketing?tipo={tipo}").text)
+        assert "atencion" in b and "ocasion" not in b
+    b = bloques(cl.get("/marketing?tipo=VO").text)
+    assert "atencion" not in b and "Atención frente a sus rivales" not in b["ocasion"][1]
+    oc = b["ocasion"][1]
+    assert "Ocasión: dónde hay stock que mover" in oc and b["ocasion"][0] == "ejemplo" and ETIQUETA in oc
+    objetivo = con_ejemplo.objetivo_antiguedad_dias
+    assert f"Más de {objetivo} días" in oc
+    vo = [f for f in filas["panel_riesgo_vehiculo"] if f["tipo"] == "VO"]
+    filas_html = re.findall(r'<tr>\s*<th scope="row" class="izq">([^<]+)</th>(.*?)</tr>', oc, re.S)
+    assert {m for m, _ in filas_html} == {f["modelo"] for f in vo}
+    for modelo, resto in filas_html:
+        suyos = [f for f in vo if f["modelo"] == modelo]
+        celdas = re.findall(r'<td data-etiqueta="[^"]+"[^>]*>([^<]*)</td>', resto)
+        precios = [Decimal(str(f["precio_mercado_pct"])) for f in suyos if f["precio_mercado_pct"] is not None]
+        media = float(sum(precios) / len(precios)) if precios else None
+        from panel import negocio as ng
+        assert celdas == [fmt.miles(len(suyos)), fmt.miles(sum(f["dias_exposicion"] > objetivo for f in suyos)),
+                          ng.signo_pct(media)], modelo
+    # Ordenadas por unidades que superan el objetivo
+    viejas = [int(re.findall(r'<td[^>]*>([^<]*)</td>', r)[1]) for _, r in filas_html]
+    assert viejas == sorted(viejas, reverse=True)
+
+
+def test_marketing_orden_y_tipo_se_conservan(pg, panel_url, personas, con_ejemplo):
+    cl = dentro(app_con(panel_url), "tecnico")
+    html = cl.get("/marketing?tipo=VO&orden=gasto").text
+    assert 'href="/marketing?tipo=VO&amp;orden=venta"' in html          # cambiar el orden mantiene el tipo
+    assert 'href="/marketing?tipo=VN&amp;orden=gasto"' in html          # cambiar el tipo mantiene el orden
+    r = cl.get("/marketing?tipo=VN", headers={"HX-Request": "true"})
+    assert r.text.lstrip().startswith('<div id="marketing"') and "<html" not in r.text
+    html = cl.get("/marketing?tipo=xx&orden=yy").text                   # valores desconocidos: Todo, por venta
+    assert 'aria-current="true">Todo<' in html and 'aria-current="true">Por coste por venta<' in html
 
 
 # ================================================================== visibilidad por rol
@@ -560,3 +723,57 @@ def test_ejemplo_en_otros_dias(pg, panel_url, personas, conc, dia):
     for ruta in VISTAS.values():
         r = cl.get(ruta)
         assert r.status_code == 200 and BANDA in r.text
+
+
+# ================================================================== migración 0006 (Marketing por tipo)
+
+def _migrar(destino: str, accion: str = "upgrade"):
+    from alembic import command
+    from alembic.config import Config
+    getattr(command, accion)(Config(str(RAIZ / "alembic.ini")), destino)
+
+
+def test_migracion_0006_desde_una_base_con_ejemplo_de_la_sesion_2(pg_url, pg, conc):
+    """En producción, 0005 ya tiene filas de ejemplo sin tipo: 0006 las quita, añade las columnas y
+    `make ejemplo-cargar` las vuelve a escribir. Las demás tablas del contrato no se tocan."""
+    ejemplo.cargar(pg, HOY, conc)
+    stock = pg.execute("SELECT count(*) FROM panel_stock_vehiculo").fetchone()[0]
+    _migrar("0005", "downgrade")
+    assert "ambito" not in _columnas(pg, "panel_campana_dia")
+    pg.execute("INSERT INTO panel_campana_dia (dia, origen, campana_id, titulo, tipo_campana, modelo, inicio, "
+               "gasto_cents, impresiones, clics) VALUES (%s, 'ejemplo', 'X', 'x', 'general', NULL, %s, 1, 1, 1)",
+               (HOY, HOY))
+    _migrar("head")
+    for t in ejemplo_tablas_0006():
+        assert pg.execute(f"SELECT count(*) FROM {t}").fetchone()[0] == 0, t
+    assert pg.execute("SELECT count(*) FROM panel_stock_vehiculo").fetchone()[0] == stock
+    assert {"ambito"} <= set(_columnas(pg, "panel_campana_dia"))
+    assert {"tipo"} <= set(_columnas(pg, "panel_leads_dia")) & set(_columnas(pg, "panel_semana_campana"))
+    ejemplo.cargar(pg, HOY, conc)                                    # make ejemplo-cargar
+    # Clave nueva de los leads: el mismo modelo, día y campaña puede tener una fila VN y otra VO
+    pg.execute("INSERT INTO panel_leads_dia (dia, origen, modelo, tipo, campana_id, leads, citas, ventas) VALUES "
+               "(%s, 'real', 'Golf', 'VN', NULL, 1, 0, 0), (%s, 'real', 'Golf', 'VO', NULL, 1, 0, 0)", (HOY, HOY))
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        pg.execute("INSERT INTO panel_leads_dia (dia, origen, modelo, tipo, campana_id, leads, citas, ventas) VALUES "
+                   "(%s, 'real', 'Golf', 'VN', NULL, 1, 0, 0)", (HOY,))
+    # Resultado de una campaña de VN: solo su fila «todo» (las filas por tipo, solo en las generales)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        pg.execute("INSERT INTO panel_campana_resultado (dia, origen, campana_id, titulo, ambito, tipo, inicio, fin, "
+                   "gasto_cents, leads, leads_sin_p10, leads_sin_p50, leads_sin_p90, ventas, ventas_sin_p10, "
+                   "ventas_sin_p50, ventas_sin_p90, veredicto_leads, veredicto_ventas, modelo_version, n) VALUES "
+                   "(%s, 'real', 'Y', 'y', 'VN', 'VO', %s, %s, 1, 1, 1, 1, 1, 1, 1, 1, 1, 'normal', 'normal', 'v', 1)",
+                   (HOY, HOY, HOY))
+
+
+def test_migracion_0006_se_detiene_si_hay_filas_reales(pg_url, pg):
+    _migrar("0005", "downgrade")
+    pg.execute("INSERT INTO panel_leads_dia (dia, origen, modelo, campana_id, leads, citas, ventas) "
+               "VALUES (%s, 'real', 'Golf', NULL, 1, 0, 0)", (HOY,))
+    with pytest.raises(Exception, match="filas reales"):
+        _migrar("head")
+    assert pg.execute("SELECT count(*) FROM panel_leads_dia WHERE origen = 'real'").fetchone()[0] == 1
+
+
+def ejemplo_tablas_0006():
+    return ("panel_campana_dia", "panel_leads_dia", "panel_recomendacion_modelo", "panel_semana_campana",
+            "panel_campana_resultado")

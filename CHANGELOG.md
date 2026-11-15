@@ -1,5 +1,32 @@
 # Cambios
 
+## 2026-11-15 · Hito 1b: estáticos con huella y Marketing por tipo (rama hito-1b)
+
+- **Caché de los estáticos** (fallo en producción tras la sesión 2: Dirección, Ventas y Marketing
+  salían sin estilos ni gráficos hasta forzar la recarga, porque el CSS y el JS viejos se guardaban un día).
+  - CSS, JS, fuentes, icono, htmx y ECharts se citan con la huella SHA-256 de su contenido
+    (`/static/css/panel.css?v=…`, `panel/estaticos.py`). El CSS se sirve con sus `url()` a las
+    fuentes ya con huella.
+  - Con la huella vigente: `public, max-age=31536000, immutable`. Sin huella o con una vieja: `no-cache`.
+    HTML, respuestas de htmx y errores: `no-store`.
+  - Caddy no añade ni pisa cabeceras de caché; una prueba lo vigila.
+  - Pruebas: `tests/test_estaticos.py` y, en Chrome con la caché activada, `tests/navegador/cache.mjs`.
+    `capturas.mjs` ya no desactiva la caché.
+- **Marketing por tipo**: selector Todo / Nuevos (VN) / Ocasión (VO).
+  - Migración `0006`: `ambito` de cada campaña (VN, VO o general) y `tipo` en leads, recomendaciones,
+    semanas y campañas pasadas. El gasto nunca se reparte.
+  - En VN o VO: campañas de ese ámbito y generales. De las generales, leads, citas y ventas del tipo,
+    y «—» en los costes con la nota «gasto común a VN y VO».
+  - Tarjetas de VN o VO: solo campañas del ámbito, «sin la campaña general».
+  - Recomendación por tipo (en Todo, con su etiqueta VN o VO).
+  - En VO, «Ocasión: dónde hay stock que mover» en lugar de la atención frente a los rivales.
+  - Semanas y campañas pasadas, del tipo elegido.
+  - Datos de ejemplo: dos campañas de ocasión, la general con leads de los dos tipos y dos campañas
+    pasadas generales y una de ocasión.
+  - Capturas nuevas: `docs/capturas/marketing_vn_*` y `marketing_vo_*`.
+- **Chrome**: la comprobación revisa también a 1440 px que ninguna celda sale de su tarjeta (encontró
+  la tabla de ocasión cortada en escritorio, ya corregida).
+
 ## 2026-11-15 · Hito 1b: ajustes de Ventas, Marketing y tarjetas (rama hito-1b)
 
 - **Ventas**

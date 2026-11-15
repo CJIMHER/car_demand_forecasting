@@ -107,23 +107,32 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     # ---- campañas activas y leads (Meta y Walcu)
     fin_meta = hoy - UN_DIA                                # Meta da los datos del día anterior
     # gasto: céntimos al día; cpm: € por mil impresiones; ctr: clics por impresión; conv: leads por clic
+    # ámbito: VN, VO o general (las dos); una general reparte sus leads entre VN y VO según el vehículo
+    vo_campana = vo[1 % len(vo)]
     campanas = [
         {"campana_id": "EJ-C1", "titulo": f"{vn[2 % len(vn)]} · Oferta del mes", "tipo_campana": "modelo",
-         "modelo": vn[2 % len(vn)], "inicio": hoy - timedelta(days=26), "gasto": 6600, "cpm": 5.2, "ctr": 0.011,
-         "conv": 0.017},
-        {"campana_id": "EJ-C2", "titulo": f"{vn[1]} · Financiación", "tipo_campana": "modelo", "modelo": vn[1],
-         "inicio": hoy - timedelta(days=13), "gasto": 8600, "cpm": 5.6, "ctr": 0.012, "conv": 0.0095},
-        {"campana_id": "EJ-C3", "titulo": f"{lento} · Entrega inmediata", "tipo_campana": "modelo", "modelo": lento,
-         "inicio": hoy - timedelta(days=48), "gasto": 5000, "cpm": 6.1, "ctr": 0.0062, "conv": 0.024},
+         "ambito": "VN", "modelo": vn[2 % len(vn)], "inicio": hoy - timedelta(days=26), "gasto": 6600, "cpm": 5.2,
+         "ctr": 0.011, "conv": 0.017},
+        {"campana_id": "EJ-C2", "titulo": f"{vn[1]} · Financiación", "tipo_campana": "modelo", "ambito": "VN",
+         "modelo": vn[1], "inicio": hoy - timedelta(days=13), "gasto": 8600, "cpm": 5.6, "ctr": 0.012, "conv": 0.0095},
+        {"campana_id": "EJ-C3", "titulo": f"{lento} · Entrega inmediata", "tipo_campana": "modelo", "ambito": "VN",
+         "modelo": lento, "inicio": hoy - timedelta(days=48), "gasto": 5000, "cpm": 6.1, "ctr": 0.0062, "conv": 0.024},
         {"campana_id": "EJ-C4", "titulo": "Campaña general · Ventas de temporada", "tipo_campana": "general",
-         "modelo": None, "inicio": hoy - timedelta(days=5), "gasto": 12000, "cpm": 4.8, "ctr": 0.010, "conv": 0.015},
+         "ambito": "general", "modelo": None, "inicio": hoy - timedelta(days=5), "gasto": 12000, "cpm": 4.8,
+         "ctr": 0.010, "conv": 0.015},
+        {"campana_id": "EJ-C5", "titulo": "Ocasión · Seminuevos con garantía", "tipo_campana": "general",
+         "ambito": "VO", "modelo": None, "inicio": hoy - timedelta(days=34), "gasto": 4200, "cpm": 4.4,
+         "ctr": 0.012, "conv": 0.016},
+        {"campana_id": "EJ-C6", "titulo": f"{vo_campana} de ocasión · Financiación", "tipo_campana": "modelo",
+         "ambito": "VO", "modelo": vo_campana, "inicio": hoy - timedelta(days=19), "gasto": 3100, "cpm": 5.0,
+         "ctr": 0.0105, "conv": 0.0105},
     ]
-    leads: dict[tuple[date, str, str | None], list[int]] = {}
+    leads: dict[tuple[date, str, str, str | None], list[int]] = {}
 
-    def sumar(d, modelo, campana, n):
+    def sumar(d, modelo, tipo, campana, n):
         citas = sum(r.random() < 0.34 for _ in range(n))
         ventas = sum(r.random() < 0.17 for _ in range(citas))
-        f = leads.setdefault((d, modelo, campana), [0, 0, 0])
+        f = leads.setdefault((d, modelo, tipo, campana), [0, 0, 0])
         f[0] += n
         f[1] += citas
         f[2] += ventas
@@ -140,30 +149,31 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
             n = sum(r.random() < conv for _ in range(clics))
             filas["panel_campana_dia"].append({
                 "dia": d, "campana_id": c["campana_id"], "titulo": c["titulo"], "tipo_campana": c["tipo_campana"],
-                "modelo": c["modelo"], "inicio": c["inicio"], "gasto_cents": gasto,
+                "ambito": c["ambito"], "modelo": c["modelo"], "inicio": c["inicio"], "gasto_cents": gasto,
                 "impresiones": impresiones, "clics": clics})
-            if c["modelo"]:
-                sumar(d, c["modelo"], c["campana_id"], n)
-            else:
-                for _ in range(n):
-                    sumar(d, r.choice(vn[:6]), c["campana_id"], 1)
+            for _ in range(n):
+                tipo = c["ambito"] if c["ambito"] != "general" else ("VN" if r.random() < 0.62 else "VO")
+                modelo = c["modelo"] or r.choice(vn[:6] if tipo == "VN" else vo[:6])
+                sumar(d, modelo, tipo, c["campana_id"], 1)
             d += UN_DIA
     d = hoy - timedelta(days=56)
     while d <= fin_meta:                                           # leads sin campaña (orgánicos)
-        for i, m in enumerate(sorted(set(vn) | set(vo), key=lambda x: (x not in vn[:4], x))):
-            n = sum(r.random() < max(0.15, 0.7 - 0.08 * i) for _ in range(2))
-            if n:
-                sumar(d, m, None, n)
+        for tipo, modelos, base in (("VN", vn, 0.7), ("VO", vo, 0.45)):
+            for i, m in enumerate(modelos):
+                n = sum(r.random() < max(0.12, base - 0.08 * i) for _ in range(2))
+                if n:
+                    sumar(d, m, tipo, None, n)
         d += UN_DIA
-    for (d, modelo, campana), (n, citas, ventas) in sorted(leads.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2] or "")):
-        filas["panel_leads_dia"].append({"dia": d, "modelo": modelo, "campana_id": campana, "leads": n,
+    for (d, modelo, tipo, campana), (n, citas, ventas) in sorted(
+            leads.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][3] or "")):
+        filas["panel_leads_dia"].append({"dia": d, "modelo": modelo, "tipo": tipo, "campana_id": campana, "leads": n,
                                          "citas": citas, "ventas": ventas})
 
-    def leads_modelo(modelo, desde, hasta):
-        return sum(v[0] for (d, m, _), v in leads.items() if m == modelo and desde <= d <= hasta)
+    def leads_modelo(modelo, tipo, desde, hasta):
+        return sum(v[0] for (d, m, t, _), v in leads.items() if m == modelo and t == tipo and desde <= d <= hasta)
 
     # ---- stock propio (Walcu) y riesgo de cada vehículo (modelo de supervivencia)
-    activa = {c["modelo"] for c in campanas if c["modelo"]}
+    activa = {(c["ambito"], c["modelo"]) for c in campanas if c["modelo"]}
     vehiculos = []
     n_id = 1001
     for tipo, modelos, total in (("VN", vn, 96), ("VO", vo, 46)):
@@ -216,9 +226,9 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
             "detalle": v["detalle"], "dias_exposicion": a, "grupo": f"{v['tipo']} · {v['modelo']}",
             "p_venta90_p10": _r(p10), "p_venta90_p50": _r(p50), "p_venta90_p90": _r(p90),
             "precio_mercado_pct": precio, "similares_n": similares,
-            "campana_activa": v["tipo"] == "VN" and v["modelo"] in activa, "sugerencia": sugerencia,
-            "leads_14": leads_modelo(v["modelo"], l14_desde, l14_hasta),
-            "leads_14_previos": leads_modelo(v["modelo"], l14_desde - timedelta(days=14), l14_desde - UN_DIA),
+            "campana_activa": (v["tipo"], v["modelo"]) in activa, "sugerencia": sugerencia,
+            "leads_14": leads_modelo(v["modelo"], v["tipo"], l14_desde, l14_hasta),
+            "leads_14_previos": leads_modelo(v["modelo"], v["tipo"], l14_desde - timedelta(days=14), l14_desde - UN_DIA),
             "modelo_version": VERSION, "n": 0})
     for (tipo, m), lm in lam.items():
         if not any(v["tipo"] == tipo and v["modelo"] == m for v in vehiculos):
@@ -269,24 +279,26 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
 
     # ---- salud de las campañas activas
     desde28 = fin_meta - timedelta(days=27)
-    stock_modelo = {m: sum(1 for v in vehiculos if v["tipo"] == "VN" and v["modelo"] == m) for m in vn}
+    stock_modelo = {(t, m): sum(1 for v in vehiculos if v["tipo"] == t and v["modelo"] == m)
+                    for t, ms in (("VN", vn), ("VO", vo)) for m in ms}
     diseno = {  # (eslabón que falla, probabilidad de estar peor)
-        "EJ-C1": (None, None), "EJ-C2": ("web", 0.78), "EJ-C3": ("anuncio", 0.95), "EJ-C4": (None, None)}
+        "EJ-C1": (None, None), "EJ-C2": ("web", 0.78), "EJ-C3": ("anuncio", 0.95), "EJ-C4": (None, None),
+        "EJ-C5": (None, None), "EJ-C6": ("calidad_lead", 0.74)}
     for c in campanas:
         dias_vida = (hoy - c["inicio"]).days
         propias = [f for f in filas["panel_campana_dia"] if f["campana_id"] == c["campana_id"]]
         gasto = sum(f["gasto_cents"] for f in propias) / 100
         imp = sum(f["impresiones"] for f in propias)
         clics = sum(f["clics"] for f in propias)
-        nl = sum(v[0] for (d, m, cp), v in leads.items() if cp == c["campana_id"])
-        nc = sum(v[1] for (d, m, cp), v in leads.items() if cp == c["campana_id"])
+        nl = sum(v[0] for (d, m, t, cp), v in leads.items() if cp == c["campana_id"])
+        nc = sum(v[1] for (d, m, t, cp), v in leads.items() if cp == c["campana_id"])
         valores = {
             "entrega": ("Coste por mil impresiones", "€", "bajo", gasto / imp * 1000 if imp else None),
             "anuncio": ("Clics por impresión", "%", "alto", clics / imp * 100 if imp else None),
             "web": ("Leads por clic", "%", "alto", nl / clics * 100 if clics else None),
             "calidad_lead": ("Citas por lead", "%", "alto", nc / nl * 100 if nl else None),
             "stock": ("Unidades del modelo en stock", "uds", "alto",
-                      stock_modelo.get(c["modelo"]) if c["modelo"] else None),
+                      stock_modelo.get((c["ambito"], c["modelo"])) if c["modelo"] else None),
         }
         falla, prob_falla = diseno[c["campana_id"]]
         for eslabon, (medida, unidad, mejor, valor) in valores.items():
@@ -314,17 +326,19 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     # ---- recomendación por modelo (reglas)
     def cpv(modelo):
         g = sum(f["gasto_cents"] for f in filas["panel_campana_dia"]
-                if f["modelo"] == modelo and desde28 <= f["dia"] <= fin_meta) / 100
-        v = sum(v[2] for (d, m, cp), v in leads.items() if m == modelo and cp and desde28 <= d <= fin_meta)
+                if f["modelo"] == modelo and f["ambito"] == "VN" and desde28 <= f["dia"] <= fin_meta) / 100
+        v = sum(v[2] for (d, m, t, cp), v in leads.items() if m == modelo and t == "VN" and cp
+                and desde28 <= d <= fin_meta)
         return g / v if v and g else None
 
-    def viejos(modelo):
-        return sum(1 for v in vehiculos if v["modelo"] == modelo and v["tipo"] == "VN" and v["dias_exposicion"] > 60)
+    def viejos(modelo, tipo="VN"):
+        return sum(1 for v in vehiculos if v["modelo"] == modelo and v["tipo"] == tipo
+                   and v["dias_exposicion"] > conc.objetivo_antiguedad_dias)
 
     c3 = [f for f in filas["panel_campana_dia"] if f["campana_id"] == "EJ-C3"]
     def _cpl(desde, hasta):
         g = sum(f["gasto_cents"] for f in c3 if desde <= f["dia"] <= hasta) / 100
-        n = sum(v[0] for (d, m, cp), v in leads.items() if cp == "EJ-C3" and desde <= d <= hasta)
+        n = sum(v[0] for (d, m, t, cp), v in leads.items() if cp == "EJ-C3" and desde <= d <= hasta)
         return g / n if n else None
     cpl7, cpl28 = _cpl(fin_meta - timedelta(days=6), fin_meta), _cpl(desde28, fin_meta)
     ratio = (cpl7 / cpl28) if cpl7 and cpl28 else 2.0
@@ -345,60 +359,90 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     recomendaciones.append((m_red, "reducir", f"Pierde atención frente a sus rivales ({_signo(atencion.get(m_red, -8))}) "
                                               f"y solo {viejos(m_red)} unidades llevan más de 60 días."))
     for m, accion, motivo in recomendaciones:
-        filas["panel_recomendacion_modelo"].append({"dia": hoy, "modelo": m, "accion": accion, "motivo": motivo,
-                                                    "modelo_version": VERSION, "n": 28})
+        filas["panel_recomendacion_modelo"].append({"dia": hoy, "tipo": "VN", "modelo": m, "accion": accion,
+                                                    "motivo": motivo, "modelo_version": VERSION, "n": 28})
+    # Ocasión: por modelo del stock de ocasión (unidades que superan el objetivo de antigüedad y precio)
+    objetivo = conc.objetivo_antiguedad_dias
+    en_vo = sorted({v["modelo"] for v in vehiculos if v["tipo"] == "VO"},
+                   key=lambda m: (-viejos(m, "VO"), m))
+    for i, m in enumerate(en_vo[:4]):
+        unidades = sum(1 for v in vehiculos if v["tipo"] == "VO" and v["modelo"] == m)
+        if i == 0:
+            accion, motivo = "aumentar", (f"{viejos(m, 'VO')} de sus {unidades} unidades de ocasión superan los "
+                                          f"{objetivo} días: conviene darles salida.")
+        elif i == len(en_vo[:4]) - 1:
+            accion, motivo = "reducir", (f"Solo {viejos(m, 'VO')} de sus {unidades} unidades de ocasión superan los "
+                                         f"{objetivo} días: se venden sin ayuda.")
+        else:
+            accion, motivo = "mantener", (f"{unidades} unidades de ocasión, {viejos(m, 'VO')} por encima de "
+                                          f"{objetivo} días: revisar en dos semanas.")
+        filas["panel_recomendacion_modelo"].append({"dia": hoy, "tipo": "VO", "modelo": m, "accion": accion,
+                                                    "motivo": motivo, "modelo_version": VERSION, "n": 28})
 
     # ---- seis semanas siguientes para una campaña general
     estacional = {1: 0.84, 2: 0.93, 3: 1.08, 4: 1.0, 5: 1.04, 6: 1.12, 7: 1.06, 8: 0.78, 9: 0.97, 10: 1.02,
                   11: 1.0, 12: 0.9}
     lunes = hoy + timedelta(days=7 - hoy.weekday())
-    n_viejos = sum(1 for v in vehiculos if v["dias_exposicion"] > 90)
-    for i in range(6):
-        s = lunes + timedelta(weeks=i)
-        dias = [s + timedelta(days=k) for k in range(7)]
-        motivos = []
-        ind = estacional[s.month] * r.uniform(0.97, 1.03)
-        motivos.append({"tipo": "estacionalidad",
-                        "texto": ("Semanas de más ventas que la media del año" if ind >= 1.03 else
-                                  "Semanas de menos ventas que la media del año" if ind <= 0.95 else
-                                  "Ventas en la media del año")})
-        festivos = [d for d in dias if (d.month, d.day) in ((12, 6), (12, 8), (12, 25), (1, 1), (1, 6))]
-        if festivos:
-            ind *= 0.9
-            motivos.append({"tipo": "calendario", "texto": f"Festivo el {festivos[0].day}/{festivos[0].month}: "
-                                                           "menos visitas al concesionario"})
-        elif s.day <= 7 or (s + timedelta(days=6)).day <= 7:
-            motivos.append({"tipo": "calendario", "texto": "Principio de mes: más solicitudes de financiación"})
-        if i < 2:
-            motivos.append({"tipo": "stock_envejecido", "texto": f"{n_viejos} vehículos superan los 90 días"})
-        if i in (1, 2):
-            motivos.append({"tipo": "atencion", "texto": f"{vn[1]} gana atención frente a sus rivales"})
-        if i in (3, 4):
-            motivos.append({"tipo": "presion_competencia",
-                            "texto": f"Más anuncios de otros concesionarios en {conc.provincia}"})
-            ind *= 0.96
-        nivel = "favorable" if ind >= 1.03 else ("poco_favorable" if ind <= 0.92 else "normal")
-        filas["panel_semana_campana"].append({
-            "dia": hoy, "semana": s, "nivel": nivel, "indice_p10": _r(ind * 0.88, 2), "indice_p50": _r(ind, 2),
-            "indice_p90": _r(ind * 1.12, 2), "motivos": motivos, "modelo_version": VERSION, "n": 6})
+    # Por tipo: la venta esperada de VN, de VO y de las dos (el VO es menos estacional)
+    for tipo_s, amplitud in (("todo", 1.0), ("VN", 1.15), ("VO", 0.6)):
+        n_viejos = sum(1 for v in vehiculos if v["dias_exposicion"] > 90 and tipo_s in ("todo", v["tipo"]))
+        for i in range(6):
+            s = lunes + timedelta(weeks=i)
+            dias = [s + timedelta(days=k) for k in range(7)]
+            motivos = []
+            ind = (1 + (estacional[s.month] - 1) * amplitud) * r.uniform(0.97, 1.03)
+            motivos.append({"tipo": "estacionalidad",
+                            "texto": ("Semanas de más ventas que la media del año" if ind >= 1.03 else
+                                      "Semanas de menos ventas que la media del año" if ind <= 0.95 else
+                                      "Ventas en la media del año")})
+            festivos = [d for d in dias if (d.month, d.day) in ((12, 6), (12, 8), (12, 25), (1, 1), (1, 6))]
+            if festivos:
+                ind *= 0.9
+                motivos.append({"tipo": "calendario", "texto": f"Festivo el {festivos[0].day}/{festivos[0].month}: "
+                                                               "menos visitas al concesionario"})
+            elif s.day <= 7 or (s + timedelta(days=6)).day <= 7:
+                motivos.append({"tipo": "calendario", "texto": "Principio de mes: más solicitudes de financiación"})
+            if i < 2:
+                motivos.append({"tipo": "stock_envejecido", "texto": f"{n_viejos} vehículos superan los 90 días"})
+            if i in (1, 2) and tipo_s != "VO":
+                motivos.append({"tipo": "atencion", "texto": f"{vn[1]} gana atención frente a sus rivales"})
+            if i in (3, 4):
+                motivos.append({"tipo": "presion_competencia",
+                                "texto": f"Más anuncios de otros concesionarios en {conc.provincia}"})
+                ind *= 0.96
+            nivel = "favorable" if ind >= 1.03 else ("poco_favorable" if ind <= 0.92 else "normal")
+            filas["panel_semana_campana"].append({
+                "dia": hoy, "tipo": tipo_s, "semana": s, "nivel": nivel, "indice_p10": _r(ind * 0.88, 2),
+                "indice_p50": _r(ind, 2), "indice_p90": _r(ind * 1.12, 2), "motivos": motivos,
+                "modelo_version": VERSION, "n": 6})
 
     # ---- campañas terminadas frente a lo esperado sin campaña
+    # Una fila «todo» por campaña; las generales, además, una por tipo con sus leads y ventas
+    # (observado, esperado sin campaña p50): (leads VN, leads VO) y (ventas VN, ventas VO)
     pasadas = [
-        ("EJ-P1", f"{vn[0]} · Fin de stock", 150, 120, 6100, (98, 81), (8, 3)),
-        ("EJ-P2", f"{vn[3 % len(vn)]} · Financiación", 120, 95, 3900, (41, 46), (4, 4)),
-        ("EJ-P3", "Campaña general · Primavera", 230, 200, 9800, (162, 120), (12, 10)),
-        ("EJ-P4", f"{vn[4 % len(vn)]} · Oferta", 300, 272, 2700, (27, 39), (2, 4)),
+        ("EJ-P1", f"{vn[0]} · Fin de stock", "VN", 150, 120, 6100, {"todo": ((98, 81), (8, 3))}),
+        ("EJ-P2", f"{vn[3 % len(vn)]} · Financiación", "VN", 120, 95, 3900, {"todo": ((41, 46), (4, 4))}),
+        ("EJ-P3", "Campaña general · Primavera", "general", 230, 200, 9800,
+         {"VN": ((118, 86), (9, 7)), "VO": ((44, 34), (3, 3))}),
+        ("EJ-P4", f"{vn[4 % len(vn)]} · Oferta", "VN", 300, 272, 2700, {"todo": ((27, 39), (2, 4))}),
+        ("EJ-P5", "Ocasión · Fin de semana de seminuevos", "VO", 90, 86, 2200, {"todo": ((63, 38), (7, 3))}),
+        ("EJ-P6", "Campaña general · Rebajas de enero", "general", 310, 290, 7600,
+         {"VN": ((71, 74), (5, 6)), "VO": ((39, 33), (4, 2))}),
     ]
-    for cid, titulo, ini, fin, gasto, (leads_obs, leads_sin), (ventas_obs, ventas_sin) in pasadas:
-        lp = (round(leads_sin * 0.8), leads_sin, round(leads_sin * 1.22))
-        vp = (max(0, round(ventas_sin * 0.5)), ventas_sin, round(ventas_sin * 1.7 + 1))
-        filas["panel_campana_resultado"].append({
-            "dia": hoy, "campana_id": cid, "titulo": titulo, "inicio": hoy - timedelta(days=ini),
-            "fin": hoy - timedelta(days=fin), "gasto_cents": gasto * 100, "leads": leads_obs,
-            "leads_sin_p10": lp[0], "leads_sin_p50": lp[1], "leads_sin_p90": lp[2],
-            "ventas": ventas_obs, "ventas_sin_p10": vp[0], "ventas_sin_p50": vp[1], "ventas_sin_p90": vp[2],
-            "veredicto_leads": _veredicto(leads_obs, *lp[::2]), "veredicto_ventas": _veredicto(ventas_obs, *vp[::2]),
-            "modelo_version": VERSION, "n": 24})
+    for cid, titulo, ambito, ini, fin, gasto, por_tipo in pasadas:
+        if ambito == "general":
+            por_tipo["todo"] = tuple(tuple(x + y for x, y in zip(por_tipo["VN"][k], por_tipo["VO"][k]))
+                                     for k in (0, 1))      # leads y ventas: VN + VO
+        for tipo, ((leads_obs, leads_sin), (ventas_obs, ventas_sin)) in por_tipo.items():
+            lp = (round(leads_sin * 0.8), leads_sin, round(leads_sin * 1.22))
+            vp = (max(0, round(ventas_sin * 0.5)), ventas_sin, round(ventas_sin * 1.7 + 1))
+            filas["panel_campana_resultado"].append({
+                "dia": hoy, "campana_id": cid, "titulo": titulo, "ambito": ambito, "tipo": tipo,
+                "inicio": hoy - timedelta(days=ini), "fin": hoy - timedelta(days=fin), "gasto_cents": gasto * 100,
+                "leads": leads_obs, "leads_sin_p10": lp[0], "leads_sin_p50": lp[1], "leads_sin_p90": lp[2],
+                "ventas": ventas_obs, "ventas_sin_p10": vp[0], "ventas_sin_p50": vp[1], "ventas_sin_p90": vp[2],
+                "veredicto_leads": _veredicto(leads_obs, *lp[::2]), "veredicto_ventas": _veredicto(ventas_obs, *vp[::2]),
+                "modelo_version": VERSION, "n": 24})
 
     # ---- alertas de hoy, sacadas de las filas anteriores
     alertas = []

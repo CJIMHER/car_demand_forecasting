@@ -14,4 +14,6 @@
 		header_up -Forwarded
 	}
 	header -Server
+	# Caché: la decide el panel (estáticos con huella, un año e immutable; HTML y htmx, no-store).
+	# Caddy no añade ni pisa Cache-Control, Expires, ETag ni Vary: no tocar aquí.
 }

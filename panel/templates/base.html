@@ -7,10 +7,10 @@
 <meta name="referrer" content="same-origin">
 <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "historyCacheSize": 0, "selfRequestsOnly": true}'>
 <title>{% block titulo %}Panel{% endblock %} · {{ conc.nombre_panel }}</title>
-<link rel="icon" href="/static/img/icono.svg" type="image/svg+xml">
-<link rel="preload" href="/static/fonts/inter/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/static/css/panel.css">
-<script src="/static/vendor/htmx/htmx.min.js" defer></script>
+<link rel="icon" href="{{ estatico('img/icono.svg') }}" type="image/svg+xml">
+<link rel="preload" href="{{ estatico('fonts/inter/inter-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{ estatico('css/panel.css') }}">
+<script src="{{ estatico('vendor/htmx/htmx.min.js') }}" defer></script>
 {% block scripts %}{% endblock %}
 </head>
 <body>

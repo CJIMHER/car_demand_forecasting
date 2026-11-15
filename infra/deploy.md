@@ -324,6 +324,27 @@ bloque. Dirección, ventas y marketing siguen viéndolas desactivadas salvo que 
 `PANEL_PERMITE_EJEMPLO=1`). Cuando una fuente escribe sus primeras filas reales, los bloques que la
 leen dejan de mostrar las de ejemplo sin hacer nada más.
 
+### 7.8 Marketing por tipo y estáticos con huella (ajustes de la sesión 2)
+
+```bash
+make deploy              # migración 0006: ámbito de campaña y tipo VN/VO en Marketing
+make ejemplo-cargar      # solo si se usan datos de ejemplo: 0006 quita las filas de ejemplo
+                         # de las cinco tablas que cambian (no tenían tipo) y hay que volver a escribirlas
+```
+
+La migración `0006` se detiene sin tocar nada si alguna de esas tablas tiene filas reales.
+
+Tras cada despliegue el navegador usa el CSS, el JS, las fuentes y htmx/ECharts nuevos sin forzar la
+recarga: sus URL llevan la huella del contenido (`?v=…`) y cambian cuando cambia el fichero. Las
+páginas y las respuestas de htmx van con `Cache-Control: no-store`. Para comprobarlo:
+
+```bash
+curl -sI https://$PANEL_DOMINIO/acceso | grep -i cache-control              # no-store
+curl -s https://$PANEL_DOMINIO/acceso | grep -o '/static/css/panel.css?v=[0-9a-f]*'
+curl -sI "https://$PANEL_DOMINIO/static/css/panel.css?v=<huella>" | grep -i cache-control
+                                                    # public, max-age=31536000, immutable
+```
+
 ## 8. Día a día
 
 ```bash
@@ -335,6 +356,11 @@ cdf-estado             # los scrapers, como hasta ahora
 ```
 
 ## Problemas frecuentes
+
+- **Tras desplegar, una vista sale sin estilos o sin gráficos.** Pasó tras la sesión 2: el CSS y el
+  JS se guardaban un día con la misma URL. Desde la 7.8 sus URL llevan huella. Si vuelve a pasar,
+  comprobar con los `curl` de la 7.8 que la página cita `?v=` y que Caddy no añade cabeceras de caché
+  (`infra/caddy/Caddyfile`: solo `header -Server`).
 
 - **El panel no arranca y `make deploy` dice «PANEL_DOMINIO vacío»**: falta `PANEL_DOMINIO` en el `.env` (7.3).
 - **Caddy no consigue el certificado** (`make panel-logs`): el registro DNS no apunta aún al servidor

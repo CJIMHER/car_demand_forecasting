@@ -122,6 +122,16 @@ def test_caddy_https_para_panel_dominio():
     assert "./caddy/Caddyfile:/etc/caddy/Caddyfile:ro" in CADDY["volumes"]
 
 
+def test_caddy_no_toca_las_cabeceras_de_cache():
+    """La caché la decide el panel (panel/estaticos.py): Caddy no sirve ficheros ni añade o pisa cabeceras de caché."""
+    codigo = "\n".join(l.split("#", 1)[0] for l in (RAIZ / "infra/caddy/Caddyfile").read_text().splitlines())
+    assert "file_server" not in codigo and "root " not in codigo
+    cabeceras = re.findall(r"^\s*header\s+(.+)$", codigo, re.M)
+    assert cabeceras == ["-Server"], cabeceras
+    for palabra in ("Cache-Control", "Expires", "ETag", "Vary", "Pragma", "cache"):
+        assert palabra.lower() not in codigo.lower(), palabra
+
+
 @sin_env_example
 def test_variables_nuevas_en_env_example_sin_valor():
     lineas = (RAIZ / ".env.example").read_text().splitlines()

@@ -23,11 +23,12 @@ conectar sus datos») hasta que lleguen los datos reales.
 | `formato.py` | Números y fechas en español, horas de Madrid |
 | `usuarios.py` | Alta, baja, rol y restablecimiento (las lanza `make`, la contraseña se pide sin eco) |
 | `rol_bd.py` | Activa el usuario de Postgres `cdf_panel` con `PANEL_DB_PASSWORD` (verificador SCRAM) |
+| `estaticos.py` | URL de los estáticos con la huella de su contenido (`estatico('css/panel.css')` en las plantillas) y cabeceras de caché |
 | `dev.py` | `make panel-dev`: el panel en el Mac con un Postgres local y datos sintéticos |
 | `templates/`, `static/` | Plantillas, CSS, JS propio y, con versión fija y licencia, htmx, ECharts, Inter y Space Grotesk (`static/VERSIONES.md`) |
 
 Rutas: `/acceso`, `/cambiar-clave`, `/salir` (POST), `/mercado`, `/direccion?tipo=todo|VN|VO`,
-`/ventas?tipo=…&riesgo=1&v=<número de stock>`, `/marketing?orden=venta|gasto`, `/estado-fuentes`
+`/ventas?tipo=…&riesgo=1&v=<número de stock>`, `/marketing?tipo=todo|VN|VO&orden=venta|gasto`, `/estado-fuentes`
 (rol técnico), `/salud` y `/robots.txt`.
 
 ## Reglas que cumple
@@ -74,8 +75,17 @@ concesionario ficticio de otra provincia sin rastro del propio.
 permisos de `cdf_panel`), los datos de ejemplo (deterministas, coherentes, sin tocar hechos ni
 mercado, se niegan sin `PANEL_PERMITE_EJEMPLO=1`), la etiqueta de cada bloque y la banda, la
 visibilidad de cada rol por vista, el paso de ejemplo a real tabla a tabla, «Sin datos todavía» y
-el concesionario ficticio de Valladolid en las tres vistas.
+el concesionario ficticio de Valladolid en las tres vistas, Marketing por tipo (las tres opciones
+del selector cuadran con las filas; una general nunca tiene coste por venta en VN ni en VO) y la
+migración `0006`.
+
+`tests/test_estaticos.py`: la URL de cada estático cambia si cambia su contenido (y la del CSS si
+cambia una fuente), no si cambia solo la fecha; estáticos con huella, un año e immutable; HTML,
+htmx y errores, `no-store`.
 
 En Chrome real, `tests/navegador/capturas.mjs` (instrucciones en su cabecera) entra en el panel de
-`make panel-dev`, comprueba a 390 px que nada desborda en Mercado, Dirección, Ventas y Marketing, y
-regenera las capturas de `docs/capturas/`.
+`make panel-dev`, comprueba a 390 px que nada desborda en Mercado, Dirección, Ventas y Marketing
+(Todo, VN y VO), y a 1440 px que ninguna celda sale de su tarjeta, y regenera las capturas de
+`docs/capturas/`. Usa la caché del navegador, como un usuario. `tests/navegador/cache.mjs`, con la
+caché activada, carga una versión, cambia `panel.css` y `panel.js` como haría un despliegue (y los
+deja como estaban) y comprueba que la siguiente carga usa los nuevos y lo demás sale de la caché.
