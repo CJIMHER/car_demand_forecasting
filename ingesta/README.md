@@ -64,8 +64,10 @@ VN eléctricos e híbridos: 419 anuncios
 Carga a Postgres: correcta (8.293 filas)
 ```
 
-Las cifras salen de Postgres (`stock_externo_snapshot` del día) y el estado de las cargas, de la
-última anotación `carga` del día en `fuentes_estado`. Con problemas, la cabecera los cuenta
+Las cifras salen de Postgres: por scraper, los anuncios de la captura del día
+(`stock_externo_snapshot`); en «Carga a Postgres», las filas cargadas ese día sumando todas las
+anotaciones `carga` correctas del día en `fuentes_estado` (08:30, la recarga de las 09:00 y las
+manuales); el estado de cada carga, de su última anotación del día. Con problemas, la cabecera los cuenta
 («1 problema», «2 problemas») y cada línea afectada dice cuál.
 
 - `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` salen del entorno (del `/opt/cdf/.env`).
@@ -76,6 +78,14 @@ Las cifras salen de Postgres (`stock_externo_snapshot` del día) y el estado de 
 - Si no se puede enviar, se anota en `fuentes_estado` (`telegram`, `aviso`, `error`) y la
   comprobación no falla por ello. Si se envía, la fila `ok` guarda el texto enviado.
 - `make comprobar` también lo envía; `SIN_TELEGRAM=1 make comprobar` no.
+
+## Aviso de copia fallida (aviso_copia.py)
+
+`infra/backup/pg_backup.sh` lo llama desde su trap solo si la copia falla
+(`python -m ingesta.aviso_copia --codigo N --paso "..."`). Mismo envío que el resumen
+(`telegram.enviar`). Primero envía y después intenta anotar en `fuentes_estado` (`telegram`,
+`aviso`, con `"aviso": "copia"` en el detalle), así que el aviso llega aunque Postgres esté caído.
+Nunca lanza; el script sale siempre con el código de la copia.
 
 ## Cómo se prueba
 

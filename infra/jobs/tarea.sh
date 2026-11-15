@@ -5,6 +5,8 @@ set -uo pipefail
 
 TAREA="${1:?uso: tarea.sh cargar|comprobar|copia}"
 [ -f /run/cdf-env/jobs.env ] && . /run/cdf-env/jobs.env
+# rclone sin fichero de configuración (el remoto va por RCLONE_CONFIG_HZ_*): sin aviso de rclone.conf.
+export RCLONE_CONFIG=/dev/null
 cd /app
 LOG="/logs/${TAREA}_$(date +%F).log"
 exec >>"$LOG" 2>&1

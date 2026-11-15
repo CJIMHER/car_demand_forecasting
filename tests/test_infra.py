@@ -110,8 +110,11 @@ def test_copia_con_home_de_solo_lectura(pg_admin, pg_url, pg, datos, tmp_path):
     falsos = tmp_path / "bin"
     falsos.mkdir()
     (falsos / "rclone").write_text(
-        '#!/usr/bin/env bash\nset -e\n[ "$1" = copyto ] && { d="$FAKE_BUCKET/${3#*:}"; mkdir -p "$(dirname "$d")"; cp "$2" "$d"; }\nexit 0\n')
+        '#!/usr/bin/env bash\nset -e\necho "${RCLONE_CONFIG-SIN}" >> "$FAKE_BUCKET.config"\n'
+        '[ "$1" = copyto ] && { d="$FAKE_BUCKET/${3#*:}"; mkdir -p "$(dirname "$d")"; cp "$2" "$d"; }\nexit 0\n')
     (falsos / "rclone").chmod(0o755)
+    (falsos / "python_aviso").write_text('#!/usr/bin/env bash\ntouch "$FAKE_BUCKET.aviso"\n')
+    (falsos / "python_aviso").chmod(0o755)
     home = tmp_path / "home_solo_lectura"
     home.mkdir()
     home.chmod(0o555)
@@ -121,7 +124,7 @@ def test_copia_con_home_de_solo_lectura(pg_admin, pg_url, pg, datos, tmp_path):
     info = psycopg.conninfo.conninfo_to_dict(pg_url)
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("PG", "GNUPG")) and k not in ("CDF_DATABASE_URL", "HOME")}
-    env.update({"HOME": str(home), "BUCKET": "b", "BACKUP_PASSPHRASE": frase, "FAKE_BUCKET": str(tmp_path / "bucket"),
+    env.update({"HOME": str(home), "BUCKET": "b", "BACKUP_PASSPHRASE": frase, "FAKE_BUCKET": str(tmp_path / "bucket"), "CDF_PYTHON": str(falsos / "python_aviso"),
                 "PATH": os.pathsep.join(p for p in (str(falsos), bindir, os.environ["PATH"]) if p)})
     for clave, var in (("host", "PGHOST"), ("port", "PGPORT"), ("user", "PGUSER"), ("password", "PGPASSWORD"),
                        ("dbname", "PGDATABASE")):
@@ -142,6 +145,22 @@ def test_copia_con_home_de_solo_lectura(pg_admin, pg_url, pg, datos, tmp_path):
     copia = next((tmp_path / "bucket").rglob("cdf_*.dump.gpg"))
     assert not copia.read_bytes().startswith(b"PGDMP")
     assert pg.execute("SELECT estado FROM fuentes_estado WHERE tipo = 'copia'").fetchone() == ("ok",)
+    assert not (tmp_path / "bucket.aviso").exists()          # copia correcta: no se avisa a Telegram
+    # rclone sin fichero de configuración (sin el aviso de rclone.conf); el remoto, por variables
+    assert set((tmp_path / "bucket.config").read_text().split()) == {"/dev/null"}
+
+
+def test_rclone_sin_aviso_de_rclone_conf():
+    for script in ("infra/backup/pg_backup.sh", "infra/backup/probar_restauracion.sh", "infra/jobs/tarea.sh"):
+        texto = (RAIZ / script).read_text()
+        assert "export RCLONE_CONFIG=/dev/null" in texto, script
+        # antes de la primera llamada a rclone
+        primera = min(i for i, l in enumerate(texto.splitlines())
+                      if re.match(r"\s*(\S+=\"\$\()?rclone ", l) or "/pg_backup.sh" in l and "copia)" in l)
+        exporta = next(i for i, l in enumerate(texto.splitlines()) if "export RCLONE_CONFIG=/dev/null" in l)
+        assert exporta < primera, script
+    assert re.search(r"^\s+RCLONE_CONFIG=/dev/null$", DOCKERFILE, re.M)   # make copia / docker exec
+    assert "RCLONE_CONFIG_HZ" not in DOCKERFILE                          # el remoto sigue en el .env
 
 
 def test_gpg_sin_frase_en_la_linea_de_ordenes():

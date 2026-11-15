@@ -1,5 +1,15 @@
 # Cambios
 
+## 2026-11-15 · Hito 0: aviso de copia fallida, rclone sin aviso y total de carga (rama hito-0)
+
+- `pg_backup.sh`: si la copia falla, aviso al grupo de Telegram (`ingesta/aviso_copia.py`, con
+  `telegram.enviar`: texto plano, reintentos, token fuera de logs) con el paso y el código. Se envía
+  antes de anotar, para que llegue aunque Postgres no responda; el script sale siempre con el código
+  de la copia. Si va bien no se envía nada. Las variables obligatorias se comprueban dentro del trap.
+- `RCLONE_CONFIG=/dev/null` en `pg_backup.sh`, `probar_restauracion.sh`, `tarea.sh` y la imagen: sin
+  el aviso «Config file ... rclone.conf not found». El remoto sigue en `RCLONE_CONFIG_HZ_*`.
+- Resumen diario: «Carga a Postgres» suma las filas de todas las cargas del día en `fuentes_estado`.
+
 ## 2026-11-14 · Hito 0: gpg sin HOME escribible (rama hito-0)
 
 - `pg_backup.sh` y `probar_restauracion.sh`: `GNUPGHOME` temporal (`/tmp/cdf_gnupg.XXXXXX`, 700) que

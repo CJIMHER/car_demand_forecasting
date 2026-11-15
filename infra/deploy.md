@@ -155,7 +155,10 @@ Carga a Postgres: correcta (8.293 filas)
 
 Si algo falla, la primera línea lo cuenta («CDF 14/11 · 1 problema») y la línea afectada dice qué
 pasa (sin captura de hoy y el último intento, capturado pero sin cargar, error al comprobar, o carga
-con errores). Las cifras salen de Postgres. Si Telegram no responde, se reintenta (respetando la
+con errores). Las cifras salen de Postgres: cada scraper, los anuncios de la captura del día; «Carga
+a Postgres», las filas cargadas ese día sumando todas las cargas (la de las 08:30, la que repite la
+comprobación de las 09:00 y cualquier `make cargar` a mano). El día de la primera carga incluye el
+histórico. Si Telegram no responde, se reintenta (respetando la
 espera que pide con un 429) y, si aun así no se puede, queda anotado en `fuentes_estado` (fuente
 `telegram`, tipo `aviso`, estado `error`) sin que la comprobación falle por ello. El token nunca se
 escribe en logs ni en `fuentes_estado`.
@@ -185,7 +188,12 @@ con `BACKUP_PASSPHRASE`; no hay llavero), sin agente ni terminal y con la frase 
 nunca en la línea de órdenes. En `cdf_jobs` el usuario `cdf` tiene `HOME=/home/cdf`, escribible.
 Las dos usan el remoto `hz` de las variables `RCLONE_CONFIG_HZ_*`: `make copia` dentro del
 contenedor, `make restaurar-prueba` en el host (carga el `.env`). La copia diaria la hace el cron a
-las 09:30 y conserva 30 días en el bucket. La prueba de restauración es manual: una vez al mes
+las 09:30 y conserva 30 días en el bucket. Si falla, llega un aviso al grupo de Telegram con el paso
+en el que falló (por ejemplo «CDF 15/11 · la copia de Postgres ha fallado / Paso: subida al bucket
+(código 1)»), con el mismo envío que el resumen; si va bien, no llega nada. El aviso se envía aunque
+Postgres no responda, y si no se puede enviar la copia sigue contando como fallida (código de salida
+y `fuentes_estado`). rclone corre con `RCLONE_CONFIG=/dev/null`: sin fichero ni aviso de
+`rclone.conf`, el remoto sale de las `RCLONE_CONFIG_HZ_*`. La prueba de restauración es manual: una vez al mes
 (ficha del hito 0: «una copia restaurada»).
 
 ## 7. Día a día

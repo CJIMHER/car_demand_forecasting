@@ -13,6 +13,9 @@ set -a; . "$ENV_FILE"; set +a
 : "${BUCKET:?falta BUCKET en $ENV_FILE}"
 : "${BACKUP_PASSPHRASE:?falta BACKUP_PASSPHRASE en $ENV_FILE}"
 REMOTO="${RCLONE_REMOTE:-hz}"
+# El remoto va por las variables RCLONE_CONFIG_<REMOTO>_* del .env: sin fichero de configuración, y
+# así rclone no avisa de «Config file ... rclone.conf not found».
+export RCLONE_CONFIG=/dev/null
 ORIGEN="$REMOTO:$BUCKET/backups/postgres"
 PG_DB="${POSTGRES_DB:-cdf}"
 CONT=cdf_restore_test

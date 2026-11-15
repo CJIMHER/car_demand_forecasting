@@ -387,8 +387,13 @@ def _dia_corto(valor) -> str:
         return str(valor)
 
 
-def texto_resumen(dia: date, comprobacion: dict, filas: dict[str, int], errores_carga: dict[str, str]) -> str:
-    """Resumen del día en texto plano. Las cifras son las de Postgres (filas) y las del scraper."""
+def texto_resumen(dia: date, comprobacion: dict, filas: dict[str, int], errores_carga: dict[str, str],
+                  cargadas: int | None = None) -> str:
+    """Resumen del día en texto plano. Las cifras son las de Postgres y las del scraper.
+
+    `filas`: anuncios de la captura del día por fuente. `cargadas`: filas cargadas ese día sumando
+    todas las cargas anotadas en fuentes_estado (si no se da, la suma de `filas`).
+    """
     lineas, problemas = [], 0
     for nombre, etiqueta in ETIQUETAS.items():
         r = comprobacion.get(nombre) or {"estado": "error", "error": "sin comprobar"}
@@ -412,7 +417,7 @@ def texto_resumen(dia: date, comprobacion: dict, filas: dict[str, int], errores_
             lineas.append(f"{etiqueta}: {_miles(r.get('anuncios') or 0)} anuncios capturados, sin cargar en Postgres")
         else:
             lineas.append(f"{etiqueta}: error al comprobar ({str(r.get('error', ''))[:150]})")
-    total = _miles(sum(filas.values()))
+    total = _miles(sum(filas.values()) if cargadas is None else cargadas)
     if errores_carga:
         problemas += 1
         detalle = "; ".join(f"{ETIQUETAS.get(f, f)}: {e[:120]}" for f, e in sorted(errores_carga.items()))
@@ -423,17 +428,27 @@ def texto_resumen(dia: date, comprobacion: dict, filas: dict[str, int], errores_
     return "\n".join([f"CDF {dia.strftime('%d/%m')} · {cabecera}", *lineas])
 
 
-def datos_resumen(pg: psycopg.Connection, dia: date) -> tuple[dict[str, int], dict[str, str]]:
-    """Filas cargadas hoy por fuente y última carga del día en error (si la hay), sacadas de Postgres."""
+def datos_resumen(pg: psycopg.Connection, dia: date) -> tuple[dict[str, int], dict[str, str], int]:
+    """Datos del resumen, sacados de Postgres.
+
+    - anuncios de la captura del día por fuente (stock_externo_snapshot);
+    - error de la última carga del día de cada fuente, si esa última carga falló;
+    - filas cargadas ese día: la suma de los anuncios de TODAS las cargas anotadas con ese día (la de
+      las 08:30, la que repite la comprobación de las 09:00 y cualquier «make cargar» a mano). Con
+      solo la última, una recarga sin nada nuevo de las 09:00 dejaría la cifra en 0.
+    """
     filas = dict(pg.execute("SELECT fuente, count(*) FROM stock_externo_snapshot WHERE snapshot_day = %s "
                             "GROUP BY fuente", (dia,)).fetchall())
+    cargadas = pg.execute(
+        """SELECT coalesce(sum((detalle->>'anuncios')::bigint), 0) FROM fuentes_estado
+           WHERE tipo = 'carga' AND dia = %s AND estado = 'ok'""", (dia,)).fetchone()[0]
     errores = {}
     for fuente, estado, detalle in pg.execute(
             """SELECT DISTINCT ON (fuente) fuente, estado, detalle FROM fuentes_estado
                WHERE tipo = 'carga' AND dia = %s ORDER BY fuente, id DESC""", (dia,)):
         if estado != "ok":
             errores[fuente] = str((detalle or {}).get("error", estado))
-    return filas, errores
+    return filas, errores, int(cargadas)
 
 
 def enviar_resumen(pg: psycopg.Connection, dia: date, comprobacion: dict, avisar) -> bool:

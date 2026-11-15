@@ -134,9 +134,41 @@ def test_comprobacion_envia_resumen_y_lo_anota(pg, datos):
                         "VN: 7 anuncios\n"
                         "VN eléctricos e híbridos: sin captura de hoy; última el 13/11; "
                         "último intento: failed (El total cambió durante la captura)\n"
-                        "Carga a Postgres: correcta (16 filas)"]
+                        "Carga a Postgres: correcta (20 filas)"]   # 9 + 7 + los 4 del 13 cargados hoy
     fila = pg.execute("SELECT fuente, estado, detalle->>'texto' FROM fuentes_estado WHERE tipo = 'aviso'").fetchone()
     assert fila == ("telegram", "ok", enviados[0])
+
+
+def test_carga_a_postgres_suma_todas_las_cargas_del_dia(pg, datos):
+    # 08:30: carga el histórico pendiente (VO del 13) y lo de hoy. 09:00: la comprobación vuelve a
+    # cargar y no encuentra nada nuevo (anota 0). La línea suma las dos cargas, no solo la última.
+    capturar(datos, "vo", "2026-11-13", flota("VO", 5))
+    capturar(datos, "vo", "2026-11-14", flota("VO", 9))
+    capturar(datos, "vn", "2026-11-14", flota("VN", 7, fuente="vn"))
+    capturar(datos, "vn_otros", "2026-11-14", flota("EH", 4, fuente="vn_otros"))
+    sv.cargar(pg, dia=DIA)
+    enviados = []
+    sv.comprobar(pg, dia=DIA, avisar=lambda t: enviados.append(t) or 1)
+    cargas = pg.execute("SELECT (detalle->>'anuncios')::int FROM fuentes_estado "
+                        "WHERE tipo = 'carga' AND fuente = 'vo' ORDER BY id").fetchall()
+    assert cargas == [(14,), (0,)]
+    assert enviados[0].splitlines()[1:] == ["VO: 9 anuncios", "VN: 7 anuncios",
+                                            "VN eléctricos e híbridos: 4 anuncios",
+                                            "Carga a Postgres: correcta (25 filas)"]
+    # Una carga de otro día no cuenta para este
+    sv.cargar(pg, dia=date(2026, 11, 15))
+    assert sv.datos_resumen(pg, DIA)[2] == 25
+
+
+def test_carga_con_error_no_suma_y_se_muestra(pg, datos):
+    capturar(datos, "vo", "2026-11-14", flota("VO", 9))
+    capturar(datos, "vn", "2026-11-14", flota("VN", 7, fuente="vn"))
+    capturar(datos, "vn_otros", "2026-11-14", flota("EH", 4, fuente="vn_otros"))
+    sv.cargar(pg, dia=DIA)
+    pg.execute("INSERT INTO fuentes_estado (fuente, tipo, dia, estado, detalle) VALUES "
+               "('vn', 'carga', %s, 'error', '{\"error\": \"disco lleno\", \"anuncios\": 99}')", (DIA,))
+    filas, errores, cargadas = sv.datos_resumen(pg, DIA)
+    assert cargadas == 20 and errores == {"vn": "disco lleno"}
 
 
 def test_fallo_de_telegram_se_anota_sin_token_y_no_rompe_el_job(pg, datos, credenciales, monkeypatch, caplog):

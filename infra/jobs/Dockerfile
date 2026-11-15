@@ -7,7 +7,8 @@ ARG CDF_UID
 ARG CDF_GID
 ENV TZ=Europe/Madrid \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    RCLONE_CONFIG=/dev/null
 
 # cron, gpg y rclone para las copias; cliente de Postgres 16 del repositorio oficial (pg_dump
 # debe ser de la misma versión mayor que el servidor).
