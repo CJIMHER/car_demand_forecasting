@@ -249,7 +249,8 @@ nombre, la marca, la provincia y los umbrales del panel salen de `config/concesi
 ```bash
 cd /opt/cdf/app/repo
 make deploy            # migración 0003, rol cdf_panel, imagen del panel, arranque de panel y Caddy
-make precalcular       # primera vez: rehace todo el histórico (luego lo hace el cron a las 09:10)
+make precalcular       # primera vez, y tras una migración que cambie las panel_*: rehace todo el histórico
+                       # (cada día lo hace el cron a las 09:10 con los 8 últimos días)
 make test              # las pruebas, también las del panel
 ```
 
@@ -318,6 +319,8 @@ cdf-estado             # los scrapers, como hasta ahora
 - **Caddy no consigue el certificado** (`make panel-logs`): el registro DNS no apunta aún al servidor
   o el 80/443 están cerrados en el cortafuegos de Hetzner (7.1 y 7.2).
 - **Mercado dice «Todavía no hay datos»**: falta el precálculo; `make precalcular` (o esperar a las 09:10).
+- **«Nuestros» sale con «—» en todos los modelos** justo después de desplegar la migración 0004: las
+  filas son anteriores a la columna; `make precalcular` las rehace (o el cron de las 09:10, solo 8 días).
 - **Un usuario bloqueado** tras 5 intentos: espera 15 minutos o, si ha olvidado la contraseña,
   `make usuario-restablecer USUARIO=...`.
 

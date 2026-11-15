@@ -149,12 +149,16 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .tabla thead th { padding: 8px; color: var(--gris); font-size: 13px; font-weight: 600; }
 .tabla tbody tr { border-top: 1px solid var(--borde-suave); }
 .tabla tbody th { font-weight: 600; color: var(--tinta); }
+.tabla td { white-space: nowrap; }
 .tabla .izq { text-align: left; padding-left: 0; }
 .tabla th:last-child, .tabla td:last-child { padding-right: 0; }
 .var-sube { color: var(--azul-oscuro); font-weight: 600; }
 .var-baja { color: var(--marron); font-weight: 600; }
 .var-neutro { color: var(--gris-oscuro); font-weight: 600; }
 .atenuado { color: var(--eje); }
+/* Concesionario propio: acento ámbar del prototipo */
+.tabla tbody tr.propio { background: #FFF7E8; box-shadow: inset 4px 0 0 var(--ambar); }
+.tabla tbody tr.propio th { padding-left: 10px; }
 .pct { margin-left: 4px; color: var(--eje); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .n { font-size: 12px; color: var(--gris); white-space: nowrap; }
 .detalle { font-size: 12px; color: var(--gris-oscuro); max-width: 520px; overflow-wrap: anywhere; }
@@ -205,24 +209,29 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
   .tarjeta { padding: 16px; }
   .tarjeta-ancha, .tarjeta-estrecha { flex-basis: 100%; }
 
-  /* Tabla por modelo: cada modelo en dos líneas, sin desplazamiento horizontal.
-     Arriba modelo, anuncios y variación; debajo, atenuado y con etiquetas, el resto. */
-  .tabla-modelos { min-width: 0; display: block; }
-  .tabla-modelos thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .tabla-modelos tbody { display: block; }
-  .tabla-modelos tbody tr {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 8px; row-gap: 6px;
-    padding: 10px 0;
+  /* Tablas por modelo y por concesionario: cada fila en dos líneas, sin desplazamiento horizontal.
+     Arriba el nombre y las cifras principales; debajo, atenuado y con etiquetas, el resto. */
+  .tabla-movil { min-width: 0; display: block; }
+  .tabla-movil thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .tabla-movil tbody { display: block; }
+  .tabla-movil tbody tr {
+    display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr)); column-gap: 8px;
+    row-gap: 6px; padding: 10px 0;
   }
-  .tabla-modelos tbody th, .tabla-modelos tbody td { padding: 0; text-align: left; overflow-wrap: anywhere; }
-  .tabla-modelos tbody th { grid-column: 1 / span 2; align-self: end; font-size: 15px; }
-  .tabla-modelos tbody td { text-align: right; }
-  .tabla-modelos tbody td.linea2 { text-align: left; font-size: 13px; color: var(--gris); }
-  .tabla-modelos tbody td.linea2.atenuado { color: var(--eje); }
-  .tabla-modelos tbody td[colspan] { grid-column: 1 / -1; text-align: left; }
-  .tabla-modelos td[data-etiqueta]::before {
+  .tabla-movil tbody th, .tabla-movil tbody td { padding: 0; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+  .tabla-movil tbody th { align-self: end; font-size: 15px; }
+  .tabla-movil tbody td { text-align: right; }
+  .tabla-movil tbody td.linea2 { text-align: left; font-size: 13px; color: var(--gris); }
+  .tabla-movil tbody td.linea2.atenuado { color: var(--eje); }
+  /* Por concesionario: arriba el nombre (como lo publica la web, puede ser largo); debajo sus cuatro cifras */
+  .tabla-concesionarios tbody tr { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tabla-concesionarios tbody th { grid-column: 1 / -1; }
+  .tabla-concesionarios tbody td { text-align: left; }
+  .tabla-movil tbody td[colspan] { grid-column: 1 / -1; text-align: left; }
+  .tabla-movil td[data-etiqueta]::before {
     content: attr(data-etiqueta); display: block; font-size: 11px; font-weight: 500; color: var(--gris);
   }
+  .tabla-movil tbody tr.propio { padding-left: 8px; }
 
   .nav-movil {
     display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;

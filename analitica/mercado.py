@@ -1,9 +1,12 @@
 """Precálculo de la vista «Mercado» del panel (cron de cdf_jobs a las 09:10).
 
 Lee las tablas de hechos (stock_externo_snapshot, eventos_externos, scraper_runs) y rellena las
-tablas derivadas panel_mercado_dia, panel_mercado_modelo y panel_mercado_capturas. El panel solo
-lee estas tablas: nunca calcula sobre las de hechos al servir una página. Recalcular un día
-sustituye ese día en las derivadas; las tablas de hechos no se tocan.
+tablas derivadas panel_mercado_dia, panel_mercado_modelo, panel_mercado_concesionario y
+panel_mercado_capturas. El panel solo lee estas tablas: nunca calcula sobre las de hechos al servir
+una página. Recalcular un día sustituye ese día en las derivadas; las tablas de hechos no se tocan.
+
+Por concesionario (solo la provincia del concesionario propio): los concesionarios con anuncios ese
+día, con el nombre que publica la web (el más reciente si un código ha tenido varios).
 
 Reglas (cada una con su prueba en tests/test_mercado.py):
 
@@ -33,6 +36,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import bisect
 import logging
 import re
 import statistics
@@ -127,7 +131,26 @@ class Hechos:
                 """SELECT e.fuente, e.id_anuncio, r.snapshot_day FROM eventos_externos e
                    JOIN scraper_runs r USING (fuente, run_id) WHERE e.tipo = 'removed'"""):
             self.retiradas[(f, i)].append(d)
+        # Nombre de cada concesionario tal como lo publica la web, por día; vale el más reciente.
+        por_dia: dict[str, dict[date, Counter]] = defaultdict(lambda: defaultdict(Counter))
+        for dealer, dia, nombre, n in pg.execute(
+                """SELECT dealer_id, snapshot_day, concesionario, count(*) FROM stock_externo_snapshot
+                   WHERE dealer_id IS NOT NULL AND concesionario IS NOT NULL GROUP BY 1, 2, 3"""):
+            nombre = re.sub(r"\s+", " ", nombre).strip()
+            if nombre:
+                por_dia[dealer][dia][nombre] += n
+        self._nombres: dict[str, tuple[list[date], list[str]]] = {}
+        for dealer, dias in por_dia.items():
+            orden = sorted(dias)
+            self._nombres[dealer] = (orden, [sorted(dias[d].items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+                                             for d in orden])
         self._dias: dict[date, dict[Clave, Fila]] = {}
+
+    def nombre_concesionario(self, dealer_id: str, dia: date) -> str:
+        """El nombre más reciente con que la web ha publicado este código hasta `dia` (si no hay, el código)."""
+        dias, nombres = self._nombres.get(dealer_id, ([], []))
+        i = bisect.bisect_right(dias, dia)
+        return nombres[i - 1] if i else dealer_id
 
     def modelo(self, valor) -> str:
         m = normalizar_modelo(valor)
@@ -162,8 +185,9 @@ class Hechos:
 
 # --------------------------------------------------------------------------- cálculo de un día
 
-def calcular_dia(h: Hechos, dia: date, tipo: str) -> tuple[list[dict], list[dict]]:
-    """Filas de panel_mercado_dia y panel_mercado_modelo para un día válido del tipo."""
+def calcular_dia(h: Hechos, dia: date, tipo: str) -> tuple[list[dict], list[dict], list[dict]]:
+    """Filas de panel_mercado_dia, panel_mercado_modelo y panel_mercado_concesionario (esta, solo de
+    la provincia del concesionario propio) para un día válido del tipo."""
     hoy = h.filas(dia, tipo)
     ayer_ok = h.valido(dia - UN_DIA, tipo)
     hace7_ok = h.valido(dia - 7 * UN_DIA, tipo)
@@ -184,15 +208,16 @@ def calcular_dia(h: Hechos, dia: date, tipo: str) -> tuple[list[dict], list[dict
                     altas7[clave] = fila
 
     nombres = {"provincia": h.conc.provincia, "comunidad": h.conc.comunidad, "espana": "España"}
-    filas_dia, filas_modelo = [], []
+    filas_dia, filas_modelo, filas_conc = [], [], []
     for zona in ZONAS:
         en_zona = lambda f: zona in h.zonas(f.provincia)  # noqa: E731
         hoy_z = {c: f for c, f in hoy.items() if en_zona(f)}
-        por_modelo: dict[str, dict] = defaultdict(lambda: {"anuncios": 0, "hace7": 0, "altas7": 0, "ausencias7": 0,
-                                                           "precios": [], "edades": []})
+        por_modelo: dict[str, dict] = defaultdict(lambda: {"anuncios": 0, "propios": 0, "hace7": 0, "altas7": 0,
+                                                           "ausencias7": 0, "precios": [], "edades": []})
         for clave, f in hoy_z.items():
             m = por_modelo[f.modelo]
             m["anuncios"] += 1
+            m["propios"] += f.es_propio
             if f.precio_cents is not None:
                 m["precios"].append(f.precio_cents)
             m["edades"].append(((dia - h.primero[clave]).days, h.alta_observada(clave)))
@@ -227,21 +252,45 @@ def calcular_dia(h: Hechos, dia: date, tipo: str) -> tuple[list[dict], list[dict
             med, cota = dias_publicado(m["edades"])
             filas_modelo.append({
                 "dia": dia, "tipo": tipo, "zona": zona, "modelo": modelo, "anuncios": m["anuncios"],
-                "anuncios_hace7": m["hace7"] if hace7_ok else None,
+                "propios": m["propios"], "anuncios_hace7": m["hace7"] if hace7_ok else None,
                 "altas_7": m["altas7"] if ventana_ok else None,
                 "ausencias_7": m["ausencias7"] if ventana_ok else None,
                 "precio_mediano_cents": precio_mediano(m["precios"]), "n_precio": len(m["precios"]),
                 "dias_mediana": med, "dias_cota": cota,
             })
-    return filas_dia, filas_modelo
+        if zona == "provincia":
+            filas_conc = _por_concesionario(h, dia, tipo, hoy_z, [f for f in hace7.values() if en_zona(f)], hace7_ok)
+    return filas_dia, filas_modelo, filas_conc
+
+
+def _por_concesionario(h: Hechos, dia: date, tipo: str, hoy_z: dict[Clave, Fila], hace7_z: list[Fila],
+                       hace7_ok: bool) -> list[dict]:
+    """Una fila por concesionario con anuncios hoy en la provincia del concesionario propio."""
+    conc: dict[str, dict] = defaultdict(lambda: {"anuncios": 0, "precios": [], "propio": False})
+    for f in hoy_z.values():
+        if f.dealer_id:
+            c = conc[f.dealer_id]
+            c["anuncios"] += 1
+            c["propio"] = c["propio"] or f.es_propio
+            if f.precio_cents is not None:
+                c["precios"].append(f.precio_cents)
+    hace7 = Counter(f.dealer_id for f in hace7_z if f.dealer_id)
+    return [{
+        "dia": dia, "tipo": tipo, "dealer_id": dealer, "concesionario": h.nombre_concesionario(dealer, dia),
+        "es_propio": c["propio"], "anuncios": c["anuncios"],
+        "anuncios_hace7": hace7.get(dealer, 0) if hace7_ok else None,
+        "precio_mediano_cents": precio_mediano(c["precios"]), "n_precio": len(c["precios"]),
+    } for dealer, c in conc.items()]
 
 
 # --------------------------------------------------------------------------- escritura
 
 COLS_DIA = ["dia", "tipo", "zona", "zona_nombre", "anuncios", "propios", "concesionarios", "altas_hoy",
             "ausencias_hoy", "bajas_7", "ayer_completo", "hace7_completo", "ventana_completa"]
-COLS_MODELO = ["dia", "tipo", "zona", "modelo", "anuncios", "anuncios_hace7", "altas_7", "ausencias_7",
+COLS_MODELO = ["dia", "tipo", "zona", "modelo", "anuncios", "propios", "anuncios_hace7", "altas_7", "ausencias_7",
                "precio_mediano_cents", "n_precio", "dias_mediana", "dias_cota"]
+COLS_CONCESIONARIO = ["dia", "tipo", "dealer_id", "concesionario", "es_propio", "anuncios", "anuncios_hace7",
+                      "precio_mediano_cents", "n_precio"]
 
 
 def _insertar(pg, tabla: str, cols: list[str], filas: list[dict]) -> None:
@@ -279,22 +328,26 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
     hasta = hasta or hoy_madrid()
     todos = set().union(*h.completos.values())
     if not todos:
-        return {"desde": None, "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0}
+        return {"desde": None, "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0,
+                "filas_concesionario": 0}
     desde = max(desde or min(todos), min(todos))
-    resumen = {"desde": str(desde), "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0}
+    resumen = {"desde": str(desde), "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0,
+               "filas_concesionario": 0}
     d = desde
     while d <= hasta:
         with pg.transaction():
-            pg.execute("DELETE FROM panel_mercado_modelo WHERE dia = %s", (d,))
-            pg.execute("DELETE FROM panel_mercado_dia WHERE dia = %s", (d,))
+            for tabla in ("panel_mercado_concesionario", "panel_mercado_modelo", "panel_mercado_dia"):
+                pg.execute(f"DELETE FROM {tabla} WHERE dia = %s", (d,))
             calculado = False
             for tipo in TIPOS:
                 if h.valido(d, tipo):
-                    filas_dia, filas_modelo = calcular_dia(h, d, tipo)
+                    filas_dia, filas_modelo, filas_conc = calcular_dia(h, d, tipo)
                     _insertar(pg, "panel_mercado_dia", COLS_DIA, filas_dia)
                     _insertar(pg, "panel_mercado_modelo", COLS_MODELO, filas_modelo)
+                    _insertar(pg, "panel_mercado_concesionario", COLS_CONCESIONARIO, filas_conc)
                     resumen["filas_dia"] += len(filas_dia)
                     resumen["filas_modelo"] += len(filas_modelo)
+                    resumen["filas_concesionario"] += len(filas_conc)
                     calculado = True
             resumen["dias"] += calculado
         d += UN_DIA

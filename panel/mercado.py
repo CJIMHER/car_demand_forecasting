@@ -72,6 +72,15 @@ def variacion(anuncios: int, hace7: int | None, motivo: str, n_minimo_pct: int) 
     return {"texto": texto, "porcentaje": porcentaje, "motivo": None, "clase": clase}
 
 
+def nuestros(propios: int | None, anuncios: int, n_minimo_pct: int) -> dict:
+    """Anuncios propios del modelo y, atenuado, su peso sobre el total del modelo si este tiene al
+    menos `n_minimo_pct` anuncios. 0 es «0»; NULL (fila anterior a la columna) es «—»."""
+    if propios is None:
+        return {"texto": fmt.GUION, "peso": None, "motivo": "sin cifra hasta el próximo precálculo"}
+    peso = fmt.porcentaje(propios / anuncios * 100, 0) if anuncios >= n_minimo_pct and anuncios else None
+    return {"texto": fmt.miles(propios), "peso": peso, "motivo": None}
+
+
 def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy: date) -> dict:
     nombres = etiquetas_zona(conc)
     nombre_tipo = {"VN": "nuevos", "VO": "ocasión"}[tipo]
@@ -87,6 +96,8 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
         """SELECT anuncios, propios, concesionarios, altas_hoy, ausencias_hoy, bajas_7,
                   ayer_completo, hace7_completo, ventana_completa
            FROM panel_mercado_dia WHERE dia = %s AND tipo = %s AND zona = %s""", (dia, tipo, zona)).fetchone()
+    if fila is None:  # el precálculo escribe siempre las tres zonas; por si acaso, sin datos
+        return base
     anuncios, propios, concesionarios, altas, ausencias, bajas, ayer_ok, hace7_ok, ventana_ok = fila
     es_hoy = dia == hoy
     cuando = "hoy" if es_hoy else f"del {fmt.fecha_corta(dia)}"
@@ -113,13 +124,14 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
 
     n_min = conc.n_minimo_medianas
     modelos = []
-    for (modelo, n, hace7, altas7, ausencias7, precio, n_precio, dias, cota) in pg.execute(
-            """SELECT modelo, anuncios, anuncios_hace7, altas_7, ausencias_7, precio_mediano_cents, n_precio,
-                      dias_mediana, dias_cota
+    n_pct = conc.n_minimo_porcentaje
+    for (modelo, n, propios_m, hace7, altas7, ausencias7, precio, n_precio, dias, cota) in pg.execute(
+            """SELECT modelo, anuncios, propios, anuncios_hace7, altas_7, ausencias_7, precio_mediano_cents,
+                      n_precio, dias_mediana, dias_cota
                FROM panel_mercado_modelo WHERE dia = %s AND tipo = %s AND zona = %s
                ORDER BY anuncios DESC, modelo""", (dia, tipo, zona)):
         modelos.append({
-            "modelo": modelo, "anuncios": fmt.miles(n),
+            "modelo": modelo, "anuncios": fmt.miles(n), "nuestros": nuestros(propios_m, n, n_pct),
             "variacion": variacion(n, hace7, MOTIVO_HACE7, conc.n_minimo_porcentaje),
             "altas": fmt.miles(altas7) if ventana_ok else fmt.GUION,
             "ausencias": fmt.miles(ausencias7) if ventana_ok else fmt.GUION,
@@ -146,14 +158,30 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
         d += timedelta(days=1)
 
     notas = [f"Frente a hace 7 días: diferencia en número de anuncios; al lado, atenuado, el porcentaje, "
-             f"solo si hace 7 días había al menos {conc.n_minimo_porcentaje} anuncios.",
+             f"solo si hace 7 días había al menos {n_pct} anuncios.",
+             f"Nuestros: anuncios propios en ese modelo; al lado, atenuado, su peso sobre el total del "
+             f"modelo, solo si el modelo tiene al menos {n_pct} anuncios.",
              f"El precio y los días son medianas de los anuncios publicados {'hoy' if es_hoy else 'ese día'}.",
              "«≥ N»: parte de esos anuncios ya estaban publicados en la primera captura o tras un día sin "
              f"captura, así que llevan al menos N días. Con menos de {n_min} anuncios, la cifra va atenuada con su n."]
     if tipo == "VN":
         notas.insert(0, "VN incluye gasolina, diésel, eléctricos e híbridos.")
+    por_concesionario = None
+    if zona == "provincia":
+        por_concesionario = []
+        for dealer, nombre, propio, n, hace7, precio, n_precio in pg.execute(
+                """SELECT dealer_id, concesionario, es_propio, anuncios, anuncios_hace7, precio_mediano_cents, n_precio
+                   FROM panel_mercado_concesionario WHERE dia = %s AND tipo = %s
+                   ORDER BY anuncios DESC, concesionario, dealer_id""", (dia, tipo)):
+            por_concesionario.append({
+                "concesionario": nombre, "propio": propio, "anuncios": fmt.miles(n),
+                "variacion": variacion(n, hace7, MOTIVO_HACE7, n_pct),
+                "precio": fmt.euros(precio), "precio_n": n_precio, "precio_atenuado": 0 < n_precio < n_min,
+                "peso": fmt.porcentaje(n / anuncios * 100, 1) if anuncios else fmt.GUION,
+            })
     return {
         **base, "hay_datos": True, "dia": dia, "es_hoy": es_hoy, "dia_largo": fmt.fecha_larga(dia),
+        "por_concesionario": por_concesionario, "provincia": conc.provincia,
         "kpis": kpis, "modelos": modelos, "motivos": motivos, "notas": notas, "n_minimo": n_min,
         "serie": serie, "bajas_7": None if bajas is None else fmt.miles(bajas),
         "motivo_bajas": None if ventana_ok else MOTIVO_VENTANA,

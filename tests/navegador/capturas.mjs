@@ -6,7 +6,8 @@
 // 3. node tests/navegador/capturas.mjs 9333 docs/capturas direccion prueba-direccion-local
 //
 // Entra con el formulario de acceso, comprueba el gráfico y el cambio de zona con htmx, y a 390 px
-// que el documento no desborda el ancho y que los siete datos de cada modelo están en pantalla.
+// en cada zona y tipo que el documento no desborda el ancho y que todos los datos de cada fila
+// (modelos y concesionarios) están en pantalla.
 // Guarda Mercado a 1440 px y a 390 px. Sale con código 1 si algo falla o si hay errores de CSP.
 import fs from "node:fs";
 const [puerto, salida, usuario, clave] = process.argv.slice(2);
@@ -52,25 +53,42 @@ await evalua(`[...document.querySelectorAll('.segmento')].find(a => a.textConten
 await espera(1500);
 console.log("htmx:", await evalua("location.search"), await evalua("document.querySelector('#t-modelos').textContent"), "gráfico:", await evalua("!!document.querySelector('[data-serie] canvas')"));
 await tamano(390, true);
-await ir(`${BASE}/mercado`); await espera(1200);
-const comprobacion = await evalua(`(() => {
-  const ancho = window.innerWidth, doc = document.documentElement;
-  const filas = [...document.querySelectorAll('.tabla-modelos tbody tr')];
-  const malas = filas.filter(tr => {
-    const celdas = [...tr.children];
-    return celdas.length !== 7 || celdas.some(c => { const r = c.getBoundingClientRect();
-      return r.width === 0 || r.height === 0 || r.left < 0 || r.right > ancho + 0.5 || getComputedStyle(c).visibility === 'hidden'; });
-  }).map(tr => tr.children[0].textContent);
-  return JSON.stringify({ancho, scrollWidth: doc.scrollWidth, desborda: doc.scrollWidth > ancho, filas: filas.length, filasConDatosFuera: malas});
-})()`);
-console.log("móvil 390:", comprobacion);
-for (const t of ["VO"]) { await ir(`${BASE}/mercado?zona=espana&tipo=${t}`); console.log("móvil 390 VO España:", await evalua(`JSON.stringify({scrollWidth: document.documentElement.scrollWidth, ancho: innerWidth})`)); }
+// Cada combinación de zona y tipo: nada desborda y todas las celdas de cada fila (8 por modelo,
+// 5 por concesionario) están dentro de la pantalla.
+const resultados = [];
+for (const zona of ["provincia", "comunidad", "espana"]) for (const tipo of ["VN", "VO"]) {
+  await ir(`${BASE}/mercado?zona=${zona}&tipo=${tipo}`);
+  resultados.push(JSON.parse(await evalua(`(() => {
+    const ancho = window.innerWidth, doc = document.documentElement;
+    const tablas = {"tabla-modelos": 8, "tabla-concesionarios": 5};
+    const malas = [], cuenta = {};
+    for (const [clase, n] of Object.entries(tablas)) {
+      const filas = [...document.querySelectorAll('.' + clase + ' tbody tr')];
+      cuenta[clase] = filas.length;
+      for (const tr of filas) {
+        const celdas = [...tr.children];
+        if (celdas.length !== n || celdas.some(c => { const r = c.getBoundingClientRect();
+            return r.width === 0 || r.height === 0 || r.left < 0 || r.right > ancho + 0.5 || getComputedStyle(c).visibility === 'hidden'; }))
+          malas.push(clase + ': ' + celdas[0].textContent.trim());
+      }
+    }
+    return JSON.stringify({zona: ${JSON.stringify(zona)}, tipo: ${JSON.stringify(tipo)}, scrollWidth: doc.scrollWidth,
+                           desborda: doc.scrollWidth > ancho, filas: cuenta, filasConDatosFuera: malas});
+  })()`)));
+}
+for (const r of resultados) console.log("móvil 390:", JSON.stringify(r));
+const comprobacion = JSON.stringify({
+  desborda: resultados.some(r => r.desborda),
+  filas: Math.min(...resultados.map(r => r.filas["tabla-modelos"])),
+  sinConcesionariosEnProvincia: resultados.some(r => r.zona === "provincia" && r.filas["tabla-concesionarios"] === 0),
+  filasConDatosFuera: resultados.flatMap(r => r.filasConDatosFuera),
+});
 await ir(`${BASE}/mercado`); await espera(800);
 await captura("mercado_movil_390.png");
 const zonas = await evalua(`JSON.stringify([...document.querySelectorAll('.segmento, .nav-movil-item, .boton-salir')].filter(e => getComputedStyle(e).display !== 'none').map(e => Math.round(e.getBoundingClientRect().height)))`);
 console.log("altos de zonas táctiles (px):", zonas);
 console.log("errores de consola/CSP:", errores.length ? errores : "ninguno");
 const c = JSON.parse(comprobacion);
-const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.filasConDatosFuera.length > 0;
+const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.sinConcesionariosEnProvincia || c.filasConDatosFuera.length > 0;
 console.log(mal ? "RESULTADO: FALLA" : "RESULTADO: correcto");
 ws.close(); process.exit(mal ? 1 : 0);

@@ -17,8 +17,9 @@ def d(n: int) -> date:
     return D0 + timedelta(days=n)
 
 
-def car(vid, fuente="vo", modelo="Golf", precio=2_500_000, cp="41001", dealer="ESP00217"):
-    return coche(vid, fuente=fuente, modelo=modelo, precio=precio, cp=cp, dealer_id=dealer)
+def car(vid, fuente="vo", modelo="Golf", precio=2_500_000, cp="41001", dealer="ESP00217", nombre=None):
+    return coche(vid, fuente=fuente, modelo=modelo, precio=precio, cp=cp, dealer_id=dealer,
+                 dealer=nombre or f"Concesionario {dealer}")
 
 
 def plan(datos, fuente, dias: dict[int, list[str]], **kw):
@@ -244,3 +245,61 @@ def test_tarea_fallida_anota_y_avisa_por_telegram(pg, pg_url, monkeypatch):
                         "Detalle: registro de precalcular de hoy (make logs)"]
     estados = dict(pg.execute("SELECT tipo, estado FROM fuentes_estado").fetchall())
     assert estados == {"precalculo": "error", "aviso": "ok"}
+
+
+# ---------------------------------------------------------------- nuestros por modelo
+
+def test_propios_por_modelo(pg, datos):
+    capturar(datos, "vo", d(0).isoformat(), [
+        car("P1", dealer="ESP00710"), car("P2", dealer="ESP00710", modelo="Polo"), car("O1"), car("O2"),
+        car("O3", modelo="Polo"), car("O4", modelo="Tiguan"), car("X1", dealer="ESP00710", cp="28001")])
+    precalcular(pg, d(0))
+    propios = {(z, m): (n, p) for z, m, n, p in pg.execute(
+        "SELECT zona, modelo, anuncios, propios FROM panel_mercado_modelo WHERE dia = %s", (d(0),))}
+    assert propios[("provincia", "Golf")] == (3, 1)
+    assert propios[("provincia", "Polo")] == (2, 1)
+    assert propios[("provincia", "Tiguan")] == (1, 0)          # 0 propios: 0, no NULL
+    assert propios[("espana", "Golf")] == (4, 2)               # el de Madrid cuenta en España
+
+
+# ---------------------------------------------------------------- por concesionario
+
+def _conc(pg, dia, tipo="VO"):
+    return {r[0]: dict(zip(["nombre", "propio", "anuncios", "hace7", "precio", "n_precio"], r[1:]))
+            for r in pg.execute("SELECT dealer_id, concesionario, es_propio, anuncios, anuncios_hace7, "
+                                "precio_mediano_cents, n_precio FROM panel_mercado_concesionario "
+                                "WHERE dia = %s AND tipo = %s", (dia, tipo))}
+
+
+def test_por_concesionario_de_la_provincia(pg, datos):
+    """A (propio) siempre; B siempre (cambia de nombre el día 6); C deja de publicar el día 7;
+    D aparece el día 7; M es de Madrid (fuera de la provincia); N no dice su concesionario."""
+    for n in range(9):
+        coches = [car(f"A{i}", dealer="ESP00710", nombre="Propio", precio=(i + 1) * 1_000_000) for i in range(3)]
+        coches += [car(f"B{i}", dealer="ESPB", nombre="Nombre viejo" if n < 6 else "Nombre nuevo") for i in range(2)]
+        coches += [car("C0", dealer="ESPC")] if n != 7 else []
+        coches += [car(f"D{i}", dealer="ESPD") for i in range(4)] if n >= 7 else []
+        coches += [car("M0", dealer="ESPM", cp="28001"), car("N0", dealer=None)]
+        capturar(datos, "vo", d(n).isoformat(), coches, PERMISIVO)
+    precalcular(pg, d(8))
+    dia7 = _conc(pg, d(7))
+    assert set(dia7) == {"ESP00710", "ESPB", "ESPD"}          # C no publica ese día; M es de otra provincia
+    assert dia7["ESP00710"] == {"nombre": "Propio", "propio": True, "anuncios": 3, "hace7": 3,
+                                "precio": 2_000_000, "n_precio": 3}
+    assert dia7["ESPB"]["nombre"] == "Nombre nuevo" and not dia7["ESPB"]["propio"]
+    assert dia7["ESPD"]["anuncios"] == 4 and dia7["ESPD"]["hace7"] == 0     # nuevo: hace 7 días no tenía
+    assert _conc(pg, d(3))["ESPB"]["nombre"] == "Nombre viejo"             # el más reciente hasta ese día
+    assert "ESPC" in _conc(pg, d(8))                                        # vuelve a publicar
+    assert _conc(pg, d(6))["ESPB"]["hace7"] is None                         # sin captura de hace 7 días
+    # El peso se calcula sobre todos los anuncios de la provincia, también los que no dicen concesionario
+    total = pg.execute("SELECT anuncios FROM panel_mercado_dia WHERE dia = %s AND tipo = 'VO' AND zona = 'provincia'",
+                       (d(7),)).fetchone()[0]
+    assert total == 3 + 2 + 4 + 1
+
+
+def test_por_concesionario_vn_suma_vn_y_vn_otros(pg, datos):
+    plan(datos, "vn", {0: ["N1", "N2"], 1: ["N1", "N2"]}, dealer="ESPX")
+    plan(datos, "vn_otros", {1: ["E1"]}, dealer="ESPX")
+    precalcular(pg, d(1))
+    assert _conc(pg, d(0), "VN") == {}                         # sin vn_otros, el día no cuenta para VN
+    assert _conc(pg, d(1), "VN")["ESPX"]["anuncios"] == 3

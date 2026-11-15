@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 
 import pytest
@@ -12,6 +13,13 @@ from sinteticos import RAIZ
 COMPOSE = yaml.safe_load((RAIZ / "infra/docker-compose.yml").read_text())
 PANEL = COMPOSE["services"]["panel"]
 CADDY = COMPOSE["services"]["caddy"]
+
+# El Makefile se ejecuta en el host y .env.example es una plantilla del host: en la imagen de
+# cdf_jobs (donde corre «make test») no hay make y .dockerignore excluye .env*. Ahí se saltan.
+sin_make = pytest.mark.skipif(shutil.which("make") is None,
+                              reason="sin make (contenedor cdf_jobs): el Makefile se prueba en el host")
+sin_env_example = pytest.mark.skipif(not (RAIZ / ".env.example").exists(),
+                                     reason="sin .env.example (lo excluye .dockerignore): se prueba en el host")
 
 
 def _make(tmp_path, objetivo, env_extra: str):
@@ -29,6 +37,7 @@ def _make(tmp_path, objetivo, env_extra: str):
     return r, (registro.read_text() if registro.exists() else "")
 
 
+@sin_make
 def test_sin_panel_dominio_no_arrancan_ni_panel_ni_caddy(tmp_path):
     for i, extra in enumerate(("", "PANEL_DOMINIO=\nPANEL_DB_PASSWORD=" + "a" * 64 + "\n")):
         d = tmp_path / f"caso{i}"
@@ -39,6 +48,7 @@ def test_sin_panel_dominio_no_arrancan_ni_panel_ni_caddy(tmp_path):
         assert " up " not in f" {docker} " and " build " not in f" {docker} " and "rol_bd" not in docker
 
 
+@sin_make
 def test_con_panel_dominio_rol_imagen_y_arranque(tmp_path):
     r, docker = _make(tmp_path, "panel-deploy", "PANEL_DOMINIO=panel.example.invalid\nPANEL_DB_PASSWORD=" + "a" * 64 + "\n")
     assert r.returncode == 0, r.stdout + r.stderr
@@ -49,6 +59,7 @@ def test_con_panel_dominio_rol_imagen_y_arranque(tmp_path):
     assert "a" * 64 not in r.stdout + r.stderr + docker          # la contraseña no sale en la orden
 
 
+@sin_make
 def test_con_panel_dominio_sin_contrasena_del_rol_falla(tmp_path):
     r, docker = _make(tmp_path, "panel-deploy", "PANEL_DOMINIO=panel.example.invalid\n")
     assert r.returncode != 0 and "PANEL_DB_PASSWORD" in r.stdout + r.stderr
@@ -95,6 +106,7 @@ def test_caddy_https_para_panel_dominio():
     assert "./caddy/Caddyfile:/etc/caddy/Caddyfile:ro" in CADDY["volumes"]
 
 
+@sin_env_example
 def test_variables_nuevas_en_env_example_sin_valor():
     lineas = (RAIZ / ".env.example").read_text().splitlines()
     variables = dict(l.split("=", 1) for l in lineas if re.match(r"^[A-Z_]+=", l))

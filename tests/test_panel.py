@@ -436,9 +436,13 @@ def _kpis(html):
     return dict(re.findall(r'kpi-etiqueta">([^<]+)</span>\s*<span class="kpi-valor">([^<]+)<', html))
 
 
-def _filas(html):
+def _filas(html, tabla="tabla-modelos"):
+    """{nombre: [celdas]} de la tabla por modelo (o la de concesionarios), con el texto de cada celda."""
+    if f'{tabla}">' not in html:
+        return {}
+    html = html.split(f'{tabla}">', 1)[1].split("</table>", 1)[0]
     filas = {}
-    for fila in re.findall(r"<tr>\s*<th scope=\"row\" class=\"izq\">(.*?)</tr>", html, re.S):
+    for fila in re.findall(r"<tr[^>]*>\s*<th scope=\"row\" class=\"izq\">(.*?)</tr>", html, re.S):
         modelo = fila.split("<", 1)[0]
         celdas = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", fila, re.S)]
         filas[modelo] = celdas
@@ -496,9 +500,34 @@ def test_la_vista_cuadra_con_sql_directo(app, pg, datos, personas):
             for modelo, (n, precio) in sql_modelos.items():
                 celdas = vista[modelo]
                 assert _num(celdas[0]) == n
-                assert _num(celdas[4].split("n =")[0]) == int(precio), (modelo, celdas)
+                assert _num(celdas[5].split("n =")[0]) == int(precio), (modelo, celdas)
             orden = [_num(vista[m][0]) for m in vista]
             assert orden == sorted(orden, reverse=True)           # ordenada por anuncios
+            propios_sql = dict(pg.execute(
+                f"""SELECT modelo, count(*) FILTER (WHERE es_propio) FROM stock_externo_snapshot
+                    WHERE snapshot_day = %(dia)s AND fuente = ANY(%(f)s) AND {cond} GROUP BY modelo""", p).fetchall())
+            for modelo, celdas in vista.items():
+                assert int(celdas[2].split()[0].replace(".", "")) == propios_sql[modelo], (modelo, celdas)
+            if zona != "provincia":
+                assert "tabla-concesionarios" not in html
+                continue
+            sql_conc = {}
+            for dealer, n, precio in pg.execute(
+                    f"""SELECT dealer_id, count(*), round(percentile_cont(0.5) WITHIN GROUP (ORDER BY precio_cents) / 100)
+                        FROM stock_externo_snapshot WHERE snapshot_day = %(dia)s AND fuente = ANY(%(f)s) AND {cond}
+                        AND dealer_id IS NOT NULL GROUP BY dealer_id""", p):
+                nombre = pg.execute("SELECT concesionario FROM stock_externo_snapshot WHERE dealer_id = %s "
+                                    "AND snapshot_day <= %s ORDER BY snapshot_day DESC LIMIT 1", (dealer, dia)).fetchone()[0]
+                sql_conc[nombre] = (n, precio)
+            vista_c = _filas(html, "tabla-concesionarios")
+            assert set(vista_c) == set(sql_conc)
+            for nombre, (n, precio) in sql_conc.items():
+                celdas = vista_c[nombre]
+                assert _num(celdas[0]) == n
+                assert celdas[2].strip() == f"{n / anuncios * 100:.1f}".replace(".", ",") + " %"
+                assert _num(celdas[3].split("n =")[0]) == int(precio)
+            orden = [_num(c[0]) for c in vista_c.values()]
+            assert orden == sorted(orden, reverse=True)
 
 
 def test_la_vista_respeta_las_reglas_en_pantalla(app, pg, datos, personas):
@@ -531,22 +560,35 @@ def test_sin_cifra_se_muestra_raya_con_motivo(app, pg, datos, personas):
     assert "Sin cifra: falta la captura completa del día anterior" in html
     assert "«—» Frente a hace 7 días: falta la captura completa de hace 7 días (07/11)." in html
     fila = _filas(html)["Golf"]
-    assert fila[1:4] == ["—", "—", "—"]
-    assert "n = 3" in fila[4] and "≥" in fila[5]                    # pocos anuncios: atenuado con su n
+    assert fila[1] == "—" and fila[2] == "0" and fila[3:5] == ["—", "—"]   # 0 propios es «0», no «—»
+    assert "n = 3" in fila[5] and "≥" in fila[6]                    # pocos anuncios: atenuado con su n
     assert 'class="linea2 atenuado"' in html
 
 
 # ================================================================== variación a 7 días
 
-def _poner_mercado(pg, dia, modelos):
-    """Filas panel_mercado_* a mano (como las dejaría el precálculo): [(modelo, anuncios, hace7)]."""
+def _poner_mercado(pg, dia, modelos, zona="espana", concesionarios=(), anuncios_zona=1):
+    """Filas panel_mercado_* a mano (como las dejaría el precálculo).
+    modelos: [(modelo, anuncios, hace7[, propios])]; concesionarios: [(id, nombre, propio, anuncios,
+    hace7, precio_cents, n_precio)]."""
     pg.execute("INSERT INTO panel_mercado_dia (dia, tipo, zona, zona_nombre, anuncios, propios, concesionarios, "
                "altas_hoy, ausencias_hoy, bajas_7, ayer_completo, hace7_completo, ventana_completa) VALUES "
-               "(%s, 'VO', 'espana', 'España', 1, 0, 1, 0, 0, 0, true, true, true)", (dia,))
-    for modelo, n, hace7 in modelos:
-        pg.execute("INSERT INTO panel_mercado_modelo (dia, tipo, zona, modelo, anuncios, anuncios_hace7, altas_7, "
-                   "ausencias_7, precio_mediano_cents, n_precio, dias_mediana, dias_cota) VALUES "
-                   "(%s, 'VO', 'espana', %s, %s, %s, 0, 0, 2000000, %s, 10, false)", (dia, modelo, n, hace7, n))
+               "(%s, 'VO', %s, 'x', %s, 0, 1, 0, 0, 0, true, true, true)", (dia, zona, anuncios_zona))
+    for modelo, n, hace7, *resto in modelos:
+        propios = resto[0] if resto else 0
+        pg.execute("INSERT INTO panel_mercado_modelo (dia, tipo, zona, modelo, anuncios, propios, anuncios_hace7, "
+                   "altas_7, ausencias_7, precio_mediano_cents, n_precio, dias_mediana, dias_cota) VALUES "
+                   "(%s, 'VO', %s, %s, %s, %s, %s, 0, 0, 2000000, %s, 10, false)",
+                   (dia, zona, modelo, n, propios, hace7, n))
+    for fila in concesionarios:
+        pg.execute("INSERT INTO panel_mercado_concesionario (dia, tipo, dealer_id, concesionario, es_propio, anuncios, "
+                   "anuncios_hace7, precio_mediano_cents, n_precio) VALUES (%s, 'VO', %s, %s, %s, %s, %s, %s, %s)",
+                   (dia, *fila))
+
+
+def _celdas(html, tabla="tabla-modelos", columna=1):
+    """{nombre: texto de la celda `columna` (0 = primera td)} de una tabla, sin etiquetas HTML."""
+    return {n: re.sub(r"\s+", " ", c[columna]).strip() for n, c in _filas(html, tabla).items()}
 
 
 def test_variacion_en_unidades_y_porcentaje_desde_10(app, pg, personas):
@@ -575,6 +617,68 @@ def test_sin_cifra_de_hace_7_dias_no_cambia(app, pg, personas):
     _poner_mercado(pg, HOY, [("Siete", 5, None)])
     html = dentro(app, "ventas").get("/mercado?zona=espana&tipo=VO").text
     assert 'title="Sin cifra: falta la captura completa de hace 7 días">—</td>' in html
+
+
+# ================================================================== nuestros y por concesionario
+
+def test_columna_nuestros(app, pg, personas):
+    _poner_mercado(pg, HOY, [("Uno", 12, 10, 3), ("Dos", 7, 9, 2), ("Tres", 3, 3, 0), ("Cuatro", 10, 10, 10)])
+    pg.execute("INSERT INTO panel_mercado_modelo (dia, tipo, zona, modelo, anuncios, propios, n_precio) "
+               "VALUES (%s, 'VO', 'espana', 'Antigua', 1, NULL, 0)", (HOY,))   # fila anterior a la columna
+    html = dentro(app, "ventas").get("/mercado?zona=espana&tipo=VO").text
+    assert _celdas(html, columna=2) == {"Uno": "3 25 %", "Dos": "2", "Tres": "0", "Cuatro": "10 100 %", "Antigua": "—"}
+    assert '<th scope="col">Nuestros</th>' in html
+    assert "su peso sobre el total del modelo, solo si el modelo tiene al menos 10 anuncios" in html
+
+
+def test_bloque_por_concesionario(app, pg, personas):
+    concesionarios = [("ESPB", "Rival Uno", False, 30, 27, 2_000_000, 30), ("ESP00710", "El nuestro", True, 12, 15, 3_100_000, 12),
+                      ("ESPD", "Recién llegado", False, 4, 0, 1_500_000, 3)]
+    _poner_mercado(pg, HOY, [("Golf", 50, 50)], zona="provincia", concesionarios=concesionarios, anuncios_zona=50)
+    _poner_mercado(pg, HOY, [("Golf", 90, 90)], zona="comunidad")
+    cl = dentro(app, "ventas")
+    html = cl.get("/mercado?zona=provincia&tipo=VO").text
+    filas = _filas(html, "tabla-concesionarios")
+    assert list(filas) == ["Rival Uno", "El nuestro", "Recién llegado"]            # ordenado por anuncios
+    texto = {n: [re.sub(r"\s+", " ", c).strip() for c in v] for n, v in filas.items()}
+    assert texto["Rival Uno"] == ["30", "+3 +11 %", "60,0 %", "20.000 €"]
+    assert texto["El nuestro"] == ["12", "−3 −20 %", "24,0 %", "31.000 €"]
+    assert texto["Recién llegado"] == ["4", "+4", "8,0 %", "15.000 € n = 3"]          # base 0: sin porcentaje
+    assert re.search(r'<tr class="propio">\s*<th scope="row" class="izq">El nuestro', html)
+    assert "Por concesionario · ocasión en Sevilla" in html and "Peso en Sevilla" in html
+    for zona in ("comunidad", "espana"):                                            # solo en la provincia
+        assert "tabla-concesionarios" not in cl.get(f"/mercado?zona={zona}&tipo=VO").text
+
+
+def test_bloque_por_concesionario_sin_captura_de_hace_7_dias(app, pg, personas):
+    _poner_mercado(pg, HOY, [], zona="provincia", anuncios_zona=5,
+                   concesionarios=[("ESPB", "Rival", False, 5, None, 2_000_000, 5)])
+    pg.execute("UPDATE panel_mercado_dia SET hace7_completo = false")
+    html = dentro(app, "ventas").get("/mercado?zona=provincia&tipo=VO").text
+    assert _celdas(html, "tabla-concesionarios", 1) == {"Rival": "—"}
+    assert 'title="Sin cifra: falta la captura completa de hace 7 días">—' in html.split("tabla-concesionarios")[1]
+    assert "«—» Frente a hace 7 días: falta la captura completa de hace 7 días" in html.split("tabla-concesionarios")[1]
+
+
+def test_concesionario_que_calla_y_nuevo_en_los_datos_sinteticos(app, pg, datos, personas):
+    import sys
+    sys.path.insert(0, str(RAIZ / "tests"))
+    from escenario_mercado import escenario, nombre_dealer
+    conc = cargar_concesionario()
+    e = escenario(datos, HOY, conc.provincia_codigo, conc.provincias_comunidad, conc.dealer_ids[0], dias=20)
+    sv.cargar(pg, dia=HOY)
+    am.precalcular(pg, hasta=HOY, conc=conc)
+    (calla, dia_calla), (nuevo, dia_nuevo) = e["calla"], e["nuevo"]
+    def ids(dia):  # VN: en este escenario VO no tiene captura justo hace 7 días (el hueco del día 12)
+        return {r[0] for r in pg.execute("SELECT dealer_id FROM panel_mercado_concesionario WHERE dia = %s AND tipo = 'VN'", (dia,))}
+    assert calla in ids(dia_calla - timedelta(days=1)) and calla not in ids(dia_calla) and calla in ids(dia_calla + timedelta(days=1))
+    assert nuevo not in ids(dia_nuevo - timedelta(days=1)) and nuevo in ids(dia_nuevo)
+    cl = dentro(app, "ventas")
+    texto = _celdas(cl.get("/mercado?zona=provincia&tipo=VN").text, "tabla-concesionarios", 1)
+    assert texto[nombre_dealer(nuevo)].startswith("+") and "%" not in texto[nombre_dealer(nuevo)]  # base 0
+    # VO, sin captura de hace 7 días: «—» con su motivo, también para el concesionario nuevo
+    vo = cl.get("/mercado?zona=provincia&tipo=VO").text
+    assert _celdas(vo, "tabla-concesionarios", 1)[nombre_dealer(nuevo)] == "—"
 
 
 # ================================================================== sin «scraper» en lo que ve el usuario de Mercado
@@ -637,3 +741,6 @@ def test_otro_concesionario_sin_rastro_del_propio(pg, datos, panel_url, tmp_path
         assert "avisa" not in html.lower() and "sevilla" not in html.lower()
     mercado = tec.get("/mercado").text
     assert "Nuestro peso en Valladolid" in mercado and "Castilla y León" in mercado and "Marca Valladolid" in mercado
+    filas = _filas(mercado, "tabla-concesionarios")
+    assert len(filas) > 2 and "Por concesionario · nuevos en Valladolid" in mercado
+    assert re.search(r'<tr class="propio">\s*<th scope="row" class="izq">Concesionario prueba 9999', mercado)

@@ -46,12 +46,13 @@
     <section aria-labelledby="t-modelos" class="tarjeta tarjeta-ancha">
       <h2 id="t-modelos">Por modelo · {{ m.titulo_tabla }}</h2>
       <div class="tabla-scroll">
-        <table class="tabla tabla-modelos">
+        <table class="tabla tabla-movil tabla-modelos">
           <thead>
             <tr>
               <th scope="col" class="izq">Modelo</th>
               <th scope="col">Anuncios</th>
               <th scope="col">Frente a hace 7 días</th>
+              <th scope="col">Nuestros</th>
               <th scope="col">Altas 7 días</th>
               <th scope="col">Ausencias 7 días</th>
               <th scope="col">Precio mediano</th>
@@ -64,13 +65,14 @@
               <th scope="row" class="izq">{{ r.modelo }}</th>
               <td data-etiqueta="Anuncios">{{ r.anuncios }}</td>
               <td data-etiqueta="En 7 días" class="var-{{ r.variacion.clase }}"{% if r.variacion.motivo %} title="Sin cifra: {{ r.variacion.motivo }}"{% endif %}>{{ r.variacion.texto }}{% if r.variacion.porcentaje %} <span class="pct">{{ r.variacion.porcentaje }}</span>{% endif %}</td>
+              <td data-etiqueta="Nuestros"{% if r.nuestros.motivo %} title="Sin cifra: {{ r.nuestros.motivo }}"{% endif %}>{{ r.nuestros.texto }}{% if r.nuestros.peso %} <span class="pct">{{ r.nuestros.peso }}</span>{% endif %}</td>
               <td data-etiqueta="Altas 7 d" class="linea2"{% if r.altas == f.GUION %} title="Sin cifra: falta alguna captura completa de los últimos 7 días"{% endif %}>{{ r.altas }}</td>
               <td data-etiqueta="Ausenc. 7 d" class="linea2"{% if r.ausencias == f.GUION %} title="Sin cifra: falta alguna captura completa de los últimos 7 días"{% endif %}>{{ r.ausencias }}</td>
               <td data-etiqueta="Precio med." class="linea2{% if r.precio_atenuado %} atenuado{% endif %}">{{ r.precio }}{% if r.precio_atenuado %} <span class="n">n = {{ r.precio_n }}</span>{% endif %}</td>
               <td data-etiqueta="Días publ." class="linea2{% if r.dias_atenuado %} atenuado{% endif %}"{% if r.dias_cota %} title="Cota inferior: parte de los anuncios ya estaban en la primera captura o tras un día sin captura"{% endif %}>{{ r.dias }}{% if r.dias_atenuado %} <span class="n">n = {{ r.dias_n }}</span>{% endif %}</td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="izq">Sin anuncios en esta zona.</td></tr>
+            <tr><td colspan="8" class="izq">Sin anuncios en esta zona.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -87,5 +89,39 @@
       <p class="nota">Bajas en los últimos 7 días (anuncios que llevan tres capturas seguidas sin verse): {% if m.bajas_7 is not none %}<strong>{{ m.bajas_7 }}</strong>{% else %}— ({{ m.motivo_bajas }}){% endif %}</p>
     </section>
   </div>
+
+  {% if m.por_concesionario is not none %}
+  <section aria-labelledby="t-concesionarios" class="tarjeta">
+    <h2 id="t-concesionarios">Por concesionario · {{ m.titulo_tabla }}</h2>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-movil tabla-concesionarios">
+        <thead>
+          <tr>
+            <th scope="col" class="izq">Concesionario</th>
+            <th scope="col">Anuncios</th>
+            <th scope="col">Frente a hace 7 días</th>
+            <th scope="col">Peso en {{ m.provincia }}</th>
+            <th scope="col">Precio mediano</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in m.por_concesionario %}
+          <tr{% if c.propio %} class="propio"{% endif %}>
+            <th scope="row" class="izq">{{ c.concesionario }}{% if c.propio %}<span class="oculto"> (concesionario propio)</span>{% endif %}</th>
+            <td data-etiqueta="Anuncios">{{ c.anuncios }}</td>
+            <td data-etiqueta="En 7 días" class="var-{{ c.variacion.clase }}"{% if c.variacion.motivo %} title="Sin cifra: {{ c.variacion.motivo }}"{% endif %}>{{ c.variacion.texto }}{% if c.variacion.porcentaje %} <span class="pct">{{ c.variacion.porcentaje }}</span>{% endif %}</td>
+            <td data-etiqueta="Peso">{{ c.peso }}</td>
+            <td data-etiqueta="Precio med." class="linea2{% if c.precio_atenuado %} atenuado{% endif %}">{{ c.precio }}{% if c.precio_atenuado %} <span class="n">n = {{ c.precio_n }}</span>{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="izq">Sin concesionarios con anuncios en {{ m.provincia }}.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% for t in m.motivos if t.startswith('Frente') %}<p class="nota motivo">«—» {{ t }}</p>{% endfor %}
+    <p class="nota">Concesionarios con anuncios publicados en {{ m.provincia }}, con el nombre que publica la web. Peso: sus anuncios sobre todos los publicados en {{ m.provincia }}. Frente a hace 7 días y precio mediano, como en la tabla por modelo.</p>
+  </section>
+  {% endif %}
   {% endif %}
 </div>

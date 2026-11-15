@@ -6,8 +6,9 @@ del stock, atención relativa y predicción de ventas llegan en el hito 2.
 ## mercado.py · precálculo de Mercado (cron 09:10)
 
 Lee `stock_externo_snapshot`, `eventos_externos` y `scraper_runs` y rellena las tablas derivadas
-`panel_mercado_dia` (por día, tipo y zona), `panel_mercado_modelo` (además, por modelo) y
-`panel_mercado_capturas` (por scraper y día: captura completa o no, hora, anuncios y anuncios sin
+`panel_mercado_dia` (por día, tipo y zona), `panel_mercado_modelo` (además, por modelo, con los anuncios propios),
+`panel_mercado_concesionario` (por concesionario, solo en la provincia del concesionario propio, con
+el nombre que publica la web, el más reciente si cambia) y `panel_mercado_capturas` (por scraper y día: captura completa o no, hora, anuncios y anuncios sin
 provincia). Recalcular un día sustituye ese día; las tablas de hechos no se tocan.
 
 - `python -m analitica.mercado` (`make precalcular`): todo el histórico.

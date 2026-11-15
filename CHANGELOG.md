@@ -1,5 +1,21 @@
 # Cambios
 
+## 2026-11-15 · Hito 1b: «Nuestros» y «Por concesionario» en Mercado (rama hito-1b)
+
+- Tabla por modelo: columna «Nuestros» (anuncios del concesionario propio y, atenuado, su peso sobre
+  el modelo si este tiene al menos `panel.n_minimo_porcentaje` anuncios). En el móvil, en la
+  primera línea.
+- Bloque «Por concesionario», solo en la provincia del concesionario propio: anuncios, variación a
+  7 días en unidades (porcentaje con base ≥ umbral), peso sobre la provincia y precio mediano; el
+  propio resaltado en ámbar. Nombre tal como lo publica la web (el más reciente). En el móvil, dos
+  líneas por concesionario.
+- Migración `0004`: `panel_mercado_modelo.propios` y tabla `panel_mercado_concesionario`
+  (precálculo en `analitica/mercado.py`; `cdf_panel` solo la lee). Tras desplegar: `make precalcular`.
+- Escenario sintético con un concesionario que no publica un día y otro que aparece nuevo.
+- `tests/test_infra_panel.py`: las cuatro pruebas del Makefile y de `.env.example` se saltan, con
+  su motivo, donde no hay make o no está el fichero (contenedor cdf_jobs); en el Mac se ejecutan.
+- `tests/navegador/capturas.mjs` revisa a 390 px las seis combinaciones de zona y tipo y las dos tablas.
+
 ## 2026-11-15 · Hito 1b: ajustes de la vista Mercado (rama hito-1b)
 
 - Móvil: en pantallas estrechas, cada modelo de la tabla ocupa dos líneas sin desplazamiento
