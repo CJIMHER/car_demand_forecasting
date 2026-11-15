@@ -47,6 +47,10 @@
   var ETIQUETA = { color: "#5B6675", fontSize: 11 };
   var REJILLA = { lineStyle: { color: "#EEF0F3" } };
 
+  // Solo se pintan los gráficos visibles (el detalle de Ventas existe dos veces: al lado en escritorio y
+  // bajo el vehículo en el móvil; el oculto se pinta si llega a verse al cambiar el ancho)
+  function visible(el) { return el.getClientRects().length > 0 && el.clientWidth > 0; }
+
   function iniciar(el) {
     var previo = echarts.getInstanceByDom(el);
     if (previo) { previo.dispose(); }
@@ -56,6 +60,7 @@
   // Dirección: ventas acumuladas del mes, previsto (p50) y banda p10–p90
   function ventas(raiz) {
     (raiz || document).querySelectorAll("[data-ventas]").forEach(function (el) {
+      if (!visible(el)) { return; }
       var d = JSON.parse(el.getAttribute("data-ventas"));
       var ancho = d.p90.map(function (v, i) { return v - d.p10[i]; });
       iniciar(el).setOption({
@@ -88,12 +93,20 @@
     });
   }
 
-  // Ventas: curva de salida del grupo (p50 y banda p10–p90) con los próximos 90 días del vehículo
+  // Ventas: curva de salida del grupo (p50 y banda p10–p90) con los próximos 90 días del vehículo.
+  // Eje de categorías (los puntos van de 10 en 10 días) para poder apilar la banda.
   function curva(raiz) {
     (raiz || document).querySelectorAll("[data-curva]").forEach(function (el) {
+      if (!visible(el)) { return; }
       var d = JSON.parse(el.getAttribute("data-curva"));
-      function pares(v) { return d.t.map(function (t, i) { return [t, v[i] * 100]; }); }
-      var ancho = d.t.map(function (t, i) { return [t, (d.p90[i] - d.p10[i]) * 100]; });
+      function pct(v) { return v.map(function (x) { return Math.round(x * 1000) / 10; }); }
+      function indice(dias) {   // el punto de la curva más cercano a esos días
+        var mejor = 0;
+        d.t.forEach(function (t, i) { if (Math.abs(t - dias) < Math.abs(d.t[mejor] - dias)) { mejor = i; } });
+        return mejor;
+      }
+      var ancho = d.p90.map(function (v, i) { return Math.round((v - d.p10[i]) * 1000) / 10; });
+      var ia = indice(d.a), ib = indice(d.b);
       iniciar(el).setOption({
         animation: false,
         textStyle: { fontFamily: "Inter, system-ui, sans-serif" },
@@ -106,18 +119,18 @@
               Math.round(d.p10[i] * 100) + "–" + Math.round(d.p90[i] * 100) + " %)";
           }
         },
-        xAxis: { type: "value", min: 0, max: d.t[d.t.length - 1], axisLine: EJE, axisTick: { show: false },
-          axisLabel: { color: "#5B6675", fontSize: 11, formatter: function (v) { return v + " d"; } }, splitLine: { show: false } },
+        xAxis: { type: "category", data: d.t, boundaryGap: false, axisLine: EJE, axisTick: { show: false },
+          axisLabel: { color: "#5B6675", fontSize: 11, interval: 4, formatter: function (v) { return v + " d"; } } },
         yAxis: { type: "value", min: 0, max: 100, splitLine: REJILLA,
           axisLabel: { color: "#5B6675", fontSize: 11, formatter: function (v) { return v + " %"; } } },
         series: [
-          { type: "line", data: pares(d.p10), stack: "banda", symbol: "none", step: "end", lineStyle: { opacity: 0 }, silent: true },
-          { type: "line", data: ancho, stack: "banda", symbol: "none", step: "end", lineStyle: { opacity: 0 }, silent: true,
-            areaStyle: { color: "#1D5FD6", opacity: 0.12 } },
-          { type: "line", data: pares(d.p50), symbol: "none", step: "end", lineStyle: { color: "#1D5FD6", width: 2.5 },
-            markArea: { silent: true, itemStyle: { color: "#F2A93B", opacity: 0.16 }, data: [[{ xAxis: d.a }, { xAxis: d.b }]] },
+          { type: "line", data: pct(d.p10), stack: "banda", symbol: "none", lineStyle: { opacity: 0 }, silent: true },
+          { type: "line", data: ancho, stack: "banda", symbol: "none", lineStyle: { opacity: 0 }, silent: true,
+            areaStyle: { color: "#1D5FD6", opacity: 0.14 } },
+          { type: "line", data: pct(d.p50), symbol: "none", lineStyle: { color: "#1D5FD6", width: 2.5 },
+            markArea: { silent: true, itemStyle: { color: "#F2A93B", opacity: 0.18 }, data: [[{ xAxis: ia }, { xAxis: ib }]] },
             markLine: { silent: true, symbol: "none", label: { formatter: "hoy", color: "#14213D" },
-              lineStyle: { color: "#14213D", type: [3, 4] }, data: [{ xAxis: d.a }] } }
+              lineStyle: { color: "#14213D", type: [3, 4] }, data: [{ xAxis: ia }] } }
         ]
       });
     });
@@ -131,12 +144,29 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () { todo(document); });
-  document.addEventListener("htmx:afterSettle", function () { todo(document); });
+  // Ventas en el móvil: al elegir un vehículo, su detalle se abre bajo él. Si el del vehículo anterior
+  // estaba más arriba, la fila sube al quitarlo: se vuelve a llevar a la vista.
+  var vehiculoPulsado = false;
+  document.addEventListener("htmx:beforeRequest", function (e) {
+    vehiculoPulsado = !!(e.detail.elt && e.detail.elt.classList && e.detail.elt.classList.contains("vehiculo"));
+  });
+  document.addEventListener("htmx:afterSettle", function () {
+    todo(document);
+    if (!vehiculoPulsado) { return; }
+    vehiculoPulsado = false;
+    var detalle = document.querySelector("tr.detalle-movil");
+    var fila = document.querySelector("tr.elegido");
+    if (detalle && fila && detalle.getClientRects().length && getComputedStyle(detalle).display !== "none") {
+      fila.scrollIntoView({ block: "start" });
+    }
+  });
   window.addEventListener("resize", function () {
     if (typeof echarts === "undefined") { return; }
+    var nuevos = false;
     document.querySelectorAll("[data-serie], [data-ventas], [data-curva]").forEach(function (el) {
       var g = echarts.getInstanceByDom(el);
-      if (g) { g.resize(); }
+      if (g) { g.resize(); } else if (visible(el)) { nuevos = true; }
     });
+    if (nuevos) { ventas(document); curva(document); }
   });
 })();

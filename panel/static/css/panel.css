@@ -232,7 +232,7 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .casilla-caja { width: 18px; height: 18px; border: 2px solid var(--gris); border-radius: 4px; background: var(--blanco); flex: none; }
 .casilla[aria-checked="true"] .casilla-caja { background: var(--azul); border-color: var(--azul); box-shadow: inset 0 0 0 3px var(--blanco); }
 .resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: stretch; }
-.resumen > .etiqueta-ejemplo { grid-column: 1 / -1; }
+.resumen > .etiqueta-ejemplo { grid-column: 1 / -1; justify-self: start; }
 .resumen-tarjeta {
   background: var(--blanco); border: 1px solid var(--borde); border-radius: var(--radio); padding: 16px 20px;
   display: flex; align-items: baseline; gap: 12px;
@@ -262,6 +262,15 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 }
 .boton-accion.secundario { border: 1px solid #C9CED6; background: var(--blanco); color: var(--tinta); }
 .boton-accion:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Escritorio: el detalle se queda a la vista mientras se recorre la lista */
+.tarjeta-detalle { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.tabla tbody tr.detalle-movil { display: none; }
+.lista-pie { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.boton-mas {
+  display: inline-flex; align-items: center; min-height: var(--toque); padding: 0 16px; border: 1px solid #C9CED6;
+  border-radius: 8px; background: var(--blanco); color: var(--tinta); font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.boton-mas:hover { background: var(--fondo); color: var(--tinta); }
 
 /* Marketing */
 .recomendaciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
@@ -278,8 +287,12 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .campana-nota { display: block; font-size: 12px; font-weight: 400; color: var(--gris); }
 .tabla tbody tr.aviso { background: #FFF8EA; }
 .fuerte { font-weight: 600; }
-.tabla td.c-salud { white-space: normal; min-width: 150px; }
-.fallo { display: block; margin-top: 6px; font-size: 12px; color: var(--aviso-texto); max-width: 280px; }
+.tabla td.c-salud { white-space: nowrap; }
+/* Diagnóstico de una campaña que no va bien: línea a todo el ancho bajo su fila */
+.tabla tbody tr.fila-diagnostico { border-top: 0; background: #FFF8EA; }
+.tabla tbody tr.fila-diagnostico td { padding-top: 0; white-space: normal; text-align: left; }
+.diagnostico { margin: 0; font-size: 13px; color: var(--aviso-texto); }
+.diagnostico + .diagnostico { margin-top: 4px; }
 .chip-salud-bien { background: #E3F4EC; color: #1F6E4F; }
 .chip-salud-vigilar { background: var(--aviso-fondo); color: var(--marron); }
 .chip-salud-revisar { background: #FBE3DC; color: #9A3412; }
@@ -291,7 +304,9 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .atencion-texto { font-size: 14px; font-weight: 600; text-align: right; }
 .semanas, .motivos, .pasadas { list-style: none; margin: 0; padding: 0; }
 .semana, .pasada { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--borde-suave); }
-.semana-cabeza, .pasada-cabeza { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 12px; }
+.semana-cabeza { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 12px; }
+/* Campañas pasadas: título; debajo, siempre en su línea, fechas y gasto */
+.pasada-cabeza { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .semana-nombre { font-weight: 600; }
 .semana-indice { font-size: 12px; color: var(--gris); overflow-wrap: anywhere; }
 .motivos { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--gris-oscuro); }
@@ -384,7 +399,8 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
   .casilla { font-size: 13px; }
 
   /* Ventas: dos líneas por vehículo. Arriba vehículo, probabilidad y días; debajo tipo, precio y sugerencia */
-  .tabla-ventas tbody tr { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 0.6fr); }
+  .tabla-ventas tbody tr { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.95fr); }
+  .tabla-ventas .c-sugerencia .chip { white-space: normal; text-align: center; }
   .tabla-ventas tbody th { order: 0; align-self: center; font-size: 14px; }
   .tabla-ventas .c-prob { order: 1; text-align: left; }
   .tabla-ventas .c-dias { order: 2; }
@@ -399,7 +415,13 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
   .tabla-campanas tbody th { grid-column: 1 / -1; }
   .tabla-campanas tbody td { text-align: left; }
   .tabla-campanas tbody td.c-salud { grid-column: 1 / -1; min-width: 0; }
-  .fallo { max-width: none; }
+  /* Tarjetas: la etiqueta de estado pasa debajo del título */
+  .kpi-cabeza { flex-direction: column; align-items: flex-start; gap: 4px; }
+  /* Ventas: sin panel lateral; el detalle se abre bajo el vehículo pulsado */
+  .tarjeta-detalle { display: none; }
+  .tabla-ventas tbody tr.detalle-movil { display: block; padding: 12px; margin: 0 -4px 8px; background: #EEF4FD; border-radius: 8px; border-top: 0; }
+  .tabla-ventas tbody tr.detalle-movil td { display: flex; flex-direction: column; gap: 12px; white-space: normal; text-align: left; }
+  .titulo-detalle { font-size: 18px; }
   .atencion { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) 32px; }
 
   .nav-movil {

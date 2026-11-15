@@ -9,7 +9,8 @@
 // Marketing solo las ve ese rol), comprueba los gráficos y el cambio de zona con htmx, y a 390 px,
 // en cada zona y tipo de Mercado y en cada vista y filtro de Dirección, Ventas y Marketing, que el
 // documento no desborda el ancho y que todas las celdas de cada fila de las tablas están en pantalla.
-// Guarda Mercado, Dirección, Ventas y Marketing a 1440 px y a 390 px. Sale con código 1 si algo
+// En Ventas, tras pulsar un vehículo de mitad de lista, comprueba que su detalle queda en pantalla
+// (1440 y 390 px). Guarda Mercado, Dirección, Ventas y Marketing a 1440 px y a 390 px. Sale con código 1 si algo
 // falla o si hay errores de CSP.
 import fs from "node:fs";
 const [puerto, salida, usuario, clave] = process.argv.slice(2);
@@ -35,6 +36,7 @@ async function tamano(ancho, movil) {
   await cdp("Emulation.setDeviceMetricsOverride", { width: ancho, height: movil ? 844 : 900, deviceScaleFactor: movil ? 2 : 1, mobile: movil });
 }
 async function captura(nombre) {
+  await evalua("window.scrollTo(0, 0); true"); await espera(300);   // Chrome restaura el desplazamiento de visitas anteriores
   const alto = await evalua("Math.ceil(document.documentElement.scrollHeight)");
   const ancho = await evalua("document.documentElement.clientWidth");
   const movil = ancho < 500;
@@ -87,8 +89,11 @@ for (const ruta of VISTAS) {
   resultados.push(JSON.parse(await evalua(`(() => {
     const ancho = 390  /* innerWidth crece si algo desborda (emulación móvil) */, doc = document.documentElement, malas = [];
     for (const tr of document.querySelectorAll('.tabla-movil tbody tr')) {
-      for (const c of tr.children) { const r = c.getBoundingClientRect();
-        if (r.width > 0 && (r.left < 0 || r.right > ancho + 0.5)) malas.push(tr.children[0].textContent.trim().slice(0, 40)); }
+      // cada celda y todo su contenido (p. ej. una etiqueta que no cabe) dentro de la tabla y de la pantalla
+      const caja = (tr.closest('.tabla-scroll') || tr).getBoundingClientRect();
+      for (const c of [...tr.children, ...tr.querySelectorAll('*')]) { const r = c.getBoundingClientRect();
+        if (r.width > 0 && (r.left < Math.max(0, caja.left) - 0.5 || r.right > Math.min(ancho, caja.right) + 0.5)) {
+          malas.push(tr.children[0].textContent.trim().slice(0, 40)); break; } }
     }
     const fuera = [...document.querySelectorAll('.tarjeta, .kpi, .resumen-tarjeta')].filter(e => {
       const r = e.getBoundingClientRect(); return r.width > 0 && (r.left < 0 || r.right > ancho + 0.5); }).length;
@@ -98,6 +103,26 @@ for (const ruta of VISTAS) {
       etiquetas: document.querySelectorAll('.etiqueta-ejemplo').length, banda: !!document.querySelector('.banda-ejemplo')});
   })()`)));
 }
+// Ventas: tras pulsar un vehículo de mitad de lista (fila 13 de 25), su detalle queda dentro de la
+// pantalla: en escritorio, el panel fijo a la vista; en el móvil, la fila que se abre bajo el vehículo.
+const detalles = [];
+for (const [ancho, movil] of [[1440, false], [390, true]]) {
+  await tamano(ancho, movil); await ir(`${BASE}/ventas`);
+  const id = await evalua(`(() => { const a = document.querySelectorAll('.tabla-ventas a.vehiculo')[12];
+    a.scrollIntoView({block: 'center'}); return a.querySelector('.vehiculo-detalle').textContent.split(' · ').pop(); })()`);
+  await espera(400);
+  await evalua(`document.querySelectorAll('.tabla-ventas a.vehiculo')[12].click(); true`);
+  await espera(1500);
+  detalles.push(JSON.parse(await evalua(`(() => {
+    const el = ${movil} ? document.querySelector('tr.detalle-movil') : document.querySelector('.tarjeta-detalle');
+    const r = el ? el.getBoundingClientRect() : null, alto = window.innerHeight;
+    return JSON.stringify({ancho: ${ancho}, elegido: ${JSON.stringify(id)}, url: location.search,
+      deEse: !!el && el.textContent.includes(${JSON.stringify(id)}), arriba: r && Math.round(r.top), alto,
+      dentro: !!r && r.top >= 0 && r.top < alto - 100, curva: !!el && !!el.querySelector('[data-curva] canvas'),
+      scrollY: Math.round(window.scrollY)});
+  })()`)));
+}
+for (const d of detalles) console.log("detalle tras pulsar:", JSON.stringify(d));
 for (const r of resultados) console.log("móvil 390:", JSON.stringify(r));
 const comprobacion = JSON.stringify({
   desborda: resultados.some(r => r.desborda),
@@ -107,6 +132,7 @@ const comprobacion = JSON.stringify({
   tarjetasFuera: resultados.reduce((n, r) => n + (r.tarjetasFuera || 0), 0),
   sinBanda: resultados.filter(r => r.ruta && !r.banda).map(r => r.ruta),
   sinGrafico: resultados.filter(r => r.ruta && /direccion|ventas/.test(r.ruta) && r.graficos === 0).map(r => r.ruta),
+  detalleFuera: detalles.filter(d => !d.dentro || !d.deEse || !d.curva || d.scrollY === 0).map(d => d.ancho),
 });
 await ir(`${BASE}/mercado`); await espera(800);
 await captura("mercado_movil_390.png");
@@ -125,7 +151,7 @@ console.log("altos de zonas táctiles (px):", zonas);
 console.log("errores de consola/CSP:", errores.length ? errores : "ninguno");
 const c = JSON.parse(comprobacion);
 const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.sinConcesionariosEnProvincia ||
-  c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0;
+  c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0 || c.detalleFuera.length > 0;
 console.log("comprobación:", comprobacion);
 console.log(mal ? "RESULTADO: FALLA" : "RESULTADO: correcto");
 ws.close(); process.exit(mal ? 1 : 0);

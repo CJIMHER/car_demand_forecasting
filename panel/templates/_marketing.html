@@ -85,9 +85,13 @@
               <td data-etiqueta="€ / venta" class="fuerte">{{ c.cpv }}</td>
               <td data-etiqueta="Salud" class="izq c-salud"{% if c.titulo_salud %} title="{{ c.titulo_salud }}"{% endif %}>
                 <span class="chip chip-salud-{{ c.estado or 'ninguno' }}">{{ c.estado_texto }}</span>
-                {% for t in c.fallos %}<span class="fallo">{{ t }}</span>{% endfor %}
               </td>
             </tr>
+            {% if c.fallos %}
+            <tr class="fila-diagnostico">
+              <td colspan="9">{% for t in c.fallos %}<p class="diagnostico">{{ t }}</p>{% endfor %}</td>
+            </tr>
+            {% endif %}
             {% else %}
             <tr><td colspan="9" class="izq">Ninguna campaña con gasto en estos 28 días.</td></tr>
             {% endfor %}

@@ -316,11 +316,13 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
             "d": direccion.datos(pg, app.state.conc, modos_de(request, pg), tipo, app.state.hoy())})
 
     @app.get("/ventas")
-    def vista_ventas(request: Request, tipo: str = "todo", riesgo: str = "", v: str = "", pg=Depends(bd)):
+    def vista_ventas(request: Request, tipo: str = "todo", riesgo: str = "", v: str = "", n: str = "",
+                     pg=Depends(bd)):
         tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
+        mostrar = min(int(n), 10_000) if n.isdigit() else ventas.POR_PAGINA
         return vista_contrato(request, pg, "ventas", "ventas.html", "_ventas.html", lambda: {
             "d": ventas.datos(pg, app.state.conc, modos_de(request, pg), tipo, riesgo == "1", v[:40] or None,
-                              app.state.hoy())})
+                              app.state.hoy(), mostrar)})
 
     @app.get("/marketing")
     def vista_marketing(request: Request, orden: str = "venta", pg=Depends(bd)):

@@ -49,6 +49,24 @@ def _valor(x, unidad: str) -> str:
     return f"{fmt.miles(x)} {unidad}"
 
 
+CON_ARTICULO = {"entrega": "la entrega", "anuncio": "el anuncio", "web": "la web", "calidad_lead": "la calidad del lead",
+                "stock": "el stock"}
+
+
+def _numero(x, unidad: str) -> str:
+    x = float(x)
+    return fmt.miles(x) if unidad == "uds" else fmt.decimal(x, 2)
+
+
+def diagnostico(eslabon, medida, unidad, valor, p10, p50, p90, dias_vida, prob, n) -> str:
+    """«Dónde falla: la web. Leads por clic: 1,36 %, frente a 2,38 % de referencia (1,91–2,91 %) en
+    campañas con los mismos 13 días de vida. Probabilidad de ir peor: 78 % (n = 31 campañas)»."""
+    return (f"Dónde falla: {CON_ARTICULO[eslabon]}. {medida[:1].upper()}{medida[1:]}: {_valor(valor, unidad)}, "
+            f"frente a {_valor(p50, unidad)} de referencia ({_numero(p10, unidad)}–{_numero(p90, unidad)} {unidad}) "
+            f"en campañas con los mismos {dias_vida} días de vida. Probabilidad de ir peor: "
+            f"{fmt.porcentaje(float(prob) * 100, 0)} (n = {n} campañas)")
+
+
 def _ventana(pg, origen) -> tuple[date, date, date, date] | None:
     fin = ng.ultimo_dia(pg, "panel_campana_dia", origen)
     if fin is None:
@@ -134,11 +152,7 @@ def campanas(pg, origen, orden: str) -> dict:
                 n_salud = max(s[11] for s in con_datos)
                 for s in sorted(con_datos, key=lambda s: -float(s[9])):
                     if s[10] in ("vigilar", "revisar"):
-                        fallos.append(
-                            f"Falla {ESLABONES[s[2]].lower()}: {s[3].lower()} {_valor(s[5], s[4])} frente a "
-                            f"{_valor(s[7], s[4])} ({_valor(s[6], s[4])}–{_valor(s[8], s[4])}) en campañas con "
-                            f"{s[1]} días de vida; probabilidad de ir peor: {fmt.porcentaje(float(s[9]) * 100, 0)} "
-                            f"· n = {s[11]} campañas.")
+                        fallos.append(diagnostico(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[1], s[9], s[11]))
         filas.append({
             "nombre": titulo, "cpv_num": _div(gasto, ve) if ve else None, "gasto_num": gasto,
             "nota": (f"De modelo ({modelo})" if tipo_c == "modelo" else "General")

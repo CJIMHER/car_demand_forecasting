@@ -323,7 +323,14 @@ def test_ventas_orden_filtros_y_detalle(pg, panel_url, personas, con_ejemplo):
     html = cl.get("/ventas").text
     ids = re.findall(r'class="vehiculo-detalle">[^<]* · (EJ\d+)</span>', html)
     orden = [f["stock_id"] for f in sorted(filas, key=lambda f: (f["p_venta90_p50"], -f["dias_exposicion"], f["stock_id"]))]
-    assert ids == orden                                                # de más a menos riesgo
+    assert ids == orden[:25]                                           # de más a menos riesgo, 25 primeros
+    assert '<span class="nota recuento">25 de 142</span>' in html
+    assert re.search(r'<a class="boton-mas" href="/ventas\?tipo=todo&amp;v=EJ\d+&amp;n=50" hx-get="[^"]+" '
+                     r'hx-target="#ventas"[^>]*>Ver 25 más</a>', html)
+    html_todo = cl.get("/ventas?n=200").text
+    assert re.findall(r'class="vehiculo-detalle">[^<]* · (EJ\d+)</span>', html_todo) == orden
+    assert "142 de 142" in html_todo and "boton-mas" not in html_todo
+    assert "Ver 17 más" in cl.get("/ventas?n=125").text                  # el último tramo, con lo que queda
     b = bloques(html)
     menos50 = sum(f["p_venta90_p50"] < 0.5 for f in filas)
     assert f'<span class="resumen-valor">{menos50}</span><span class="resumen-texto">con menos del 50 %' in b["resumen"][1]
@@ -339,6 +346,8 @@ def test_ventas_orden_filtros_y_detalle(pg, panel_url, personas, con_ejemplo):
     html = cl.get("/ventas?tipo=VO&riesgo=1").text
     ids = re.findall(r'class="vehiculo-detalle">[^<]* · (EJ\d+)</span>', html)
     assert ids and set(ids) == {f["stock_id"] for f in filas if f["tipo"] == "VO" and f["p_venta90_p50"] < 0.5}
+    vn = [f for f in filas if f["tipo"] == "VN"]                       # el filtro se aplica a todos, no a los 25
+    assert f"25 de {len(vn)}" in cl.get("/ventas?tipo=VN").text
     assert 'role="checkbox" aria-checked="true"' in html
     # Elegir otro vehículo
     otro = orden[5]
@@ -346,6 +355,26 @@ def test_ventas_orden_filtros_y_detalle(pg, panel_url, personas, con_ejemplo):
     assert re.search(rf'aria-current="true">\s*<span class="vehiculo-nombre">[^<]+</span>\s*'
                      rf'<span class="vehiculo-detalle">[^<]* · {otro}<', html)
     assert f"· {otro} ·" in bloques(html)["detalle"][1]
+    # Móvil: una copia del detalle justo debajo de la fila elegida (en escritorio se oculta con CSS)
+    lista = bloques(html)["lista"][1]
+    filas_html = re.findall(r"<tr[^>]*>", lista.split("<tbody>")[1])
+    i = filas_html.index('<tr class="elegido">')
+    assert filas_html[i + 1] == '<tr class="detalle-movil">' and lista.count('class="detalle-movil"') == 1
+    assert re.search(rf'<tr class="detalle-movil">\s*<td colspan="6" class="izq">\s*<div>\s*<h3 id="t-detalle-movil"[^>]*>'
+                     rf'[^<]+</h3>\s*<p class="nota">[^<]*· {otro} ·', lista)
+    # Un vehículo más allá de los 25 primeros: la lista se amplía hasta él
+    lejos = orden[60]
+    html = cl.get(f"/ventas?v={lejos}").text
+    assert "75 de 142" in html and f"· {lejos}</span>" in html
+
+
+def test_diagnostico_en_lenguaje_llano():
+    from panel.marketing import diagnostico
+    assert diagnostico("web", "Leads por clic", "%", 1.36, 1.91, 2.38, 2.91, 13, 0.78, 31) == (
+        "Dónde falla: la web. Leads por clic: 1,36 %, frente a 2,38 % de referencia (1,91–2,91 %) en campañas "
+        "con los mismos 13 días de vida. Probabilidad de ir peor: 78 % (n = 31 campañas)")
+    assert diagnostico("stock", "Unidades del modelo en stock", "uds", 4, 8, 11, 15, 20, 0.91, 12).startswith(
+        "Dónde falla: el stock. Unidades del modelo en stock: 4 uds, frente a 11 uds de referencia (8–15 uds)")
 
 
 def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
@@ -366,9 +395,14 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     for estado in ("Bien", "Vigilar", "Revisar", "Sin datos suficientes"):
         assert f">{estado}</span>" in camp, estado
     assert "De modelo (" in camp and "General ·" in camp and "días de vida" in camp
-    assert re.search(r"Falla anuncio: clics por impresión [\d,]+ % frente a [\d,]+ % \([\d,]+ %–[\d,]+ %\) en "
-                     r"campañas con \d+ días de vida; probabilidad de ir peor: 95 % · n = 31 campañas", camp)
-    assert "Falla web:" in camp
+    # El diagnóstico va en su propia fila, a todo el ancho; en «Salud» queda solo el estado
+    assert re.search(r'<tr class="fila-diagnostico">\s*<td colspan="9"><p class="diagnostico">Dónde falla: el anuncio\. '
+                     r"Clics por impresión: [\d,]+ %, frente a [\d,]+ % de referencia \([\d,]+–[\d,]+ %\) en "
+                     r"campañas con los mismos \d+ días de vida\. Probabilidad de ir peor: 95 % \(n = 31 campañas\)</p>",
+                     camp)
+    assert "Dónde falla: la web. Leads por clic:" in camp
+    salud = re.findall(r'<td data-etiqueta="Salud"[^>]*>(.*?)</td>', camp, re.S)
+    assert salud and all(re.fullmatch(r'\s*<span class="chip [^"]+">[^<]+</span>\s*', c) for c in salud)
     assert "se compara con su referencia en campañas anteriores con los mismos días de vida" in camp
     # Recomendación, atención, semanas y campañas pasadas
     for accion in ("Aumentar", "Mantener", "Reducir o cambiar"):

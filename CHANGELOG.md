@@ -1,5 +1,24 @@
 # Cambios
 
+## 2026-11-15 · Hito 1b: ajustes de Ventas, Marketing y tarjetas (rama hito-1b)
+
+- **Ventas**
+  - La lista muestra los 25 vehículos de más riesgo, con el recuento («25 de 142») y un botón «Ver
+    25 más» (htmx). Los filtros y el resumen se aplican a todos los vehículos.
+  - Si se elige un vehículo más abajo, la lista se amplía hasta él.
+  - Escritorio: el detalle se queda fijo a la vista mientras se recorre la lista.
+  - Móvil: el detalle se abre justo debajo del vehículo pulsado, que se mantiene en pantalla.
+  - Curva del grupo redibujada: la banda p10–p90 no se pintaba bien.
+  - En el móvil, las etiquetas de sugerencia ya no se cortan.
+- **Marketing**: el diagnóstico de salud de una campaña va en una línea a todo el ancho bajo su fila,
+  en lenguaje llano («Dónde falla: la web. Leads por clic: …»). En «Salud» queda solo el estado.
+- **Tarjetas en el móvil**: la etiqueta de estado pasa debajo del título.
+- **Campañas pasadas**: fechas y gasto, siempre en su propia línea bajo el título.
+- **`tests/navegador/capturas.mjs`**
+  - Pulsa un vehículo de mitad de lista y comprueba que su detalle queda en pantalla, a 1440 y a 390 px.
+  - A 390 px compara con el ancho real (antes, con el de la ventana, que crece si algo desborda).
+  - Revisa también el contenido de cada celda y no usa la caché del navegador.
+
 ## 2026-11-15 · Hito 1b, sesión 2: contrato de datos y vistas Dirección, Ventas y Marketing (rama hito-1b)
 
 - Encargo guardado en `docs/hitos/hito_1b_sesion_2.md`.

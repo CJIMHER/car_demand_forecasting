@@ -15,6 +15,7 @@ from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
 
+POR_PAGINA = 25
 SUGERENCIAS = {"campana": "Campaña", "revisar_precio": "Revisar precio", "mantener": "Mantener"}
 COLS = ("stock_id", "tipo", "modelo", "version", "detalle", "dias_exposicion", "grupo", "p_venta90_p10",
         "p_venta90_p50", "p_venta90_p90", "precio_mercado_pct", "similares_n", "campana_activa", "sugerencia",
@@ -36,7 +37,9 @@ def _fila(v: dict) -> dict:
 
 
 def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, solo_riesgo: bool,
-          sel: str | None, hoy: date) -> dict:
+          sel: str | None, hoy: date, mostrar: int = POR_PAGINA) -> dict:
+    """`mostrar`: cuántas filas de la lista se pintan (de 25 en 25; siempre incluye el vehículo elegido).
+    Los filtros y el resumen se aplican a todos los vehículos, no solo a los mostrados."""
     org = contrato.origenes(modos, "ventas")
     extra = "&riesgo=1" if solo_riesgo else ""
     base = {"tipo": tipo, "solo_riesgo": solo_riesgo, "tipos": ng.selector_tipo("/ventas", tipo, "#ventas", extra),
@@ -63,13 +66,25 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, s
         resumen = ng.bloque(org["resumen"], hay=False)
     visibles = [v for v in del_tipo if not solo_riesgo or float(v["p_venta90_p50"]) < 0.5]
     elegido = next((v for v in visibles if v["stock_id"] == sel), visibles[0] if visibles else None)
+    mostrar = max(POR_PAGINA, mostrar)
+    if elegido is not None:                     # el elegido siempre a la vista: se amplía de 25 en 25
+        pos = next(i for i, v in enumerate(visibles) if v["stock_id"] == elegido["stock_id"])
+        mostrar = max(mostrar, (pos // POR_PAGINA + 1) * POR_PAGINA)
+    mostrar = min(mostrar, len(visibles)) if visibles else POR_PAGINA
     filas = []
-    for v in visibles:
+    for v in visibles[:mostrar]:
         f = _fila(v)
         f["elegido"] = elegido is not None and v["stock_id"] == elegido["stock_id"]
-        f["url"] = f"/ventas?tipo={tipo}{extra}&v={v['stock_id']}"
+        f["url"] = f"/ventas?tipo={tipo}{extra}&v={v['stock_id']}&n={mostrar}"
         filas.append(f)
-    lista = ng.bloque(org["lista"], hay=bool(todos), filas=filas, n_total=len(del_tipo))
+    quedan = len(visibles) - mostrar
+    mas = None
+    if quedan > 0:
+        siguiente = mostrar + min(POR_PAGINA, quedan)
+        mas = {"texto": f"Ver {min(POR_PAGINA, quedan)} más",
+               "url": f"/ventas?tipo={tipo}{extra}" + (f"&v={elegido['stock_id']}" if elegido else "") + f"&n={siguiente}"}
+    lista = ng.bloque(org["lista"], hay=bool(todos), filas=filas, n_total=len(del_tipo), mas=mas,
+                      recuento=f"{fmt.miles(len(filas))} de {fmt.miles(len(visibles))}")
 
     # Detalle del vehículo elegido con la curva de su grupo
     detalle = ng.bloque(org["detalle"], hay=False)

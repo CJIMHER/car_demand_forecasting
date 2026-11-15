@@ -1,4 +1,31 @@
 {% from "_bloques.html" import attrs, marca, sin_datos, segmentos %}
+{% macro contenido_detalle(dd, suf, h) -%}
+      {% set v = dd.v %}
+      <div>
+        <{{ h }} id="t-detalle{{ suf }}" class="titulo-detalle">{{ v.nombre }}</{{ h }}>
+        <p class="nota">{{ v.tipo_largo }} · {{ v.detalle }} · {{ v.stock_id }} · {{ v.dias }} días en exposición</p>
+      </div>
+      {{ marca(dd) }}
+      <div class="detalle-prob">
+        <span class="detalle-valor">{{ dd.p_texto }}</span>
+        <span class="detalle-texto">de venderse en los próximos 90 días si no se hace nada distinto (entre {{ dd.intervalo }})</span>
+      </div>
+      {% if dd.serie %}
+      <div class="grafico" role="img" aria-label="Curva de salida del grupo de este vehículo, con el tramo de los próximos 90 días marcado" data-curva='{{ dd.serie|tojson }}'></div>
+      <p class="nota">Línea azul: qué parte de los coches parecidos sigue sin venderse según pasan los días (banda: del percentil 10 al 90). Zona naranja: los próximos 90 días de este coche.</p>
+      <p class="nota">{{ dd.base_curva }}</p>
+      {% else %}
+      <p class="sin-datos">Sin curva de su grupo todavía</p>
+      {% endif %}
+      <ul class="puntos">
+        {% for p in dd.puntos %}<li>{{ p }}</li>{% endfor %}
+      </ul>
+      <div class="acciones">
+        <button type="button" class="boton-accion" disabled aria-describedby="acciones-nota{{ suf }}">Pedir campaña a marketing</button>
+        <button type="button" class="boton-accion secundario" disabled aria-describedby="acciones-nota{{ suf }}">Revisar precio</button>
+      </div>
+      <p class="nota" id="acciones-nota{{ suf }}">Estos dos botones se activarán cuando esté listo su circuito.</p>
+{%- endmacro %}
 <div id="ventas" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -60,43 +87,30 @@
               <td data-etiqueta="Precio vs mercado" class="c-precio linea2">{{ v.precio }}</td>
               <td data-etiqueta="Sugerencia" class="izq c-sugerencia linea2"><span class="chip chip-{{ v.sugerencia_clase }}">{{ v.sugerencia }}</span></td>
             </tr>
+            {% if v.elegido and d.detalle.hay %}
+            {#- Móvil: el detalle justo debajo del vehículo pulsado (en escritorio no se muestra) -#}
+            <tr class="detalle-movil">
+              <td colspan="6" class="izq">{{ contenido_detalle(d.detalle, "-movil", "h3") }}</td>
+            </tr>
+            {% endif %}
             {% else %}
             <tr><td colspan="6" class="izq">Ningún vehículo con este filtro.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+      <div class="lista-pie">
+        <span class="nota recuento">{{ d.lista.recuento }}</span>
+        {% if d.lista.mas %}<a class="boton-mas" href="{{ d.lista.mas.url }}" hx-get="{{ d.lista.mas.url }}" hx-target="#ventas" hx-swap="outerHTML" hx-push-url="true">{{ d.lista.mas.texto }}</a>{% endif %}
+      </div>
       <p class="nota">«Se vende en 90 días»: de cada 100 coches parecidos que han llegado a esos días en exposición, cuántos se vendieron en los 90 siguientes; al lado, su intervalo (del percentil 10 al 90). Es la base de la sugerencia, que decide el jefe de ventas.</p>
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
 
-    <section aria-labelledby="t-detalle" class="tarjeta tarjeta-estrecha"{{ attrs("detalle", d.detalle) }}>
+    {#- Escritorio: el detalle al lado, fijo a la vista al desplazarse por la lista -#}
+    <section aria-labelledby="t-detalle" class="tarjeta tarjeta-estrecha tarjeta-detalle"{{ attrs("detalle", d.detalle) }}>
       {% if d.detalle.hay %}
-      {% set v = d.detalle.v %}
-      <div>
-        <h2 id="t-detalle" class="titulo-detalle">{{ v.nombre }}</h2>
-        <p class="nota">{{ v.tipo_largo }} · {{ v.detalle }} · {{ v.stock_id }} · {{ v.dias }} días en exposición</p>
-      </div>
-      {{ marca(d.detalle) }}
-      <div class="detalle-prob">
-        <span class="detalle-valor">{{ d.detalle.p_texto }}</span>
-        <span class="detalle-texto">de venderse en los próximos 90 días si no se hace nada distinto (entre {{ d.detalle.intervalo }})</span>
-      </div>
-      {% if d.detalle.serie %}
-      <div class="grafico" role="img" aria-label="Curva de salida del grupo de este vehículo, con el tramo de los próximos 90 días marcado" data-curva='{{ d.detalle.serie|tojson }}'></div>
-      <p class="nota">Línea azul: qué parte de los coches parecidos sigue sin venderse según pasan los días (banda: del percentil 10 al 90). Zona naranja: los próximos 90 días de este coche.</p>
-      <p class="nota">{{ d.detalle.base_curva }}</p>
-      {% else %}
-      <p class="sin-datos">Sin curva de su grupo todavía</p>
-      {% endif %}
-      <ul class="puntos">
-        {% for p in d.detalle.puntos %}<li>{{ p }}</li>{% endfor %}
-      </ul>
-      <div class="acciones">
-        <button type="button" class="boton-accion" disabled aria-describedby="acciones-nota">Pedir campaña a marketing</button>
-        <button type="button" class="boton-accion secundario" disabled aria-describedby="acciones-nota">Revisar precio</button>
-      </div>
-      <p class="nota" id="acciones-nota">Estos dos botones se activarán cuando esté listo su circuito.</p>
+      {{ contenido_detalle(d.detalle, "", "h2") }}
       {% else %}
       <h2 id="t-detalle">Detalle del vehículo</h2>
       {{ marca(d.detalle) }}
