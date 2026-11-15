@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block titulo %}Estado de las fuentes{% endblock %}
+{% block contenido %}
+<div class="vista">
+  <div class="vista-cabecera">
+    <div>
+      <h1>Estado de las fuentes</h1>
+      <p class="subtitulo">Capturas de los scrapers, cargas, comprobaciones, copias, avisos y precálculo</p>
+    </div>
+  </div>
+
+  <section class="tarjeta" aria-labelledby="t-dias">
+    <h2 id="t-dias">Días con y sin captura completa</h2>
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead><tr>
+          <th scope="col" class="izq">Scraper</th><th scope="col">Desde</th><th scope="col">Con captura completa</th>
+          <th scope="col">Sin captura completa</th><th scope="col">Última completa</th><th scope="col">Anuncios</th>
+          <th scope="col">Sin provincia</th>
+        </tr></thead>
+        <tbody>
+        {% for d in e.dias %}
+          <tr>
+            <th scope="row" class="izq">{{ d.etiqueta }}</th><td>{{ d.desde }}</td><td>{{ d.con }}</td><td>{{ d.sin }}</td>
+            <td>{{ d.ultima }}</td><td>{{ d.anuncios }}</td><td>{{ d.sin_provincia }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% for d in e.dias %}{% if d.dias_sin %}<p class="nota">{{ d.etiqueta }}, días sin captura completa: {{ d.dias_sin|join(', ') }}</p>{% endif %}{% endfor %}
+    <p class="nota">«Sin provincia»: anuncios de la última captura completa cuyo código postal no permite saber la provincia; cuentan en España pero no en la provincia ni en la comunidad.</p>
+  </section>
+
+  <section class="tarjeta" aria-labelledby="t-anotaciones">
+    <h2 id="t-anotaciones">Últimas anotaciones por fuente y tipo</h2>
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead><tr>
+          <th scope="col" class="izq">Fuente</th><th scope="col" class="izq">Tipo</th><th scope="col">Día</th>
+          <th scope="col" class="izq">Estado</th><th scope="col">Anotado</th><th scope="col" class="izq">Detalle</th>
+        </tr></thead>
+        <tbody>
+        {% for a in e.anotaciones %}
+          <tr>
+            <th scope="row" class="izq">{{ a.fuente }}</th><td class="izq">{{ a.tipo }}</td><td>{{ a.dia }}</td>
+            <td class="izq estado-{{ 'ok' if a.estado == 'ok' else 'mal' }}">{{ a.estado }}</td><td>{{ a.registrado }}</td>
+            <td class="izq detalle">{{ a.detalle }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="izq">Sin anotaciones todavía.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

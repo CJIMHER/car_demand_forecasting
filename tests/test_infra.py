@@ -20,9 +20,10 @@ CRONTAB = (RAIZ / "infra/jobs/crontab").read_text()
 # --- B4: Postgres no publica puertos hacia fuera
 
 def test_postgres_sin_puertos_publicos():
-    for nombre, servicio in COMPOSE["services"].items():
-        for p in servicio.get("ports", []):
-            assert str(p).startswith("127.0.0.1:"), f"{nombre} publica {p} fuera de 127.0.0.1"
+    # Solo Caddy publica puertos, y solo el 80 y el 443
+    publican = {n for n, s in COMPOSE["services"].items() if s.get("ports")}
+    assert publican == {"caddy"}
+    assert {str(p).split(":")[0] for p in COMPOSE["services"]["caddy"]["ports"]} == {"80", "443"}
     assert "ports" not in COMPOSE["services"]["postgres"]
     assert "network_mode" not in COMPOSE["services"]["postgres"]
 
@@ -70,7 +71,8 @@ def test_imagen_en_hora_de_madrid():
 def test_crontab_a_las_horas_previstas_y_como_cdf():
     lineas = [l.split() for l in CRONTAB.splitlines() if re.match(r"^\d", l)]
     assert [(l[0], l[1], l[5], l[-1]) for l in lineas] == [
-        ("30", "8", "cdf", "cargar"), ("0", "9", "cdf", "comprobar"), ("30", "9", "cdf", "copia")]
+        ("30", "8", "cdf", "cargar"), ("0", "9", "cdf", "comprobar"), ("10", "9", "cdf", "precalcular"),
+        ("30", "9", "cdf", "copia")]
     assert "CRON_TZ" not in CRONTAB  # cron usa la hora local del sistema, que es Madrid
 
 

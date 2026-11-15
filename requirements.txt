@@ -1,5 +1,15 @@
-# Dependencias del contenedor jobs (Python 3.12). Versiones fijas.
+# Dependencias de los contenedores jobs y panel (Python 3.12). Versiones fijas.
 alembic==1.14.0
 psycopg[binary]==3.2.3
 PyYAML==6.0.2
 SQLAlchemy==2.0.36
+# Panel (hito 1b)
+fastapi==0.115.6
+starlette==0.41.3
+pydantic==2.10.4
+anyio==4.6.2.post1
+uvicorn==0.34.0
+Jinja2==3.1.5
+python-multipart==0.0.20
+argon2-cffi==23.1.0
+argon2-cffi-bindings==21.2.0

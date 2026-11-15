@@ -7,9 +7,17 @@
 # Si se cambia este fichero, las filas ya cargadas se vuelven a marcar con:
 #   make remarcar-propio
 
+# Una instancia, un concesionario: todo lo propio del concesionario sale de aquí (o del .env), nunca
+# del código ni de las plantillas del panel.
 propio:
   nombre: AVISA
+  # Cabecera del panel
+  nombre_panel: Volkswagen Sevilla
+  marca: Volkswagen
   ciudad: Sevilla
+  # Código INE de la provincia del concesionario: zona por defecto del panel («Nuestro peso en
+  # <provincia>»). La comunidad autónoma sale de la provincia.
+  provincia_codigo: "41"
   dealer_ids:
     - ESP00710
   # Nombres con que aparece en los scrapers (dealer_name). Comprobar con  make concesionarios
@@ -23,3 +31,8 @@ competencia:
     nombre: Sevilla Wagen
   - dealer_id: ESP00714
     nombre: Utrewal
+
+# Umbrales del panel
+panel:
+  # Con menos anuncios que esto, el precio mediano y los días publicado se muestran atenuados con su n
+  n_minimo_medianas: 5

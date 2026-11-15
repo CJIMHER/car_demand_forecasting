@@ -19,3 +19,10 @@ def test_invalidos():
 
 def test_tabla_completa():
     assert sorted(PROVINCIAS) == [f"{i:02d}" for i in range(1, 53)]
+
+
+def test_comunidades_cubren_las_52_provincias_una_vez():
+    from ingesta.provincias import COMUNIDADES, PROVINCIAS, comunidad
+    todas = [p for _, provs in COMUNIDADES.values() for p in provs]
+    assert sorted(todas) == sorted(PROVINCIAS)
+    assert comunidad("41")[1] == "Andalucía" and comunidad("47")[1] == "Castilla y León"

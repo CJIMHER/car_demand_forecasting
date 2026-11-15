@@ -91,3 +91,15 @@ def datos(tmp_path, monkeypatch):
     d.mkdir()
     monkeypatch.setenv("CDF_SCRAPERS_DATA", str(d))
     return d
+
+
+CLAVE_ROL_PANEL = "clave-del-rol-panel-solo-pruebas-0123456789"
+
+
+@pytest.fixture
+def panel_url(pg_url, pg):
+    """Conexión como cdf_panel (el usuario de Postgres del panel), con la contraseña puesta como en
+    producción (verificador SCRAM)."""
+    from panel import rol_bd
+    rol_bd.activar(pg, CLAVE_ROL_PANEL)
+    return psycopg.conninfo.make_conninfo(pg_url, user="cdf_panel", password=CLAVE_ROL_PANEL)

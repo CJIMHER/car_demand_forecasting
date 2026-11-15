@@ -1,8 +1,59 @@
 # panel
 
-Panel web (FastAPI) detrás de Caddy. Vacío hasta el hito 1b; sus servicios `cdf_panel` y
-`cdf_caddy` ya están reservados en `infra/docker-compose.yml` con el perfil `hito1b`.
+Panel web del concesionario: FastAPI + Jinja2 + htmx + ECharts, sin compilación de frontend, detrás
+de Caddy (HTTPS automático en `PANEL_DOMINIO`). Traduce el prototipo aprobado (`docs/prototipo/`) a
+plantillas y a una hoja de estilos con variables. Hoy tiene datos reales la vista **Mercado**;
+Dirección, Ventas y Marketing aparecen en la navegación desactivadas («Se activa al conectar sus
+datos») hasta la sesión 2 del hito 1b.
+
+## Qué hay
+
+| Fichero | Qué hace |
+| --- | --- |
+| `app.py` | Aplicación (`uvicorn --factory panel.app:crear_app`): rutas, sesión, CSRF, cabeceras de seguridad |
+| `permisos.py` | **Único** sitio con roles y permisos (quién ve qué vista) |
+| `seguridad.py` | argon2id, sesiones en Postgres, CSRF de doble envío, bloqueo de intentos, IP detrás de Caddy |
+| `mercado.py` | Consultas de la vista Mercado y de «Estado de las fuentes»: solo tablas `panel_*` y `fuentes_estado` |
+| `formato.py` | Números y fechas en español, horas de Madrid |
+| `usuarios.py` | Alta, baja, rol y restablecimiento (las lanza `make`, la contraseña se pide sin eco) |
+| `rol_bd.py` | Activa el usuario de Postgres `cdf_panel` con `PANEL_DB_PASSWORD` (verificador SCRAM) |
+| `dev.py` | `make panel-dev`: el panel en el Mac con un Postgres local y datos sintéticos |
+| `templates/`, `static/` | Plantillas, CSS, JS propio y, con versión fija y licencia, htmx, ECharts, Inter y Space Grotesk (`static/VERSIONES.md`) |
+
+Rutas: `/acceso`, `/cambiar-clave`, `/salir` (POST), `/mercado`, `/direccion`, `/ventas`,
+`/marketing`, `/estado-fuentes` (rol técnico), `/salud` y `/robots.txt`.
+
+## Reglas que cumple
+
+- **Datos**: nunca calcula sobre las tablas de hechos; lee `panel_mercado_*`, que rellena
+  `analitica/mercado.py` a las 09:10. Su usuario de Postgres (`cdf_panel`) no puede leer ni escribir
+  las tablas de hechos: solo lee `panel_mercado_*` y `fuentes_estado`, y escribe en
+  `panel_usuarios`, `panel_sesiones` y `panel_accesos`.
+- **Replicable**: nada propio del concesionario en el código ni en las plantillas. Nombre, marca,
+  provincia (zona por defecto), comunidad y umbrales salen de `config/concesionario.yaml`
+  (`ingesta/concesionario.py`); el dominio y las contraseñas, del `.env`.
+- **Acceso**: usuario y contraseña por persona (argon2id); sin registro ni recuperación por la web.
+  Contraseña temporal de 12 caracteres como mínimo, que se cambia en el primer acceso. 5 fallos en
+  15 minutos bloquean 15 minutos al usuario y a la IP, con el mismo mensaje exista o no el usuario.
+- **Sesión**: en Postgres (en la cookie solo va un testigo aleatorio; en la base, su SHA-256).
+  Cookie `__Host-cdf_sesion`: sin Domain, Secure, HttpOnly, SameSite=Lax. Caduca tras
+  `PANEL_SESION_DIAS` días sin uso (30 por defecto).
+- **CSRF** en todo POST: testigo en cookie `__Host-cdf_csrf` y en el formulario, y `Origin` del propio sitio.
+- **Registro de accesos** (usuario si existe, hora, resultado, IP), sin contraseñas; se borra a los 90 días.
+- **Cabeceras**: HSTS, CSP solo con origen propio y sin scripts ni estilos en línea, nosniff,
+  `frame-ancestors 'none'`, Referrer-Policy same-origin, X-Robots-Tag noindex; `robots.txt` lo prohíbe todo.
+- **Proxy**: solo acepta `X-Forwarded-For` si la conexión llega de Caddy (`PANEL_PROXY=caddy`).
 
 ## Cómo se prueba
 
-Con pytest (acceso, permisos por rol y vistas con datos sintéticos), cuando haya código.
+```bash
+.venv/bin/python -m pytest tests/test_panel.py tests/test_mercado.py tests/test_infra_panel.py
+make panel-dev        # http://localhost:8000 con datos sintéticos; usuarios de prueba: direccion,
+                      # ventas, marketing y tecnico (las contraseñas salen en la consola)
+```
+
+Las pruebas usan el TestClient de Starlette, sin red, con la aplicación conectada como `cdf_panel`.
+Cubren acceso, bloqueo, caducidad, cierre, CSRF, la matriz completa de permisos, que ni la
+contraseña ni el hash salen en logs o respuestas, los permisos del usuario de Postgres, las
+cabeceras, que el HTML no pide nada fuera, las cifras de Mercado frente a SQL directo y un
+concesionario ficticio de otra provincia sin rastro del propio. Capturas en `docs/capturas/`.

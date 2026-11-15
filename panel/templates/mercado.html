@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block titulo %}Mercado{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/echarts/echarts.min.js" defer></script>
+<script src="/static/js/panel.js" defer></script>
+{% endblock %}
+{% block contenido %}
+{% include "_mercado.html" %}
+{% endblock %}

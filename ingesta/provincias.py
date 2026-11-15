@@ -24,6 +24,38 @@ PROVINCIAS = {
 }
 
 
+# Comunidades y ciudades autónomas (código INE) con sus provincias.
+COMUNIDADES = {
+    "01": ("Andalucía", ("04", "11", "14", "18", "21", "23", "29", "41")),
+    "02": ("Aragón", ("22", "44", "50")),
+    "03": ("Principado de Asturias", ("33",)),
+    "04": ("Illes Balears", ("07",)),
+    "05": ("Canarias", ("35", "38")),
+    "06": ("Cantabria", ("39",)),
+    "07": ("Castilla y León", ("05", "09", "24", "34", "37", "40", "42", "47", "49")),
+    "08": ("Castilla-La Mancha", ("02", "13", "16", "19", "45")),
+    "09": ("Cataluña", ("08", "17", "25", "43")),
+    "10": ("Comunitat Valenciana", ("03", "12", "46")),
+    "11": ("Extremadura", ("06", "10")),
+    "12": ("Galicia", ("15", "27", "32", "36")),
+    "13": ("Comunidad de Madrid", ("28",)),
+    "14": ("Región de Murcia", ("30",)),
+    "15": ("Comunidad Foral de Navarra", ("31",)),
+    "16": ("País Vasco", ("01", "20", "48")),
+    "17": ("La Rioja", ("26",)),
+    "18": ("Ceuta", ("51",)),
+    "19": ("Melilla", ("52",)),
+}
+
+
+def comunidad(codigo_provincia: str) -> tuple[str, str, tuple[str, ...]]:
+    """(código, nombre, provincias) de la comunidad autónoma de una provincia."""
+    for codigo, (nombre, provincias) in COMUNIDADES.items():
+        if codigo_provincia in provincias:
+            return codigo, nombre, provincias
+    raise KeyError(f"Provincia desconocida: {codigo_provincia!r}")
+
+
 def normalizar_cp(valor) -> str | None:
     """Código postal de 5 cifras, o None si no lo es.
 

@@ -151,6 +151,8 @@ Termina con las decisiones tomadas sin preguntar, las versiones que no han mapea
 
 ## Hito 1b · Primer panel (semana 3)
 
+> **Ficha desactualizada.** La sustituye el encargo de docs/hitos/hito_1b_sesion_1.md (sesión 1 de 3, 15-11-2026); lo que sigue se conserva solo como referencia.
+
 **Objetivo**: una primera versión del panel con los datos que ya hay, para probar el circuito completo de los datos a la pantalla y que el jefe de ventas vea algo real pronto. Sigue el prototipo de las tres pantallas validado con él.
 
 **Puerta**: el jefe de ventas lo abre en su móvil y los números de dos modelos cuadran con la web de stock de VW de ese día.

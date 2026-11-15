@@ -10,9 +10,14 @@ COMPOSE = docker compose -p cdf --env-file $(ENV_FILE) -f infra/docker-compose.y
 JOBS = $(COMPOSE) exec -T -u cdf jobs
 # Órdenes sueltas en un contenedor nuevo, siempre como cdf
 RUN = $(COMPOSE) run --rm --no-deps -u cdf
+# Órdenes en el contenedor del panel (usuario de Postgres cdf_panel); con terminal para pedir contraseñas
+PANEL_RUN = $(COMPOSE) --profile panel run --rm --no-deps panel python -m panel.usuarios
+# Python del Mac para make panel-dev
+PYTHON ?= .venv/bin/python
 
 .PHONY: help comprobar-entorno deploy migrar cargar comprobar recuento concesionarios remarcar-propio \
-        estado copia restaurar-prueba test hora logs ps psql
+        estado copia restaurar-prueba test hora logs ps psql precalcular panel-deploy panel-rol \
+        panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -37,8 +42,66 @@ deploy: comprobar-entorno ## Descarga el repositorio, aplica migraciones y reini
 	$(COMPOSE) up -d --wait postgres
 	$(RUN) jobs alembic upgrade head
 	$(COMPOSE) up -d --force-recreate jobs
+	@$(MAKE) --no-print-directory panel-deploy
 	$(COMPOSE) ps
 	@$(MAKE) --no-print-directory hora
+
+panel-deploy: ## Panel y Caddy, solo si PANEL_DOMINIO tiene valor en el .env (si no, no se arrancan)
+	@set -a; . $(ENV_FILE); set +a; \
+	if [ -z "$${PANEL_DOMINIO:-}" ]; then \
+	  echo "PANEL_DOMINIO vacío en $(ENV_FILE): el panel y Caddy no se arrancan."; \
+	  $(COMPOSE) --profile panel stop panel caddy >/dev/null 2>&1 || true; \
+	else \
+	  test -n "$${PANEL_DB_PASSWORD:-}" || { echo "Falta PANEL_DB_PASSWORD en $(ENV_FILE)"; exit 1; }; \
+	  $(MAKE) --no-print-directory panel-rol && \
+	  $(COMPOSE) --profile panel build panel && \
+	  $(COMPOSE) --profile panel up -d --wait --force-recreate panel caddy && \
+	  echo "Panel en https://$${PANEL_DOMINIO}"; \
+	fi
+
+panel-rol: ## Activa el usuario de Postgres del panel (cdf_panel) con PANEL_DB_PASSWORD del .env
+	$(RUN) jobs python -m panel.rol_bd
+
+panel-comprobar: ## Certificado, cabeceras y puertos publicados del panel
+	@set -a; . $(ENV_FILE); set +a; \
+	echo "== Certificado de $$PANEL_DOMINIO"; \
+	echo | openssl s_client -connect "$$PANEL_DOMINIO:443" -servername "$$PANEL_DOMINIO" 2>/dev/null \
+	  | openssl x509 -noout -subject -issuer -dates; \
+	echo "== Cabeceras de https://$$PANEL_DOMINIO/acceso"; \
+	curl -sS -o /dev/null -D - "https://$$PANEL_DOMINIO/acceso" | grep -iE '^(HTTP|strict-transport|content-security|x-content-type|x-frame|referrer-policy|x-robots|set-cookie)'; \
+	echo "== http:// redirige a https://"; \
+	curl -sS -o /dev/null -D - "http://$$PANEL_DOMINIO/" | grep -iE '^(HTTP|location)'; \
+	echo "== Puertos publicados (solo cdf_caddy: 80 y 443)"; \
+	docker ps --format '{{.Names}}\t{{.Ports}}' | grep '^cdf_'
+
+panel-logs: ## Registros del panel y de Caddy
+	$(COMPOSE) --profile panel logs --tail 100 panel caddy
+
+precalcular: ## Precálculo del panel; sin argumentos rehace todo el histórico, DIA=AAAA-MM-DD solo ese día
+	$(JOBS) python -m analitica.mercado $${DIA:+--dia $$DIA}
+
+usuario-alta: ## Alta en el panel: make usuario-alta USUARIO=ana NOMBRE="Ana" ROL=ventas (pide la contraseña)
+	@test -n "$(USUARIO)" -a -n "$(NOMBRE)" -a -n "$(ROL)" || \
+	  { echo 'Uso: make usuario-alta USUARIO=ana NOMBRE="Ana R." ROL=direccion|ventas|marketing|tecnico'; exit 1; }
+	$(PANEL_RUN) alta "$(USUARIO)" --nombre "$(NOMBRE)" --rol "$(ROL)"
+
+usuario-baja: ## Baja en el panel: make usuario-baja USUARIO=ana
+	@test -n "$(USUARIO)" || { echo 'Uso: make usuario-baja USUARIO=ana'; exit 1; }
+	$(PANEL_RUN) baja "$(USUARIO)"
+
+usuario-rol: ## Cambio de rol: make usuario-rol USUARIO=ana ROL=marketing
+	@test -n "$(USUARIO)" -a -n "$(ROL)" || { echo 'Uso: make usuario-rol USUARIO=ana ROL=marketing'; exit 1; }
+	$(PANEL_RUN) rol "$(USUARIO)" "$(ROL)"
+
+usuario-restablecer: ## Contraseña temporal nueva: make usuario-restablecer USUARIO=ana (la pide por teclado)
+	@test -n "$(USUARIO)" || { echo 'Uso: make usuario-restablecer USUARIO=ana'; exit 1; }
+	$(PANEL_RUN) restablecer "$(USUARIO)"
+
+usuarios: ## Usuarios del panel
+	$(PANEL_RUN) lista
+
+panel-dev: ## (Mac) Panel en http://127.0.0.1:8000 con datos sintéticos y un usuario de prueba por rol
+	$(PYTHON) -m panel.dev
 
 migrar: ## Aplica las migraciones pendientes
 	$(RUN) jobs alembic upgrade head

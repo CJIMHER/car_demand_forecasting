@@ -1,4 +1,4 @@
-# Despliegue en el servidor cdf (hito 0, segunda parte)
+# Despliegue en el servidor cdf (hito 0 y panel del hito 1b)
 
 Todo se ejecuta en el servidor de Hetzner como usuario `cdf`. Claude no se conecta al servidor:
 estas órdenes las lanza Cayetano. Los scrapers y sus bases no se tocan: el contenedor `cdf_jobs`
@@ -9,8 +9,9 @@ solo las lee (`mode=ro`).
 | Contenedor | Qué hace |
 | --- | --- |
 | `cdf_postgres` | Postgres 16, volumen `cdf_pgdata`, red interna `cdf_net`, **sin ningún puerto publicado** |
-| `cdf_jobs` | Python 3.12 con cron en hora de Madrid: carga 08:30, comprobación y resumen por Telegram 09:00, copia 09:30 |
-| `cdf_panel`, `cdf_caddy` | Reservados para el hito 1b; no arrancan (perfil `hito1b`) |
+| `cdf_jobs` | Python 3.12 con cron en hora de Madrid: carga 08:30, comprobación y resumen por Telegram 09:00, precálculo del panel 09:10, copia 09:30 |
+| `cdf_panel` | Panel web (FastAPI), sin privilegios ni puertos publicados; Postgres como `cdf_panel`. Solo si `PANEL_DOMINIO` tiene valor |
+| `cdf_caddy` | HTTPS automático para `PANEL_DOMINIO`; el **único** que publica puertos (80 y 443). Solo si `PANEL_DOMINIO` tiene valor |
 
 Tres reglas de este despliegue:
 
@@ -26,10 +27,10 @@ Tres reglas de este despliegue:
 
 ## 0. Antes de empezar (en el Mac)
 
-Revisar el diff de la rama `hito-0`, subirla a GitHub y fusionarla en `main`:
+Revisar el diff de la rama del hito, subirla a GitHub y fusionarla en `main`:
 
 ```bash
-git push -u origin hito-0       # y abrir/fusionar el PR en GitHub
+git push -u origin <rama-del-hito>   # p. ej. hito-1b, y abrir/fusionar el PR en GitHub
 ```
 
 ## 1. Paquetes del host (una vez)
@@ -196,16 +197,129 @@ y `fuentes_estado`). rclone corre con `RCLONE_CONFIG=/dev/null`: sin fichero ni 
 `rclone.conf`, el remoto sale de las `RCLONE_CONFIG_HZ_*`. La prueba de restauración es manual: una vez al mes
 (ficha del hito 0: «una copia restaurada»).
 
-## 7. Día a día
+## 7. Panel (hito 1b)
+
+El panel solo arranca si `PANEL_DOMINIO` tiene valor en el `.env`; si está vacío, `make deploy` lo
+dice («el panel y Caddy no se arrancan») y todo lo demás sigue igual. Los pasos, en orden:
+
+### 7.1 Registro DNS
+
+En el proveedor del dominio, un registro **A** del subdominio del panel (por ejemplo
+`panel.ejemplo.es`; el dominio principal no se toca) a la IPv4 del servidor, y si el servidor
+tiene IPv6, un **AAAA** a esa IPv6. Comprobar desde el Mac:
+
+```bash
+dig +short panel.ejemplo.es A       # la IP del servidor
+dig +short panel.ejemplo.es AAAA    # vacío o la IPv6 del servidor (nunca otra)
+```
+
+### 7.2 Puertos 80 y 443
+
+- **Cortafuegos de Hetzner** (consola de Hetzner Cloud → Firewalls → el del servidor cdf → Inbound
+  rules): añadir TCP 80, TCP 443 y UDP 443 (HTTP/3) desde cualquier origen. El 80 hace falta para
+  el certificado de Let's Encrypt y para redirigir a HTTPS.
+- **ufw** en el servidor:
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 443/udp
+sudo ufw status numbered
+```
+
+Ojo: Docker publica sus puertos por delante de ufw, así que el filtro que de verdad manda es el
+cortafuegos de Hetzner. Por eso solo Caddy publica puertos (lo comprueban las pruebas y
+`make panel-comprobar`).
+
+### 7.3 Variables del .env
+
+```bash
+cat >> /opt/cdf/.env <<EOF
+PANEL_DOMINIO=panel.ejemplo.es
+PANEL_DB_PASSWORD=$(openssl rand -hex 32)
+EOF
+chmod 600 /opt/cdf/.env
+```
+
+`PANEL_SESION_DIAS` es opcional (días sin uso tras los que caduca una sesión; 30 si no está). El
+nombre, la marca, la provincia y los umbrales del panel salen de `config/concesionario.yaml`.
+
+### 7.4 Desplegar y precalcular
+
+```bash
+cd /opt/cdf/app/repo
+make deploy            # migración 0003, rol cdf_panel, imagen del panel, arranque de panel y Caddy
+make precalcular       # primera vez: rehace todo el histórico (luego lo hace el cron a las 09:10)
+make test              # las pruebas, también las del panel
+```
+
+`make deploy` termina con «Panel en https://panel.ejemplo.es». Caddy pide el certificado en el
+primer arranque (unos segundos; `make panel-logs` lo cuenta).
+
+### 7.5 Alta del primer usuario
+
+```bash
+make usuario-alta USUARIO=cayetano NOMBRE="Cayetano" ROL=tecnico
+```
+
+Pide dos veces una contraseña temporal (12 caracteres como mínimo; no se ve al escribirla). Al
+entrar por primera vez, el panel obliga a cambiarla. Para el resto de personas, lo mismo con su
+rol (`direccion`, `ventas`, `marketing` o `tecnico`), y la temporal se les da en persona o por
+teléfono, nunca por el grupo de Telegram. Otras órdenes:
+
+```bash
+make usuarios                                          # lista
+make usuario-rol USUARIO=ana ROL=marketing             # cambio de rol (inmediato)
+make usuario-restablecer USUARIO=ana                   # contraseña temporal nueva; cierra sus sesiones
+make usuario-baja USUARIO=ana                          # baja; cierra sus sesiones
+```
+
+### 7.6 Comprobaciones
+
+```bash
+make panel-comprobar
+```
+
+Debe mostrar:
+
+- **Certificado**: `issuer` de Let's Encrypt, `subject` con el dominio y fechas vigentes.
+- **Cabeceras** de `/acceso`: `strict-transport-security`, `content-security-policy` (con
+  `frame-ancestors 'none'`), `x-content-type-options: nosniff`, `referrer-policy: same-origin`,
+  `x-robots-tag: noindex…`, y las cookies `__Host-…` con `Secure; HttpOnly` y sin `Domain`.
+- **http://** redirige (308) a **https://**.
+- **Puertos publicados**: solo `cdf_caddy` con `0.0.0.0:80`, `0.0.0.0:443` (y su IPv6); `cdf_panel`,
+  `cdf_postgres` y `cdf_jobs` sin ninguno.
+
+Y además:
+
+```bash
+sudo ss -ltnp | grep -E ':(5432|8000)\b'      # no debe salir nada
+curl -s https://panel.ejemplo.es/robots.txt   # User-agent: *  Disallow: /
+curl -s https://panel.ejemplo.es/salud        # ok
+make estado                                   # panel_mercado · precalculo · ok
+```
+
+Por último, entrar con el usuario técnico, cambiar la contraseña y abrir Mercado y «Estado de las
+fuentes», en el ordenador y en el móvil.
+
+## 8. Día a día
 
 ```bash
 make estado            # ¿cargas, comprobaciones, avisos y copias en ok?
 make logs              # registros de hoy de las tareas (/opt/cdf/logs/jobs/)
 make hora              # hora del contenedor, usuario de las tareas y crontab
+make panel-logs        # registros del panel y de Caddy
 cdf-estado             # los scrapers, como hasta ahora
 ```
 
 ## Problemas frecuentes
+
+- **El panel no arranca y `make deploy` dice «PANEL_DOMINIO vacío»**: falta `PANEL_DOMINIO` en el `.env` (7.3).
+- **Caddy no consigue el certificado** (`make panel-logs`): el registro DNS no apunta aún al servidor
+  o el 80/443 están cerrados en el cortafuegos de Hetzner (7.1 y 7.2).
+- **Mercado dice «Todavía no hay datos»**: falta el precálculo; `make precalcular` (o esperar a las 09:10).
+- **Un usuario bloqueado** tras 5 intentos: espera 15 minutos o, si ha olvidado la contraseña,
+  `make usuario-restablecer USUARIO=...`.
 
 - **`make deploy` dice que falta `RCLONE_CONFIG_HZ_TYPE`**: el remoto del bucket no está definido en
   el `.env` con variables. Copia las mismas `RCLONE_CONFIG_HZ_*` que usa `run_scraper.sh`.

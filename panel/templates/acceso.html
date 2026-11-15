@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Acceso{% endblock %}
+{% block contenido %}
+<section class="tarjeta formulario">
+  <h1>Acceso al panel</h1>
+  <form method="post" action="/acceso" class="campos">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="usuario">Usuario</label>
+    <input id="usuario" name="usuario" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="40" required autofocus>
+    <label for="clave">Contraseña</label>
+    <input id="clave" name="clave" type="password" autocomplete="current-password" maxlength="256" required>
+    {% if mensaje %}<p class="mensaje-error" role="alert">{{ mensaje }}</p>{% endif %}
+    <button type="submit" class="boton">Entrar</button>
+  </form>
+  <p class="nota">Si no tienes usuario o has olvidado la contraseña, pídeselo a la persona responsable del panel.</p>
+</section>
+{% endblock %}

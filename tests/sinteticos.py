@@ -35,7 +35,7 @@ CONFIG = {
 
 def coche(vid: str, *, fuente: str = "vo", dealer_id: str = "ESP00217", dealer: str = "CONCESIONARIO PRUEBA",
           cp: str | None = "41001", modelo: str = "Golf", precio: int | None = 2_500_000,
-          km: float | None = 15000, dia: str = "2026-11-10") -> dict:
+          km: float | None = 15000, dia: str = "2026-11-10", ciudad: str = "Sevilla") -> dict:
     vn = fuente != "vo"
     business = {
         "brand": "Volkswagen", "model": modelo, "model_code": "5G1", "carline": modelo,
@@ -48,7 +48,7 @@ def coche(vid: str, *, fuente: str = "vo", dealer_id: str = "ESP00217", dealer: 
         "power_kw": 110, "power_cv": 150, "engine_capacity_cc": 1498,
         "exterior_color": "Blanco", "interior_color": "Negro", "reservation": None,
         "vat_reclaimable": False, "approved": not vn, "business_model": "retail",
-        "dealer_id": dealer_id, "dealer_name": dealer, "dealer_city": "Sevilla", "dealer_postcode": cp,
+        "dealer_id": dealer_id, "dealer_name": dealer, "dealer_city": ciudad, "dealer_postcode": cp,
         "campaign_codes": [],
     }
     if vn:
@@ -71,9 +71,14 @@ def coche(vid: str, *, fuente: str = "vo", dealer_id: str = "ESP00217", dealer: 
     }
 
 
-def capturar(base: Path, fuente: str, dia: str, coches: list[dict]) -> str:
-    """Una pasada success del scraper `fuente` el día `dia` con estos anuncios. Devuelve run_id."""
+def capturar(base: Path, fuente: str, dia: str, coches: list[dict], ajustes: dict | None = None) -> str:
+    """Una pasada success del scraper `fuente` el día `dia` con estos anuncios. Devuelve run_id.
+
+    `ajustes` cambia la configuración del scraper solo en esta pasada (p. ej. sus límites de caída
+    anómala, que con las flotas diminutas de algunas pruebas saltarían).
+    """
     mod, cfg, fichero = CONFIG[fuente]
+    cfg = {**cfg, **(ajustes or {})}
     ruta = base / fichero
     db = mod.connect_db(ruta) if fuente == "vo" else mod.connect_db(ruta, cfg)
     try:

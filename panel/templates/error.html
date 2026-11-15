@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block contenido %}
+<section class="tarjeta formulario">
+  <h1>{{ titulo }}</h1>
+  <p>{{ texto }}</p>
+  {% if usuario %}<p><a href="/">Volver al panel</a></p>{% endif %}
+</section>
+{% endblock %}

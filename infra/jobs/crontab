@@ -7,5 +7,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 30 8 * * * cdf /app/infra/jobs/tarea.sh cargar
 # Comprobación: carga lo que falte y anota en fuentes_estado si un scraper no tiene captura del día
 0 9 * * * cdf /app/infra/jobs/tarea.sh comprobar
+# Precálculo del panel (tablas panel_mercado_*): los 8 últimos días, con la carga ya comprobada
+10 9 * * * cdf /app/infra/jobs/tarea.sh precalcular
 # Copia cifrada de Postgres al bucket, con la carga del día ya dentro
 30 9 * * * cdf /app/infra/jobs/tarea.sh copia

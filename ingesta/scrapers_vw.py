@@ -483,7 +483,7 @@ def recuento(pg: psycopg.Connection, dias: int = 14) -> list[tuple]:
 
 
 def concesionarios(pg: psycopg.Connection) -> list[tuple]:
-    """dealer_id y nombres que casan con el propio o con 'AVISA', para revisar el YAML."""
+    """dealer_id y nombres que casan con el concesionario propio de config/concesionario.yaml, para revisarlo."""
     cfg = yaml.safe_load(ruta_concesionario().read_text(encoding="utf-8")) or {}
     ids = sorted(dealers_propios())
     nombres = [n for n in (cfg.get("propio") or {}).get("nombres_en_scrapers") or []]

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="same-origin">
+<meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "historyCacheSize": 0, "selfRequestsOnly": true}'>
+<title>{% block titulo %}Panel{% endblock %} · {{ conc.nombre_panel }}</title>
+<link rel="icon" href="/static/img/icono.svg" type="image/svg+xml">
+<link rel="preload" href="/static/fonts/inter/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/css/panel.css">
+<script src="/static/vendor/htmx/htmx.min.js" defer></script>
+{% block scripts %}{% endblock %}
+</head>
+<body>
+<div class="app">
+  <header class="barra">
+    <div class="barra-in">
+      <div class="marca">
+        <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1D5FD6"></rect><path d="M7 9 H13 V14 H18 V19 H25" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"></path></svg>
+        <div>
+          <div class="marca-titulo">Stock · Demanda · Campañas</div>
+          <div class="marca-sub">{{ conc.nombre_panel }}</div>
+        </div>
+      </div>
+      {% if usuario and not usuario.cambiar_clave %}
+      <nav class="nav-escritorio" aria-label="Secciones del panel">
+        {% for v in navegacion %}
+          {% if v.activa %}
+          <a class="nav-item" href="{{ v.ruta }}"{% if vista == v.clave %} aria-current="page"{% endif %}>{{ v.titulo }}</a>
+          {% else %}
+          <span class="nav-item desactivada" aria-disabled="true" tabindex="0" data-nota="{{ TEXTO_DESACTIVADA }}">{{ v.titulo }}<span class="oculto"> ({{ TEXTO_DESACTIVADA }})</span></span>
+          {% endif %}
+        {% endfor %}
+      </nav>
+      {% endif %}
+      {% if usuario %}
+      <div class="barra-estado">
+        {% if cabecera %}<span class="estado-global"><span class="punto {{ 'ok' if cabecera.ok else 'aviso' }}" aria-hidden="true"></span>{{ cabecera.texto }}</span>{% endif %}
+        <span class="pildora-rol">{{ usuario.nombre }} · {{ rol }}</span>
+        <form method="post" action="/salir" class="form-salir">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button type="submit" class="boton-salir">Salir</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="contenido">
+    {% block contenido %}{% endblock %}
+  </main>
+
+  {% if usuario and not usuario.cambiar_clave %}
+  <nav class="nav-movil n{{ navegacion|length }}" aria-label="Secciones del panel">
+    {% for v in navegacion %}
+      {% if v.activa %}
+      <a class="nav-movil-item" href="{{ v.ruta }}"{% if vista == v.clave %} aria-current="page"{% endif %}>{{ 'Fuentes' if v.clave == 'estado' else v.titulo }}</a>
+      {% else %}
+      <span class="nav-movil-item desactivada" aria-disabled="true" tabindex="0" data-nota="{{ TEXTO_DESACTIVADA }}">{{ v.titulo }}<span class="oculto"> ({{ TEXTO_DESACTIVADA }})</span></span>
+      {% endif %}
+    {% endfor %}
+  </nav>
+  {% endif %}
+</div>
+</body>
+</html>

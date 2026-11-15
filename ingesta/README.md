@@ -31,7 +31,7 @@ entrega (VN), bastidor, concesionario (`dealer_id`, nombre, ciudad, código post
 derivada del código postal (`provincias.py`). El resto del registro va en `datos` (jsonb), salvo las
 URL de las fotos, que siguen en la base del scraper y en los brutos del bucket.
 
-`es_propio` marca los anuncios de los `dealer_id` de `config/concesionario.yaml` (AVISA, ESP00710).
+`es_propio` marca los anuncios de los `dealer_id` de `config/concesionario.yaml` (el concesionario de esta instancia).
 
 Las tablas de hechos (`scraper_runs`, `stock_externo_snapshot`, `eventos_externos`,
 `fuentes_estado`) rechazan UPDATE, DELETE y TRUNCATE con un disparador. La única excepción es
@@ -86,6 +86,13 @@ manuales); el estado de cada carga, de su última anotación del día. Con probl
 (`telegram.enviar`). Primero envía y después intenta anotar en `fuentes_estado` (`telegram`,
 `aviso`, con `"aviso": "copia"` en el detalle), así que el aviso llega aunque Postgres esté caído.
 Nunca lanza; el script sale siempre con el código de la copia.
+
+## Concesionario de la instancia (concesionario.py)
+
+`ingesta/concesionario.py` lee `config/concesionario.yaml` (o el fichero de `CDF_CONCESIONARIO`):
+nombre, nombre del panel, marca, `dealer_ids`, provincia (código INE) y umbrales del panel. La
+comunidad autónoma sale de la provincia (`provincias.COMUNIDADES`). Una instancia, un
+concesionario: nada de esto va escrito en el código.
 
 ## Cómo se prueba
 

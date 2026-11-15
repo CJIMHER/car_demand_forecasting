@@ -1,6 +1,7 @@
 # Plataforma cdf: Postgres y jobs. Se usa siempre a través del Makefile de la raíz, que hace:
 #   docker compose -p cdf --env-file /opt/cdf/.env -f infra/docker-compose.yml ...
-# Prefijo cdf_ en contenedores, red y volúmenes. Postgres NO publica ningún puerto.
+# Prefijo cdf_ en contenedores, red y volúmenes. Postgres NO publica ningún puerto; solo Caddy
+# publica el 80 y el 443 (perfil «panel», solo si PANEL_DOMINIO tiene valor).
 
 name: cdf
 
@@ -63,28 +64,72 @@ services:
       - /opt/cdf/logs/jobs:/logs
     networks: [cdf_net]
 
-  # Hito 1b. Definidos para reservar nombre; no arrancan hasta que se quite el perfil.
+  # Panel (hito 1b). Perfil «panel»: solo los arranca «make deploy» si PANEL_DOMINIO tiene valor.
+  # Sin env_file: el panel recibe solo lo que necesita (ni Telegram, ni el bucket, ni la frase de
+  # las copias). Se conecta a Postgres como cdf_panel, que no puede leer las tablas de hechos.
   panel:
-    image: busybox:1.36
+    build:
+      context: ..
+      dockerfile: panel/Dockerfile
+    image: cdf_panel:latest
     container_name: cdf_panel
-    profiles: ["hito1b"]
-    command: ["true"]
-    networks: [cdf_net]
+    profiles: ["panel"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: Europe/Madrid
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB:-cdf}
+      PGUSER: cdf_panel
+      PGPASSWORD: ${PANEL_DB_PASSWORD:-}
+      PANEL_SESION_DIAS: ${PANEL_SESION_DIAS:-30}
+      PANEL_PROXY: caddy
+    # Sin privilegios: usuario panel (UID 10001) de la imagen, sistema de ficheros de solo lectura
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Sin «ports»: solo Caddy llega a él, por la red cdf_web
+    networks: [cdf_net, cdf_web]
 
   caddy:
-    image: caddy:2
+    image: caddy:2.8.4
     container_name: cdf_caddy
-    profiles: ["hito1b"]
-    networks: [cdf_net]
+    profiles: ["panel"]
+    restart: unless-stopped
+    depends_on:
+      panel:
+        condition: service_healthy
+    environment:
+      PANEL_DOMINIO: ${PANEL_DOMINIO:-}
+    # El único servicio que publica puertos: 80 (redirección y reto ACME) y 443 (HTTPS, también HTTP/3)
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
     volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - cdf_caddy_data:/data
+      - cdf_caddy_config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    networks: [cdf_web]
 
 networks:
   cdf_net:
     name: cdf_net
+  # Caddy y el panel; Postgres no está en esta red
+  cdf_web:
+    name: cdf_web
 
 volumes:
   cdf_pgdata:
     name: cdf_pgdata
   cdf_caddy_data:
     name: cdf_caddy_data
+  cdf_caddy_config:
+    name: cdf_caddy_config

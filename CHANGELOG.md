@@ -1,5 +1,34 @@
 # Cambios
 
+## 2026-11-15 · Hito 1b, sesión 1: base del panel y vista Mercado (rama hito-1b)
+
+- Encargo guardado en `docs/hitos/hito_1b_sesion_1.md` (sustituye a la ficha de `docs/desarrollo.md`).
+  Regla nueva en `CLAUDE.md`: replicable, una instancia por concesionario, nada propio de AVISA en
+  el código ni en las plantillas.
+- `config/concesionario.yaml` + `ingesta/concesionario.py`: nombre del panel, marca, provincia
+  (zona por defecto) y umbral de medianas; comunidad autónoma desde la provincia (`provincias.COMUNIDADES`).
+- Migración `0003`: tablas derivadas `panel_mercado_dia`, `panel_mercado_modelo` y
+  `panel_mercado_capturas`; `panel_usuarios`, `panel_sesiones` y `panel_accesos`; rol `cdf_panel`
+  (lee `panel_mercado_*` y `fuentes_estado`, escribe solo sus tablas, sin acceso a las de hechos);
+  tipo `precalculo` en `fuentes_estado`.
+- `analitica/mercado.py`: precálculo de Mercado (cron 09:10, `make precalcular`), con las reglas
+  de capturas completas, altas observadas, ausencias y bajas, ventanas de 7 días y cotas
+  inferiores; anota en `fuentes_estado` y avisa por Telegram si falla (`aviso_copia.avisar_texto`,
+  generalizado sin cambiar el aviso de la copia).
+- `panel/`: FastAPI + Jinja2 + htmx + ECharts (servidos desde el propio panel, con versión fija y
+  licencia), plantillas y CSS traducidos del prototipo, escritorio y móvil con barra inferior.
+  Acceso con argon2id, contraseña temporal con cambio obligatorio, sesión en Postgres con cookie
+  `__Host-`, CSRF, bloqueo de 15 minutos tras 5 fallos por usuario y por IP, registro de accesos de
+  90 días, permisos en `panel/permisos.py`. Vistas: Mercado (datos reales), Estado de las fuentes
+  (técnico), Dirección/Ventas/Marketing desactivadas; `/salud`, `robots.txt` y cabeceras de seguridad.
+- Despliegue: servicios `panel` y `caddy` (perfil `panel`, red `cdf_web`), Caddyfile, imagen del
+  panel sin privilegios; `make deploy` solo los arranca con `PANEL_DOMINIO`; `make panel-rol`,
+  `panel-comprobar`, `panel-logs`, `precalcular`, `usuario-*`, `usuarios` y `panel-dev` (Mac).
+  Variables nuevas en `.env.example`. Guía en `infra/deploy.md` (sección 7).
+- Pruebas: reglas estadísticas, acceso, matriz de permisos, CSRF, secretos fuera de logs, permisos
+  de `cdf_panel`, cabeceras y recursos propios, cifras frente a SQL directo, concesionario ficticio
+  de otra provincia, despliegue sin `PANEL_DOMINIO`. Capturas en `docs/capturas/`.
+
 ## 2026-11-15 · Hito 0: aviso de copia fallida, rclone sin aviso y total de carga (rama hito-0)
 
 - `pg_backup.sh`: si la copia falla, aviso al grupo de Telegram (`ingesta/aviso_copia.py`, con

@@ -1,0 +1,17 @@
+# Caddy: HTTPS automático (Let's Encrypt) para PANEL_DOMINIO y proxy hacia el panel.
+# Es el único contenedor que publica puertos (80 y 443). El dominio sale del .env.
+{
+	admin off
+}
+
+{$PANEL_DOMINIO} {
+	encode zstd gzip
+	reverse_proxy panel:8000 {
+		# El panel solo se fía de esta cabecera, y solo si llega desde Caddy: se sustituye
+		# (no se añade a la que mande el cliente).
+		header_up X-Forwarded-For {remote_host}
+		header_up -X-Real-IP
+		header_up -Forwarded
+	}
+	header -Server
+}

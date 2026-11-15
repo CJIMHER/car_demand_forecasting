@@ -44,19 +44,26 @@ def _anotar(dia: date, estado: str, detalle: dict) -> None:
         LOG.warning("No se pudo anotar el aviso en fuentes_estado (%s)", type(exc).__name__)
 
 
-def avisar(dia: date, codigo: int, paso: str, enviar=None) -> bool:
-    """Envía el aviso de copia fallida y lo anota. Nunca lanza."""
-    texto = texto_aviso(dia, codigo, paso)
+def avisar_texto(dia: date, texto: str, aviso: str, enviar=None) -> bool:
+    """Envía un aviso de fallo (texto plano) y lo anota con detalle.aviso = `aviso`. Nunca lanza.
+
+    Lo usan la copia (aviso «copia») y el precálculo del panel (aviso «precalculo»).
+    """
     try:
         intentos = (enviar or telegram.enviar)(texto)
     except Exception as exc:  # sin traza: podría llevar la URL con el token
         error = telegram.limpiar(f"{type(exc).__name__}: {exc}")[:500]
-        LOG.warning("No se pudo enviar el aviso de copia fallida a Telegram: %s", error)
-        _anotar(dia, "error", {"aviso": "copia", "error": error, "texto": texto})
+        LOG.warning("No se pudo enviar el aviso «%s» a Telegram: %s", aviso, error)
+        _anotar(dia, "error", {"aviso": aviso, "error": error, "texto": texto})
         return False
-    LOG.info("Aviso de copia fallida enviado a Telegram")
-    _anotar(dia, "ok", {"aviso": "copia", "texto": texto, "intentos": intentos})
+    LOG.info("Aviso «%s» enviado a Telegram", aviso)
+    _anotar(dia, "ok", {"aviso": aviso, "texto": texto, "intentos": intentos})
     return True
+
+
+def avisar(dia: date, codigo: int, paso: str, enviar=None) -> bool:
+    """Envía el aviso de copia fallida y lo anota. Nunca lanza."""
+    return avisar_texto(dia, texto_aviso(dia, codigo, paso), "copia", enviar)
 
 
 def main(argv=None) -> int:

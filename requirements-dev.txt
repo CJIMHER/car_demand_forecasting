@@ -1,4 +1,6 @@
 -r requirements.txt
 pytest==8.3.4
+# TestClient de Starlette para las pruebas del panel
+httpx==0.28.1
 # Solo en el Mac: Postgres 16 embebido para las pruebas sin Docker (opcional)
 # pgserver==0.1.4
