@@ -22,6 +22,7 @@ from panel import seguridad as seg
 from panel import usuarios
 from panel.app import CABECERAS, MENSAJE_ACCESO, crear_app
 from panel.permisos import ROLES
+from sinteticos import RAIZ
 
 CLAVE = "clave-temporal-123"
 NUEVA = "clave-definitiva-456"
@@ -532,7 +533,65 @@ def test_sin_cifra_se_muestra_raya_con_motivo(app, pg, datos, personas):
     fila = _filas(html)["Golf"]
     assert fila[1:4] == ["—", "—", "—"]
     assert "n = 3" in fila[4] and "≥" in fila[5]                    # pocos anuncios: atenuado con su n
-    assert 'class="atenuado"' in html
+    assert 'class="linea2 atenuado"' in html
+
+
+# ================================================================== variación a 7 días
+
+def _poner_mercado(pg, dia, modelos):
+    """Filas panel_mercado_* a mano (como las dejaría el precálculo): [(modelo, anuncios, hace7)]."""
+    pg.execute("INSERT INTO panel_mercado_dia (dia, tipo, zona, zona_nombre, anuncios, propios, concesionarios, "
+               "altas_hoy, ausencias_hoy, bajas_7, ayer_completo, hace7_completo, ventana_completa) VALUES "
+               "(%s, 'VO', 'espana', 'España', 1, 0, 1, 0, 0, 0, true, true, true)", (dia,))
+    for modelo, n, hace7 in modelos:
+        pg.execute("INSERT INTO panel_mercado_modelo (dia, tipo, zona, modelo, anuncios, anuncios_hace7, altas_7, "
+                   "ausencias_7, precio_mediano_cents, n_precio, dias_mediana, dias_cota) VALUES "
+                   "(%s, 'VO', 'espana', %s, %s, %s, 0, 0, 2000000, %s, 10, false)", (dia, modelo, n, hace7, n))
+
+
+def test_variacion_en_unidades_y_porcentaje_desde_10(app, pg, personas):
+    _poner_mercado(pg, HOY, [("Uno", 12, 10), ("Dos", 7, 9), ("Tres", 3, 3), ("Cuatro", 3, 0), ("Cinco", 30, 40)])
+    html = dentro(app, "ventas").get("/mercado?zona=espana&tipo=VO").text
+    celdas = {m: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", c)).strip()
+              for m, c in re.findall(r'<th scope="row" class="izq">([^<]+)</th>\s*<td[^>]*>[^<]*</td>\s*<td[^>]*>(.*?)</td>',
+                                     html, re.S)}
+    assert celdas == {"Uno": "+2 +20 %", "Dos": "−2", "Tres": "0", "Cuatro": "+3", "Cinco": "−10 −25 %"}
+    assert '<span class="pct">+20 %</span>' in html                 # el porcentaje va atenuado
+    assert "solo si hace 7 días había al menos 10 anuncios" in html
+
+
+def test_umbral_del_porcentaje_desde_la_configuracion(pg, panel_url, personas, tmp_path, monkeypatch):
+    fichero = tmp_path / "c.yaml"
+    fichero.write_text((RAIZ / "config/concesionario.yaml").read_text()
+                       .replace("n_minimo_porcentaje: 10", "n_minimo_porcentaje: 5"))
+    monkeypatch.setenv("CDF_CONCESIONARIO", str(fichero))
+    app = crear_app(dsn=panel_url, hoy=lambda: HOY)
+    _poner_mercado(pg, HOY, [("Seis", 8, 6)])
+    html = dentro(app, "ventas").get("/mercado?zona=espana&tipo=VO").text
+    assert '+2 <span class="pct">+33 %</span>' in html
+
+
+def test_sin_cifra_de_hace_7_dias_no_cambia(app, pg, personas):
+    _poner_mercado(pg, HOY, [("Siete", 5, None)])
+    html = dentro(app, "ventas").get("/mercado?zona=espana&tipo=VO").text
+    assert 'title="Sin cifra: falta la captura completa de hace 7 días">—</td>' in html
+
+
+# ================================================================== sin «scraper» en lo que ve el usuario de Mercado
+
+def test_mercado_sin_la_palabra_scraper(app, pg, datos, personas):
+    cl = dentro(app, "tecnico")
+    textos = [cl.get(f"/mercado?tipo={t}").text for t in ("VN", "VO")]          # sin datos todavía
+    _con_datos(pg, datos, hasta=HOY - timedelta(days=1))                         # y sin captura de hoy
+    for zona in ("provincia", "comunidad", "espana"):
+        for tipo in ("VN", "VO"):
+            textos.append(cl.get(f"/mercado?zona={zona}&tipo={tipo}").text)
+            textos.append(cl.get(f"/mercado?zona={zona}&tipo={tipo}", headers={"HX-Request": "true"}).text)
+    for html in textos:
+        assert "scraper" not in html.lower()
+    assert "anuncios que llevan tres capturas seguidas sin verse" in textos[-1]
+    assert "La serie empieza el día de la primera captura" in textos[-1]
+    assert "scraper" in cl.get("/estado-fuentes").text.lower()                  # la página técnica sí puede
 
 
 # ================================================================== replicable: otro concesionario

@@ -36,3 +36,6 @@ competencia:
 panel:
   # Con menos anuncios que esto, el precio mediano y los días publicado se muestran atenuados con su n
   n_minimo_medianas: 5
+  # «Frente a hace 7 días» muestra la diferencia en anuncios; el porcentaje, atenuado, solo si hace
+  # 7 días había al menos estos anuncios
+  n_minimo_porcentaje: 10

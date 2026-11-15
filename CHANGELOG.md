@@ -1,5 +1,15 @@
 # Cambios
 
+## 2026-11-15 · Hito 1b: ajustes de la vista Mercado (rama hito-1b)
+
+- Móvil: en pantallas estrechas, cada modelo de la tabla ocupa dos líneas sin desplazamiento
+  horizontal (arriba modelo, anuncios y variación; debajo, atenuado y con etiquetas, altas,
+  ausencias, precio y días). En escritorio la tabla no cambia.
+- «Frente a hace 7 días»: diferencia en anuncios con signo; el porcentaje, atenuado, solo si hace 7
+  días había al menos `panel.n_minimo_porcentaje` anuncios (10, en `config/concesionario.yaml`).
+- Sin la palabra «scraper» en la vista Mercado: «captura» en su lugar.
+- `tests/navegador/capturas.mjs`: comprobación en Chrome a 390 px y capturas de `docs/capturas/`.
+
 ## 2026-11-15 · Hito 1b, sesión 1: base del panel y vista Mercado (rama hito-1b)
 
 - Encargo guardado en `docs/hitos/hito_1b_sesion_1.md` (sustituye a la ficha de `docs/desarrollo.md`).

@@ -56,4 +56,8 @@ Las pruebas usan el TestClient de Starlette, sin red, con la aplicación conecta
 Cubren acceso, bloqueo, caducidad, cierre, CSRF, la matriz completa de permisos, que ni la
 contraseña ni el hash salen en logs o respuestas, los permisos del usuario de Postgres, las
 cabeceras, que el HTML no pide nada fuera, las cifras de Mercado frente a SQL directo y un
-concesionario ficticio de otra provincia sin rastro del propio. Capturas en `docs/capturas/`.
+concesionario ficticio de otra provincia sin rastro del propio.
+
+En Chrome real, `tests/navegador/capturas.mjs` (instrucciones en su cabecera) entra en el panel de
+`make panel-dev`, comprueba a 390 px que nada desborda y que cada modelo enseña sus siete datos, y
+regenera las capturas de `docs/capturas/`.

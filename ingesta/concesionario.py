@@ -34,6 +34,7 @@ class Concesionario:
     comunidad: str
     provincias_comunidad: tuple[str, ...]
     n_minimo_medianas: int            # por debajo, precio y días se muestran atenuados
+    n_minimo_porcentaje: int          # variación a 7 días: porcentaje solo si hace 7 días había al menos estos
 
 
 def ruta() -> Path:
@@ -62,4 +63,5 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         comunidad=ccaa,
         provincias_comunidad=provincias,
         n_minimo_medianas=int(panel.get("n_minimo_medianas", 5)),
+        n_minimo_porcentaje=int(panel.get("n_minimo_porcentaje", 10)),
     )

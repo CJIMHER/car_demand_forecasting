@@ -30,7 +30,7 @@ def etiquetas_zona(conc: Concesionario) -> dict[str, str]:
 
 
 def capturas(pg: psycopg.Connection, hoy: date) -> list[dict]:
-    """Última captura completa de cada scraper, para la cabecera."""
+    """Última captura completa de cada fuente, para la cabecera."""
     ultimas = {f: (d, fin, n) for f, d, fin, n in pg.execute(
         """SELECT DISTINCT ON (fuente) fuente, dia, fin_at, anuncios FROM panel_mercado_capturas
            WHERE completa ORDER BY fuente, dia DESC""")}
@@ -58,14 +58,18 @@ def estado_cabecera(pg: psycopg.Connection, hoy: date) -> dict:
         "1 fuente" if len(faltan) == 1 else f"{len(faltan)} fuentes")}
 
 
-def _variacion(anuncios: int, hace7: int | None, motivo: str) -> dict:
+def variacion(anuncios: int, hace7: int | None, motivo: str, n_minimo_pct: int) -> dict:
+    """Diferencia en anuncios frente a hace 7 días («−2», «+3», «0») y, atenuado al lado, el
+    porcentaje solo si hace 7 días había al menos `n_minimo_pct` anuncios."""
     if hace7 is None:
-        return {"texto": fmt.GUION, "motivo": motivo, "clase": "neutro"}
-    if hace7 == 0:
-        return {"texto": fmt.GUION, "motivo": "sin anuncios hace 7 días", "clase": "neutro"}
-    pct = (anuncios - hace7) / hace7 * 100
-    clase = "sube" if round(pct) > 0 else ("baja" if round(pct) < 0 else "neutro")
-    return {"texto": fmt.porcentaje(pct, 0, signo=True), "motivo": None, "clase": clase}
+        return {"texto": fmt.GUION, "porcentaje": None, "motivo": motivo, "clase": "neutro"}
+    diferencia = anuncios - hace7
+    texto = "0" if diferencia == 0 else ("+" if diferencia > 0 else "") + fmt.miles(diferencia)
+    porcentaje = None
+    if hace7 >= n_minimo_pct:
+        porcentaje = fmt.porcentaje(diferencia / hace7 * 100, 0, signo=True)
+    clase = "sube" if diferencia > 0 else ("baja" if diferencia < 0 else "neutro")
+    return {"texto": texto, "porcentaje": porcentaje, "motivo": None, "clase": clase}
 
 
 def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy: date) -> dict:
@@ -116,7 +120,7 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
                ORDER BY anuncios DESC, modelo""", (dia, tipo, zona)):
         modelos.append({
             "modelo": modelo, "anuncios": fmt.miles(n),
-            "variacion": _variacion(n, hace7, MOTIVO_HACE7),
+            "variacion": variacion(n, hace7, MOTIVO_HACE7, conc.n_minimo_porcentaje),
             "altas": fmt.miles(altas7) if ventana_ok else fmt.GUION,
             "ausencias": fmt.miles(ausencias7) if ventana_ok else fmt.GUION,
             "precio": fmt.euros(precio), "precio_n": n_precio, "precio_atenuado": 0 < n_precio < n_min,
@@ -141,7 +145,9 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
         serie["valores"].append(valores.get(d))
         d += timedelta(days=1)
 
-    notas = [f"El precio y los días son medianas de los anuncios publicados {'hoy' if es_hoy else 'ese día'}.",
+    notas = [f"Frente a hace 7 días: diferencia en número de anuncios; al lado, atenuado, el porcentaje, "
+             f"solo si hace 7 días había al menos {conc.n_minimo_porcentaje} anuncios.",
+             f"El precio y los días son medianas de los anuncios publicados {'hoy' if es_hoy else 'ese día'}.",
              "«≥ N»: parte de esos anuncios ya estaban publicados en la primera captura o tras un día sin "
              f"captura, así que llevan al menos N días. Con menos de {n_min} anuncios, la cifra va atenuada con su n."]
     if tipo == "VN":

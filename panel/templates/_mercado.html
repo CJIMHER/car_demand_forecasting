@@ -27,10 +27,10 @@
   {% if not m.hay_datos %}
   <section class="tarjeta">
     <h2>Todavía no hay datos de {{ 'nuevos' if m.tipo == 'VN' else 'ocasión' }}</h2>
-    <p class="nota">Aparecen tras el primer día con captura completa{% if m.tipo == 'VN' %} de los dos scrapers de nuevos{% endif %} y el precálculo de las 09:10.</p>
+    <p class="nota">Aparecen tras el primer día con captura completa{% if m.tipo == 'VN' %} de las dos capturas de nuevos (gasolina y diésel; eléctricos e híbridos){% endif %} y el precálculo de las 09:10.</p>
   </section>
   {% else %}
-  <p class="dia-datos">Datos del {{ m.dia_largo }}{% if not m.es_hoy %}<span class="aviso-dia"> · Falta la captura completa de hoy{% if m.tipo == 'VN' %} de alguno de los dos scrapers de nuevos{% endif %}: se muestran los datos del último día completo.</span>{% endif %}</p>
+  <p class="dia-datos">Datos del {{ m.dia_largo }}{% if not m.es_hoy %}<span class="aviso-dia"> · Falta la captura completa de hoy{% if m.tipo == 'VN' %} de alguna de las dos capturas de nuevos{% endif %}: se muestran los datos del último día completo.</span>{% endif %}</p>
 
   <div class="kpis">
     {% for k in m.kpis %}
@@ -46,7 +46,7 @@
     <section aria-labelledby="t-modelos" class="tarjeta tarjeta-ancha">
       <h2 id="t-modelos">Por modelo · {{ m.titulo_tabla }}</h2>
       <div class="tabla-scroll">
-        <table class="tabla">
+        <table class="tabla tabla-modelos">
           <thead>
             <tr>
               <th scope="col" class="izq">Modelo</th>
@@ -62,12 +62,12 @@
             {% for r in m.modelos %}
             <tr>
               <th scope="row" class="izq">{{ r.modelo }}</th>
-              <td>{{ r.anuncios }}</td>
-              <td class="var-{{ r.variacion.clase }}"{% if r.variacion.motivo %} title="Sin cifra: {{ r.variacion.motivo }}"{% endif %}>{{ r.variacion.texto }}</td>
-              <td{% if r.altas == f.GUION %} title="Sin cifra: falta alguna captura completa de los últimos 7 días"{% endif %}>{{ r.altas }}</td>
-              <td{% if r.ausencias == f.GUION %} title="Sin cifra: falta alguna captura completa de los últimos 7 días"{% endif %}>{{ r.ausencias }}</td>
-              <td{% if r.precio_atenuado %} class="atenuado"{% endif %}>{{ r.precio }}{% if r.precio_atenuado %} <span class="n">n = {{ r.precio_n }}</span>{% endif %}</td>
-              <td{% if r.dias_atenuado %} class="atenuado"{% endif %}{% if r.dias_cota %} title="Cota inferior: parte de los anuncios ya estaban en la primera captura o tras un día sin captura"{% endif %}>{{ r.dias }}{% if r.dias_atenuado %} <span class="n">n = {{ r.dias_n }}</span>{% endif %}</td>
+              <td data-etiqueta="Anuncios">{{ r.anuncios }}</td>
+              <td data-etiqueta="En 7 días" class="var-{{ r.variacion.clase }}"{% if r.variacion.motivo %} title="Sin cifra: {{ r.variacion.motivo }}"{% endif %}>{{ r.variacion.texto }}{% if r.variacion.porcentaje %} <span class="pct">{{ r.variacion.porcentaje }}</span>{% endif %}</td>
+              <td data-etiqueta="Altas 7 d" class="linea2"{% if r.altas == f.GUION %} title="Sin cifra: falta alguna captura completa de los últimos 7 días"{% endif %}>{{ r.altas }}</td>
+              <td data-etiqueta="Ausenc. 7 d" class="linea2"{% if r.ausencias == f.GUION %} title="Sin cifra: falta alguna captura completa de los últimos 7 días"{% endif %}>{{ r.ausencias }}</td>
+              <td data-etiqueta="Precio med." class="linea2{% if r.precio_atenuado %} atenuado{% endif %}">{{ r.precio }}{% if r.precio_atenuado %} <span class="n">n = {{ r.precio_n }}</span>{% endif %}</td>
+              <td data-etiqueta="Días publ." class="linea2{% if r.dias_atenuado %} atenuado{% endif %}"{% if r.dias_cota %} title="Cota inferior: parte de los anuncios ya estaban en la primera captura o tras un día sin captura"{% endif %}>{{ r.dias }}{% if r.dias_atenuado %} <span class="n">n = {{ r.dias_n }}</span>{% endif %}</td>
             </tr>
             {% else %}
             <tr><td colspan="7" class="izq">Sin anuncios en esta zona.</td></tr>
@@ -82,9 +82,9 @@
     <section aria-labelledby="t-serie" class="tarjeta tarjeta-estrecha">
       <h2 id="t-serie">Anuncios publicados, últimos {{ 90 }} días</h2>
       <div class="grafico" role="img" aria-label="Evolución diaria del número de anuncios publicados; los días sin captura completa quedan como huecos" data-serie='{{ m.serie|tojson }}'></div>
-      <p class="nota">La serie empieza el día que arrancaron los scrapers y crece con cada captura. Un día sin captura completa queda como un hueco.</p>
+      <p class="nota">La serie empieza el día de la primera captura y crece con cada captura. Un día sin captura completa queda como un hueco.</p>
       <p class="recuadro">Desaparecer de la web no es vender: una ausencia puede ser una venta, un traslado o una retirada. Solo cuenta como baja tras tres capturas seguidas sin verlo.</p>
-      <p class="nota">Bajas en los últimos 7 días (anuncios ausentes que el scraper ya ha retirado): {% if m.bajas_7 is not none %}<strong>{{ m.bajas_7 }}</strong>{% else %}— ({{ m.motivo_bajas }}){% endif %}</p>
+      <p class="nota">Bajas en los últimos 7 días (anuncios que llevan tres capturas seguidas sin verse): {% if m.bajas_7 is not none %}<strong>{{ m.bajas_7 }}</strong>{% else %}— ({{ m.motivo_bajas }}){% endif %}</p>
     </section>
   </div>
   {% endif %}
