@@ -159,18 +159,23 @@ def test_cdf_panel_solo_lee_las_tablas_del_contrato(panel_url):
 
 def test_origen_de_un_bloque():
     M = contrato.Modo
-    modos = {t: M(False, False) for t in contrato.TABLAS}
+    modos = {t: M(False, False) for t in contrato.TABLAS + contrato.MOTOR}
     assert contrato.estados(modos) == {"direccion": "vacia", "ventas": "vacia", "marketing": "vacia"}
-    modos = {t: M(False, True) for t in contrato.TABLAS}
+    modos = {t: M(False, True) for t in contrato.TABLAS + contrato.MOTOR}
     assert set(contrato.estados(modos).values()) == {"ejemplo"}
     # Una fila real en una tabla: los bloques que la leen pasan a real (también su otra tabla)
     modos["panel_leads_dia"] = M(True, True)
     o = contrato.origenes(modos, "marketing")
     assert o["kpis"] == o["campanas"] == "real" and o["recomendacion"] == "ejemplo"
     assert contrato.estado_vista(modos, "marketing") == "ejemplo"       # quedan bloques de ejemplo
-    for t in contrato.TABLAS:
+    for t in contrato.TABLAS + contrato.MOTOR:
         modos[t] = M(True, True)
     assert set(contrato.estados(modos).values()) == {"real"}
+    # El motor de alertas evaluado con datos reales: los bloques de alertas pasan a real
+    modos = {t: M(False, True) for t in contrato.TABLAS + contrato.MOTOR}
+    modos["alertas_evaluacion"] = M(True, False)
+    assert {v: contrato.origenes(modos, v)["alertas"] for v in contrato.VISTAS} == {
+        "direccion": "real", "ventas": "real", "marketing": "real"}
 
 
 # ================================================================== datos de ejemplo
@@ -366,8 +371,10 @@ def test_ventas_orden_filtros_y_detalle(pg, panel_url, personas, con_ejemplo):
     assert primero["stock_id"] in det and "data-curva=" in det
     assert f"{round(primero['p_venta90_p10'] * 100)}–{round(primero['p_venta90_p90'] * 100)} %" in det
     assert f"Leads de {primero['modelo']} en 14 días: {primero['leads_14']}" in det
-    assert re.search(r'<button type="button" class="boton-accion" disabled[^>]*>Pedir campaña a marketing</button>', det)
-    assert re.search(r'<button type="button" class="boton-accion secundario" disabled[^>]*>Revisar precio</button>', det)
+    # Botones activos (sesión 3): formularios POST con CSRF; su circuito se prueba en test_acciones.py
+    assert re.search(r'<button type="submit" class="boton-accion" data-accion="campana" aria-[^>]*>Pedir campaña a marketing</button>', det)
+    assert re.search(r'<button type="submit" class="boton-accion secundario" data-accion="revisar_precio" aria-[^>]*>Revisar precio</button>', det)
+    assert det.count('action="/ventas/accion"') == 2 and det.count('name="csrf"') == 2
     # Filtros: tipo y «solo menos del 50 %»
     html = cl.get("/ventas?tipo=VO&riesgo=1").text
     ids = re.findall(r'class="vehiculo-detalle">[^<]* · (EJ\d+)</span>', html)

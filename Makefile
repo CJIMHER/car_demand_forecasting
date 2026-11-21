@@ -18,7 +18,7 @@ PYTHON ?= .venv/bin/python
 .PHONY: help comprobar-entorno deploy migrar cargar comprobar recuento concesionarios remarcar-propio \
         estado copia restaurar-prueba test hora logs ps psql precalcular panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
-        ejemplo-cargar ejemplo-borrar
+        ejemplo-cargar ejemplo-borrar alertas meta ga4
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -121,6 +121,15 @@ migrar: ## Aplica las migraciones pendientes
 
 cargar: ## Carga ahora lo nuevo de los scrapers (lo mismo que el cron de las 08:30)
 	$(JOBS) python -m ingesta.scrapers_vw cargar
+
+alertas: ## Motor de alertas y envío por Telegram por rol (cron 09:15); SIN_TELEGRAM=1 calcula sin enviar
+	$(JOBS) python -m alertas.motor $${SIN_TELEGRAM:+--sin-telegram} $${DIA:+--dia $$DIA}
+
+meta: ## Descarga de Meta (cron 06:00): los últimos 7 días; sin credenciales no hace nada
+	$(JOBS) python -m ingesta.meta
+
+ga4: ## Descarga de GA4 (cron 06:10): los últimos 7 días; sin credenciales no hace nada
+	$(JOBS) python -m ingesta.ga4
 
 comprobar: ## Comprobación del día y resumen por Telegram (cron 09:00); SIN_TELEGRAM=1 no envía
 	$(JOBS) python -m ingesta.scrapers_vw comprobar $${SIN_TELEGRAM:+--sin-telegram}

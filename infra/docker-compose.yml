@@ -43,8 +43,8 @@ services:
       postgres:
         condition: service_healthy
     # El .env del servidor es la única fuente de secretos: de ahí salen BUCKET, BACKUP_PASSPHRASE,
-    # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID y el remoto de rclone (RCLONE_CONFIG_HZ_*), sin fichero
-    # rclone.conf. Las tareas de cron solo reciben la lista de infra/jobs/exportar_entorno.sh.
+    # TELEGRAM_BOT_TOKEN, los TELEGRAM_CHAT_* de cada rol, el token de Meta, la propiedad de GA4 y el
+    # remoto de rclone (RCLONE_CONFIG_HZ_*), sin fichero rclone.conf. Las tareas de cron solo reciben la lista de infra/jobs/exportar_entorno.sh.
     env_file:
       - ${CDF_ENV_FILE:-/opt/cdf/.env}
     environment:
@@ -62,6 +62,9 @@ services:
       - /opt/cdf/data/vn:/datos/scrapers/vn
       - /opt/cdf/data/vn_otros:/datos/scrapers/vn_otros
       - /opt/cdf/logs/jobs:/logs
+      # Credenciales en fichero (cuenta de servicio de GA4), fuera del repositorio y solo lectura:
+      # /opt/cdf/secretos (700, de cdf), cada fichero 600. GA4_CREDENCIALES=/secretos/<fichero>.json
+      - /opt/cdf/secretos:/secretos:ro
     networks: [cdf_net]
 
   # Panel (hito 1b). Perfil «panel»: solo los arranca «make deploy» si PANEL_DOMINIO tiene valor.

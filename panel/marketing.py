@@ -19,6 +19,7 @@ from datetime import date, timedelta
 import psycopg
 
 from ingesta.concesionario import Concesionario
+from panel import alertas as pal
 from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
@@ -329,4 +330,5 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, 
         "atencion": atencion(pg, org["atencion"]) if tipo != "VO" else None,
         "ocasion": ocasion(pg, org["ocasion"], conc) if tipo == "VO" else None,
         "semanas": semanas(pg, org["semanas"], tipo), "pasadas": pasadas(pg, org["pasadas"], tipo), "origenes": org,
+        "alertas": pal.bloque_rol(pg, org["alertas"], "marketing", tipo),
     }

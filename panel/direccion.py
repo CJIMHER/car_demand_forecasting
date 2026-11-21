@@ -1,6 +1,7 @@
 """Vista «Dirección» (docs/prototipo/Main.dc.html y Movil.dc.html).
 
-Lee panel_stock_vehiculo, panel_ventas_mes y panel_alertas (contrato) y, para la tarjeta del
+Lee panel_stock_vehiculo, panel_ventas_mes y las alertas (las del motor, tabla alertas, o las de
+ejemplo de panel_alertas: panel/alertas.py) y, para la tarjeta del
 mercado, panel_mercado_dia (datos reales del precálculo). Nada se calcula sobre tablas de hechos:
 solo recuentos y medias de las filas ya preparadas.
 """
@@ -14,6 +15,7 @@ from datetime import date, timedelta
 import psycopg
 
 from ingesta.concesionario import Concesionario
+from panel import alertas as pal
 from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
@@ -118,30 +120,26 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, h
                                    resumen=(f"Ventas acumuladas: {fmt.miles(real)} a día {dia.day}; "
                                             f"lo previsto a estas alturas, entre {p10} y {p90}."))
 
-    # ---- alertas
+    # ---- alertas (motor de alertas o, sin él, las de ejemplo: panel/alertas.py)
     alertas_kpi = ng.bloque(org["alertas_kpi"], hay=False)
     alertas = ng.bloque(org["alertas"], hay=False)
     for nombre in ("alertas_kpi", "alertas"):
         origen = org[nombre]
-        dia = ng.ultimo_dia(pg, "panel_alertas", origen)
+        dia, filas = pal.leer(pg, origen, tipos)
         if dia is None:
             continue
-        filas = pg.execute(
-            """SELECT tema, destinatarios, nivel, texto, abierta_desde FROM panel_alertas
-               WHERE origen = %s AND dia = %s AND (tipo IS NULL OR tipo = ANY(%s))
-               ORDER BY (nivel = 'aviso') DESC, abierta_desde DESC, alerta_id""", (origen, dia, list(tipos))).fetchall()
         if nombre == "alertas_kpi":
-            temas = Counter(t for t, *_ in filas)
-            nuevas = sum(1 for f in filas if f[4] == dia)
+            temas = Counter(a["tema"] for a in filas)
+            nuevas = sum(1 for a in filas if a["abierta_desde"] == dia)
             alertas_kpi = ng.bloque(
                 origen, etiqueta="Alertas abiertas", valor=fmt.miles(len(filas)),
                 sub=" · ".join(f"{n} de {ng.TEMAS[t].lower()}" for t, n in temas.most_common()) or "Ninguna abierta",
                 badge=(f"{nuevas} nueva{'s' if nuevas != 1 else ''} hoy" if nuevas else None), tono="info")
         else:
             alertas = ng.bloque(origen, filas=[
-                {"texto": texto, "nivel": nivel, "nueva": desde == dia,
-                 "pie": f"{ng.TEMAS[tema]} · para {ng.destinatarios(dest)}"}
-                for tema, dest, nivel, texto, desde in filas], dia=dia)
+                {"texto": a["texto"], "nivel": a["nivel"], "nueva": a["abierta_desde"] == dia,
+                 "pie": f"{ng.TEMAS[a['tema']]} · para {ng.destinatarios(a['destinatarios'])}"}
+                for a in filas], dia=dia)
 
     return {
         "tipo": tipo, "tipos": ng.selector_tipo("/direccion", tipo, "#direccion"),

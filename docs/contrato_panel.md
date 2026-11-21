@@ -71,7 +71,8 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | --- | --- | --- |
 | Dirección | Tarjeta de stock, tarjeta de antigüedad, stock por días en exposición | `panel_stock_vehiculo` |
 | Dirección | Tarjeta de ventas del mes, gráfico de ventas acumuladas | `panel_ventas_mes` |
-| Dirección | Tarjeta de alertas abiertas, alertas de hoy | `panel_alertas` |
+| Dirección | Tarjeta de alertas abiertas, alertas de hoy | `alertas_evaluacion` y `panel_alertas` (ver más abajo) |
+| Ventas y Marketing | Alertas para su rol | `alertas_evaluacion` y `panel_alertas` |
 | Dirección | Tarjeta del mercado | `panel_mercado_dia`. Siempre real: fuera del contrato |
 | Ventas | Resumen y lista de vehículos | `panel_riesgo_vehiculo` |
 | Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
@@ -142,10 +143,29 @@ Hitos según `docs/desarrollo.md`.
 - **La fila `todo` la escribe el modelo**: los percentiles no se suman, así que el panel no suma VN + VO.
 - **«Lo normal: 8 de cada 10 meses caen aquí»** es la banda p10–p90.
 
-### panel_alertas · alertas abiertas
+### Alertas: tabla alertas del motor (real) y panel_alertas (ejemplo)
+
+Desde la sesión 3 del hito 1b, el motor (`alertas/`, cron 09:15) escribe sus propias tablas
+(migración `0009`):
+
+- `alertas`: una fila por día, regla, rol y clave, con texto, cifras (JSON), origen y estado
+  (nueva, abierta, cerrada). Una alerta calculada sobre filas de ejemplo solo puede ir al rol técnico.
+- `alertas_evaluacion`: qué reglas se evaluaron cada día y con qué origen, con el formato de las tablas
+  del contrato (`dia`, `origen`, `calculado_at`).
+
+Los bloques de alertas leen `alertas_evaluacion` y `panel_alertas`, con la regla de siempre: en cuanto
+el motor ha evaluado una regla con datos reales, el bloque es **real** y las alertas salen de la tabla
+`alertas` (nuevas y abiertas de la última evaluación; dice «Ninguna alerta abierta» si no salta
+ninguna). Hasta entonces, las de ejemplo de `panel_alertas`. Como la regla de fuente caída es real
+desde el primer día, el bloque de alertas pasa a real con la primera pasada del motor; una vista solo
+con bloques reales se abre a sus roles aunque los demás bloques digan «Sin datos todavía».
+
+`panel_alertas` queda para los datos de ejemplo (`make ejemplo-cargar`); nadie escribe en ella filas reales.
+
+### panel_alertas · alertas abiertas (ejemplo)
 
 - **Grano**: día × alerta abierta ese día.
-- **Fuente**: motor de alertas, hito 4 (`docs/diseno.md`, Señales y alertas).
+- **Fuente**: datos de ejemplo. Las reales, en la tabla `alertas` del motor (arriba).
 
 | Columna | Unidad | Significado |
 | --- | --- | --- |

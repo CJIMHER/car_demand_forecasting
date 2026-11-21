@@ -11,11 +11,17 @@ from datetime import date
 import psycopg
 
 from ingesta.concesionario import Concesionario
+from panel import alertas as pal
 from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
 
 POR_PAGINA = 25
+# Botones del detalle: acción → (texto del botón, quién recibe el aviso, cómo se dice hecha)
+ACCIONES = {"campana": ("Pedir campaña a marketing", "marketing", "Campaña pedida a marketing"),
+            "revisar_precio": ("Revisar precio", "ventas", "Revisión de precio pedida")}
+BLOQUEO_DIAS = 7
+ENVIO = {"enviado": "aviso enviado", "error": "el aviso no se pudo enviar", None: "aviso en cola (sale en un minuto)"}
 SUGERENCIAS = {"campana": "Campaña", "revisar_precio": "Revisar precio", "mantener": "Mantener"}
 COLS = ("stock_id", "tipo", "modelo", "version", "detalle", "dias_exposicion", "grupo", "p_venta90_p10",
         "p_venta90_p50", "p_venta90_p90", "precio_mercado_pct", "similares_n", "campana_activa", "sugerencia",
@@ -126,9 +132,66 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, s
             cambio = ng.cambio(elegido["leads_14"], elegido["leads_14_previos"])
             puntos.append(f"Leads de {elegido['modelo']} en 14 días: {fmt.miles(elegido['leads_14'])}"
                           + (f", {cambio}." if cambio else "."))
+        hechas = recientes(pg, elegido["stock_id"], org["detalle"])
+        bloqueadas = {h["accion"] for h in hechas}
+        botones = [{"accion": a, "titulo": t, "secundario": i > 0, "bloqueado": a in bloqueadas}
+                   for i, (a, (t, _, _)) in enumerate(ACCIONES.items())]
         detalle = ng.bloque(org["detalle"], v=f, puntos=puntos, serie=serie, base_curva=base_curva,
                             p_texto=f["p"], intervalo=f["p_intervalo"], n=elegido["n"],
-                            version=elegido["modelo_version"])
+                            version=elegido["modelo_version"], botones=botones, hechas=hechas,
+                            ejemplo=org["detalle"] == contrato.EJEMPLO)
     elif todos:
         detalle = ng.bloque(org["detalle"], hay=False, filtrado=True)
-    return {**base, "resumen": resumen, "lista": lista, "detalle": detalle, "dia": dia}
+    alertas = pal.bloque_rol(pg, org["alertas"], "ventas", tipo)
+    return {**base, "resumen": resumen, "lista": lista, "detalle": detalle, "dia": dia, "alertas": alertas,
+            "mostrar": mostrar}
+
+
+# --------------------------------------------------------------------------- botones del detalle
+
+def recientes(pg: psycopg.Connection, stock_id: str, origen: str | None) -> list[dict]:
+    """Acciones pedidas para el vehículo en los últimos 7 días (la más reciente de cada una), con el
+    estado de su aviso."""
+    if origen is None:
+        return []
+    filas = pg.execute(
+        """SELECT DISTINCT ON (a.accion) a.accion, a.pedido_at, a.usuario,
+                  (SELECT s.estado FROM alertas_salida s WHERE s.accion_id = a.id ORDER BY s.id DESC LIMIT 1)
+           FROM acciones a WHERE a.stock_id = %s AND a.origen = %s AND a.pedido_at > now() - make_interval(days => %s)
+           ORDER BY a.accion, a.pedido_at DESC""", (stock_id, origen, BLOQUEO_DIAS)).fetchall()
+    return [{"accion": a, "texto": f"{ACCIONES[a][2]} el {fmt.fecha_hora(t)} por {u} · {ENVIO[e]}"}
+            for a, t, u, e in sorted(filas, key=lambda f: list(ACCIONES).index(f[0]))]
+
+
+def pedir(pg: psycopg.Connection, modos: dict, stock_id: str, accion: str, usuario: str) -> tuple[bool, str]:
+    """Anota la acción en la tabla acciones (el aviso lo envía cdf_jobs). Devuelve (hecha, mensaje).
+    No deja repetir la misma acción sobre el mismo vehículo en 7 días. Nunca escribe en Walcu."""
+    if accion not in ACCIONES:
+        return False, "Acción desconocida."
+    origen = contrato.origenes(modos, "ventas")["detalle"]
+    dia = ng.ultimo_dia(pg, "panel_riesgo_vehiculo", origen)
+    v = pg.execute(
+        """SELECT tipo, modelo, version, dias_exposicion, p_venta90_p10, p_venta90_p50, p_venta90_p90
+           FROM panel_riesgo_vehiculo WHERE origen = %s AND dia = %s AND stock_id = %s""",
+        (origen, dia, stock_id)).fetchone() if dia else None
+    if v is None:
+        return False, "Ese vehículo ya no está en la lista."
+    titulo, destino, hecha = ACCIONES[accion]
+    with pg.transaction():
+        # Dos pulsaciones a la vez no la anotan dos veces
+        pg.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"acciones|{stock_id}|{accion}",))
+        previa = pg.execute(
+            """SELECT pedido_at, usuario FROM acciones WHERE stock_id = %s AND accion = %s AND origen = %s
+               AND pedido_at > now() - make_interval(days => %s) ORDER BY pedido_at DESC LIMIT 1""",
+            (stock_id, accion, origen, BLOQUEO_DIAS)).fetchone()
+        if previa:
+            return False, (f"{hecha} el {fmt.fecha_hora(previa[0])} por {previa[1]}: no se repite hasta pasados "
+                           f"{BLOQUEO_DIAS} días.")
+        tipo, modelo, version, dias, p10, p50, p90 = v
+        pg.execute(
+            """INSERT INTO acciones (stock_id, accion, usuario, origen, tipo, vehiculo, dias_exposicion,
+                                     p_venta90_p10, p_venta90_p50, p_venta90_p90)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (stock_id, accion, usuario, origen, tipo, f"{modelo} {version}" if version else modelo, dias, p10, p50, p90))
+    a_quien = "al grupo técnico (datos de ejemplo)" if origen == contrato.EJEMPLO else f"a {ng.DESTINATARIOS[destino]}"
+    return True, f"{hecha}: el aviso sale por Telegram {a_quien} en un minuto."

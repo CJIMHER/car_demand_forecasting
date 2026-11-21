@@ -1,0 +1,175 @@
+# Reglas del motor de alertas (alertas/motor.py, cron de cdf_jobs a las 09:15). Deterministas: sin
+# ningún modelo de lenguaje. Aquí van los umbrales, los destinatarios y los textos; el código
+# (alertas/reglas.py) solo sabe hacer la comparación que nombra «calculo».
+#
+# Campos de cada regla:
+#   id          identificador estable (va en la tabla alertas y en la clave de deduplicación)
+#   nombre      cómo se llama en el panel
+#   calculo     función de alertas/reglas.py que la evalúa
+#   roles       destinatarios: direccion, ventas, marketing, tecnico. Una alerta calculada sobre
+#               filas de ejemplo va SOLO a tecnico, con «[EJEMPLO]» delante (lo exige también la base)
+#   fuente      tablas de las que depende. Las del contrato del panel (panel_*, docs/contrato_panel.md)
+#               deciden si la regla está activa: con filas reales en todas, se evalúa con ellas; si
+#               no, con filas de ejemplo en todas, se evalúa sobre el ejemplo (solo para tecnico); si
+#               no, queda inactiva. fuentes_estado y panel_mercado_* son siempre reales.
+#   tema, nivel lo que muestra el panel (tema: ventas, stock, campanas, mercado, datos; nivel: aviso, info)
+#   umbrales    números de la regla
+#   n_minimo    clave de config/concesionario.yaml (sección panel) con el n mínimo: por debajo, la
+#               regla no salta
+#   texto       el motivo en una frase, con huecos {así} para las cifras (formato español)
+#
+# Los umbrales son una propuesta inicial (docs/diseno.md, Señales y alertas): se calibran en el piloto.
+version: reglas-2026-11-21
+
+reglas:
+  # ------------------------------------------------------------------ con datos reales desde ya
+  - id: fuente_caida
+    nombre: Fuente caída
+    calculo: fuente_caida
+    roles: [tecnico]
+    fuente: [fuentes_estado]
+    tema: datos
+    nivel: aviso
+    umbrales:
+      # La copia corre a las 09:30, después de las alertas: se mira la última. Salta si falló o si
+      # la última correcta tiene más días que estos.
+      dias_sin_copia: 2
+    textos:
+      scraper_sin_captura: "Scraper {fuente}: sin captura completa del {dia}{detalle}."
+      scraper_sin_cargar: "Scraper {fuente}: {anuncios} anuncios capturados el {dia} sin cargar en Postgres."
+      scraper_error: "Scraper {fuente}: la comprobación del {dia} terminó con error ({error})."
+      sin_comprobacion: "Sin comprobación de los scrapers del {dia}: la tarea de las 09:00 no ha anotado nada."
+      carga_error: "Carga de {fuente} a Postgres del {dia} con error: {error}."
+      precalculo_error: "El precálculo del panel del {dia} falló en «{paso}»: {error}."
+      sin_precalculo: "Sin precálculo del panel del {dia}: la tarea de las 09:10 no ha anotado nada."
+      copia_error: "La última copia de Postgres ({dia}) falló en «{paso}»."
+      sin_copia: "Sin copia correcta de Postgres desde el {dia} ({dias} días)."
+      descarga_error: "Descarga de {fuente} del {dia} con error: {error}."
+
+  - id: competidor_stock
+    nombre: Presión de un competidor (stock)
+    calculo: competidor_stock
+    roles: [ventas, direccion]
+    fuente: [panel_mercado_dia, panel_mercado_competidor]
+    tema: mercado
+    nivel: aviso
+    umbrales:
+      subida_unidades: 5      # y además…
+      subida_pct: 25          # … al menos este % sobre los anuncios de hace 7 días
+    n_minimo: n_minimo_porcentaje   # anuncios del concesionario en ese modelo hace 7 días
+    texto: "{concesionario} sube su stock de {modelo} {tipo_texto} en {provincia}: de {antes} a {ahora} anuncios en 7 días (+{subida_pct} %)."
+
+  - id: competidor_precio
+    nombre: Presión de un competidor (precio)
+    calculo: competidor_precio
+    roles: [ventas, direccion]
+    fuente: [panel_mercado_dia, panel_mercado_competidor]
+    tema: mercado
+    nivel: aviso
+    umbrales:
+      bajada_pct: 3           # caída del precio mediano del segmento (modelo + acabado) en 7 días
+    n_minimo: n_minimo_medianas     # anuncios con precio del segmento, hoy y hace 7 días
+    texto: "{concesionario} baja el precio mediano de {modelo} {acabado} {tipo_texto}: de {antes} a {ahora} en 7 días (−{bajada_pct} %, {n} anuncios con precio)."
+
+  - id: perdida_peso
+    nombre: Pérdida de peso
+    calculo: perdida_peso
+    roles: [ventas, direccion]
+    fuente: [panel_mercado_dia, panel_mercado_modelo]
+    tema: mercado
+    nivel: aviso
+    umbrales:
+      caida_puntos: 5         # puntos de porcentaje de nuestro peso en el modelo
+    n_minimo: n_minimo_porcentaje   # anuncios del modelo en la provincia, hoy y hace 7 días
+    texto: "Nuestro peso en {modelo} {tipo_texto} en {provincia} cae {caida_puntos} puntos en 7 días: del {antes} % al {ahora} % ({propios} de {anuncios} anuncios)."
+
+  # ------------------------------------------------------------------ preparadas: se activan con su fuente
+  - id: vehiculo_envejecido
+    nombre: Vehículo envejecido
+    calculo: vehiculo_envejecido
+    roles: [ventas]
+    fuente: [panel_riesgo_vehiculo, panel_curva_grupo]
+    tema: stock
+    nivel: aviso
+    umbrales:
+      percentil_curva: 75     # días en stock por encima del percentil 75 de la curva de su grupo
+    texto: "{vehiculo} ({stock_id}): {dias} días en stock, por encima del percentil {percentil} de su grupo ({limite} días; {n} coches)."
+
+  - id: riesgo_inmovilizacion
+    nombre: Riesgo de inmovilización
+    calculo: riesgo_inmovilizacion
+    roles: [ventas, direccion]
+    fuente: [panel_riesgo_vehiculo]
+    tema: stock
+    nivel: aviso
+    umbrales:
+      prob_maxima: 0.5        # probabilidad (p50) de venderse en 90 días por debajo de esto
+    texto: "{vehiculo} ({stock_id}): {prob} % de venderse en 90 días (entre {p10} y {p90} %), con {dias} días en stock."
+
+  - id: ventas_fuera_banda
+    nombre: Ventas fuera de la banda
+    calculo: ventas_fuera_banda
+    roles: [direccion]
+    fuente: [panel_ventas_mes]
+    tema: ventas
+    nivel: aviso
+    texto: "Ventas {tipo_texto} del mes {sentido} de lo previsto: {real} a día {dia_mes}, frente a {p10}–{p90}."
+
+  - id: caida_leads
+    nombre: Caída de leads
+    calculo: caida_leads
+    roles: [marketing]
+    fuente: [panel_leads_dia]
+    tema: campanas
+    nivel: aviso
+    umbrales:
+      dias: 14                # los últimos 14 días frente a los 14 anteriores
+      caida_pct: 30
+      base_minima: 10         # leads en los 14 días anteriores
+    texto: "Leads de {modelo} {tipo_texto}: {ahora} en los últimos {dias} días frente a {antes} en los {dias} anteriores (−{caida_pct} %)."
+
+  - id: coste_lead
+    nombre: Coste por lead fuera de rango
+    calculo: coste_lead
+    roles: [marketing]
+    fuente: [panel_campana_dia, panel_leads_dia]
+    tema: campanas
+    nivel: aviso
+    umbrales:
+      dias: 7                 # coste por lead de los últimos 7 días…
+      dias_referencia: 28     # … frente a su media de los 28 anteriores
+      factor_maximo: 2
+      leads_minimos: 5        # leads en los 28 días de referencia
+    texto: "Campaña «{titulo}»: coste por lead de {cpl} en los últimos {dias} días, {factor} veces su media de {dias_referencia} días ({cpl_ref})."
+
+  - id: campana_salud
+    nombre: Campaña en vigilar o revisar
+    calculo: campana_salud
+    roles: [marketing]
+    fuente: [panel_campana_salud, panel_campana_dia]
+    tema: campanas
+    nivel: aviso
+    texto: "Campaña «{titulo}»: {eslabon} en «{estado}» ({medida} {valor} frente a {referencia} de referencia a los {dias_vida} días; probabilidad de ir peor, {prob} %)."
+
+  - id: campana_sin_citas
+    nombre: Campaña sin citas
+    calculo: campana_sin_citas
+    roles: [marketing]
+    fuente: [panel_campana_dia, panel_leads_dia]
+    tema: campanas
+    nivel: aviso
+    umbrales:
+      dias_vida_minimos: 14
+      leads_minimos: 5        # leads atribuidos desde su inicio
+    texto: "Campaña «{titulo}»: {leads} leads y ninguna cita en sus {dias_vida} días de vida."
+
+  - id: ventana_favorable
+    nombre: Ventana favorable para una campaña general
+    calculo: ventana_favorable
+    roles: [marketing]
+    fuente: [panel_semana_campana]
+    tema: campanas
+    nivel: info
+    umbrales:
+      semanas: 2              # las dos semanas siguientes
+    texto: "Semana del {semana} favorable para una campaña general ({tipo_texto}): {indice} veces una semana media ({p10}–{p90}). {motivos}"

@@ -17,6 +17,7 @@ conectar sus datos») hasta que lleguen los datos reales.
 | `permisos.py` | **Único** sitio con roles y permisos (quién ve qué vista, también según sus datos) |
 | `contrato.py` | Qué tablas lee cada bloque y de qué origen (real o ejemplo; un bloque nunca los mezcla) |
 | `direccion.py`, `ventas.py`, `marketing.py`, `negocio.py` | Consultas de las tres vistas sobre las tablas del contrato |
+| `alertas.py` | Alertas de las vistas: las del motor (tabla `alertas`) o, sin él, las de ejemplo; y el motor en «Estado de las fuentes» |
 | `ejemplo.py` | Datos de ejemplo deterministas y coherentes entre vistas (`make ejemplo-cargar` / `ejemplo-borrar`) |
 | `seguridad.py` | argon2id, sesiones en Postgres, CSRF de doble envío, bloqueo de intentos, IP detrás de Caddy |
 | `mercado.py` | Consultas de la vista Mercado y de «Estado de las fuentes»: solo tablas `panel_*` y `fuentes_estado` |
@@ -33,8 +34,16 @@ Rutas: `/acceso`, `/cambiar-clave`, `/salir` (POST), `/mercado`,
 acabado, combustible y motor, que se conservan al cambiar de zona o tipo si siguen existiendo; uno que
 no existe se descarta y se redirige a la URL sin él; se llega pulsando el modelo en la
 tabla de Mercado), `/direccion?tipo=todo|VN|VO`,
-`/ventas?tipo=…&riesgo=1&v=<número de stock>`, `/marketing?tipo=todo|VN|VO&orden=venta|gasto`, `/estado-fuentes`
+`/ventas?tipo=…&riesgo=1&v=<número de stock>`, `/ventas/accion` (POST con CSRF: «Pedir campaña a
+marketing» y «Revisar precio»), `/marketing?tipo=todo|VN|VO&orden=venta|gasto`, `/estado-fuentes`
 (rol técnico), `/salud` y `/robots.txt`.
+
+Alertas (sesión 3): Dirección muestra todas las abiertas con su destinatario; Ventas y Marketing, las
+de su rol. Las leen de la tabla `alertas` del motor (`alertas/`) en cuanto ha evaluado alguna regla
+con datos reales (`alertas_evaluacion`); hasta entonces, las de ejemplo de `panel_alertas`. Los
+botones de Ventas anotan la petición en `acciones` (cdf_panel solo puede leer e insertar ahí) y el
+aviso por Telegram lo envía cdf_jobs: el panel no tiene el token. La misma acción no se repite sobre
+un vehículo en 7 días, y la ficha dice quién la pidió, cuándo y si el aviso salió.
 
 ## Reglas que cumple
 

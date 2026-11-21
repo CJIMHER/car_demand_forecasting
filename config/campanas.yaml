@@ -1,0 +1,34 @@
+# Campañas: a qué modelo y a qué stock va cada una, y cómo se unen Meta, GA4 y los leads de Walcu.
+# Lo usa ingesta/campanas.py. Tras cambiarlo, las campañas sin regla de «Estado de las fuentes» se
+# recalculan con la descarga siguiente (o a mano: make meta / make ga4).
+#
+# 1. Regla de unión (Meta ↔ GA4 ↔ Walcu)
+#    La clave es el utm_campaign de los enlaces de los anuncios:
+#      - Walcu lo guarda en cada lead (origin.campaign) y los leads se agregan por campaña;
+#      - GA4 lo da como sessionCampaignName;
+#      - en Meta, el utm_campaign de cada anuncio debe ser el NOMBRE DE LA CAMPAÑA ({{campaign.name}}
+#        en los parámetros de URL del anuncio).
+#    Las tres se comparan normalizadas: minúsculas, sin tildes, y todo lo que no sea letra o número
+#    convertido en «_» («T-Roc Ocasión · Noviembre» → «t_roc_ocasion_noviembre»).
+#    Si una campaña usa otro utm_campaign, se añade aquí en «equivalencias» (utm_campaign → nombre de
+#    la campaña en Meta, los dos tal como aparecen).
+#
+# 2. Regla de cada campaña (nombre de campaña → modelo y ámbito)
+#    La primera regla cuyo «patron» (expresión regular, sobre el nombre normalizado) encaja decide:
+#      modelo  el de config/concesionario.yaml (modelos), o vacío en una campaña general;
+#      ambito  VN (stock nuevo), VO (ocasión) o general (los dos; su gasto nunca se reparte).
+#    Las campañas descargadas sin ninguna regla salen en «Estado de las fuentes» del panel.
+#
+# Ejemplos (descomentar y adaptar a los nombres reales de las campañas):
+#   - {patron: "^vn_t_roc", modelo: T-Roc, ambito: VN}
+#   - {patron: "^vo_.*golf", modelo: Golf, ambito: VO}
+#   - {patron: "^(marca|general)_", ambito: general}
+
+meta:
+  # Versión de la Marketing API (Graph API). Meta retira cada versión unos dos años después de
+  # publicarla: comprobar la vigente en developers.facebook.com/docs/graph-api/changelog.
+  version_api: v24.0
+
+equivalencias: {}
+
+reglas: []

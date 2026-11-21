@@ -44,16 +44,20 @@ def test_entorno_de_cron_filtrado(tmp_path):
     env = {"PATH": os.environ["PATH"], "PGHOST": "postgres", "BUCKET": "cdf-bucket",
            "RCLONE_CONFIG_HZ_TYPE": "s3", "RCLONE_CONFIG_HZ_SECRET_ACCESS_KEY": "abc$def 'x'",
            "TELEGRAM_BOT_TOKEN": "1:tok", "TELEGRAM_CHAT_ID": "-100", "OTRA_COSA_SECRETA": "no",
-           "POSTGRES_PASSWORD": "no-hace-falta"}
+           "POSTGRES_PASSWORD": "no-hace-falta", "TELEGRAM_CHAT_VENTAS": "-200", "TELEGRAM_CHAT_DIRECCION": "-300",
+           "TELEGRAM_CHAT_MARKETING": "-400", "META_ACCESS_TOKEN": "EAAB-meta", "META_AD_ACCOUNT_ID": "123",
+           "GA4_PROPERTY_ID": "456", "GA4_CREDENCIALES": "/secretos/ga4.json", "PANEL_DB_PASSWORD": "no-hace-falta"}
     subprocess.run(["bash", str(RAIZ / "infra/jobs/exportar_entorno.sh"), str(destino)], env=env, check=True)
     assert stat.S_IMODE(destino.stat().st_mode) == 0o600
     texto = destino.read_text()
-    assert "OTRA_COSA_SECRETA" not in texto and "POSTGRES_PASSWORD" not in texto
+    assert "OTRA_COSA_SECRETA" not in texto and "POSTGRES_PASSWORD" not in texto and "PANEL_DB_PASSWORD" not in texto
     # Lo que lee una tarea de cron al cargar el fichero
     leido = subprocess.run(["bash", "-c", f". {destino}; env"], env={"PATH": os.environ["PATH"]},
                            capture_output=True, text=True, check=True).stdout
     for clave in ("PGHOST", "BUCKET", "RCLONE_CONFIG_HZ_TYPE", "RCLONE_CONFIG_HZ_SECRET_ACCESS_KEY",
-                  "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+                  "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_CHAT_VENTAS", "TELEGRAM_CHAT_DIRECCION",
+                  "TELEGRAM_CHAT_MARKETING", "META_ACCESS_TOKEN", "META_AD_ACCOUNT_ID", "GA4_PROPERTY_ID",
+                  "GA4_CREDENCIALES"):
         assert f"{clave}={env[clave]}\n" in leido
 
 
@@ -71,8 +75,11 @@ def test_imagen_en_hora_de_madrid():
 def test_crontab_a_las_horas_previstas_y_como_cdf():
     lineas = [l.split() for l in CRONTAB.splitlines() if re.match(r"^\d", l)]
     assert [(l[0], l[1], l[5], l[-1]) for l in lineas] == [
+        ("0", "6", "cdf", "meta"), ("10", "6", "cdf", "ga4"),
         ("30", "8", "cdf", "cargar"), ("0", "9", "cdf", "comprobar"), ("10", "9", "cdf", "precalcular"),
-        ("30", "9", "cdf", "copia")]
+        ("15", "9", "cdf", "alertas"), ("30", "9", "cdf", "copia")]
+    # Los avisos de los botones de Ventas, cada minuto y también como cdf
+    assert "* * * * * cdf /app/infra/jobs/tarea.sh avisos" in CRONTAB.splitlines()
     assert "CRON_TZ" not in CRONTAB  # cron usa la hora local del sistema, que es Madrid
 
 

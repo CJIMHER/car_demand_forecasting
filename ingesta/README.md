@@ -87,6 +87,35 @@ manuales); el estado de cada carga, de su última anotación del día. Con probl
 `aviso`, con `"aviso": "copia"` en el detalle), así que el aviso llega aunque Postgres esté caído.
 Nunca lanza; el script sale siempre con el código de la copia.
 
+## Conectores de Meta y GA4 (meta.py, ga4.py, conectores.py, campanas.py)
+
+Inactivos hasta tener credenciales: sin ellas no hacen ninguna petición y anotan `sin_credenciales`
+en `fuentes_estado` (tipo `descarga`), que no es un error y no dispara ninguna alerta.
+
+| | Meta Marketing API (`meta.py`, cron 06:00) | GA4 Data API (`ga4.py`, cron 06:10) |
+| --- | --- | --- |
+| Acceso | Solo lectura: token con `ads_read` en `META_ACCESS_TOKEN`, cuenta en `META_AD_ACCOUNT_ID` | Solo lectura: cuenta de servicio con rol Lector; propiedad en `GA4_PROPERTY_ID`, fichero JSON en `GA4_CREDENCIALES` (fuera del repositorio, permisos 600) |
+| Qué | Insights diarios por campaña, conjunto y anuncio: gasto, impresiones, alcance, frecuencia, clics, CPM y acciones de lead | Por día, fuente, medio, campaña y página de destino (solo la ruta): sesiones, sesiones con interacción y eventos clave |
+| Tabla | `campanas_meta_dia` (vista `campanas_meta_dia_vigente`) | `ga4_trafico_dia` (vista `ga4_trafico_dia_vigente`) |
+
+Comunes (`conectores.py`):
+- **Recarga de 7 días cada noche**, porque Meta y GA4 corrigen los días pasados. Las tablas son de
+  solo añadir: una fila se añade solo si su clave es nueva o su contenido (huella) ha cambiado. Así,
+  una corrección queda como versión nueva sin duplicar lo que no cambia; la vista `*_vigente` da la
+  última de cada clave. Cada fila lleva `descargado_at`, `run_id` y `origen` (API y versión).
+- **Brutos**: las respuestas, comprimidas, al bucket (`<fuente>/raw/<día>/`) antes de leerlas. Si no
+  se pueden subir, no se escribe nada (la noche siguiente recarga los 7 días).
+- **Límites**: un 429 (o el código de límite de cada API) espera `Retry-After` o 5, 15, 45, 90 y
+  180 s, y reintenta; otro error no se reintenta. El token nunca va en una URL ni en un error o un log.
+- **Nada personal**: lista blanca de campos; de la página de destino, solo la ruta (sin parámetros).
+- GA4 firma el JWT de la cuenta de servicio con `cryptography` (RS256), que solo se carga con credenciales.
+
+`campanas.py` aplica `config/campanas.yaml`: la regla de unión (Meta, GA4 y los leads de Walcu por
+`utm_campaign`, normalizado) y la regla de cada campaña (modelo y ámbito VN, VO o general). Las
+campañas descargadas sin regla van a `panel_campanas_sin_regla` y salen en «Estado de las fuentes».
+
+    make meta      make ga4      (lo mismo que el cron; DESDE/HASTA a mano: python -m ingesta.meta --desde … --hasta …)
+
 ## Concesionario de la instancia (concesionario.py)
 
 `ingesta/concesionario.py` lee `config/concesionario.yaml` (o el fichero de `CDF_CONCESIONARIO`):

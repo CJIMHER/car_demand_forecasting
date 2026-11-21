@@ -3,11 +3,18 @@
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 
+# Conectores de Meta y GA4: recargan los últimos 7 días (sin credenciales no hacen nada)
+0 6 * * * cdf /app/infra/jobs/tarea.sh meta
+10 6 * * * cdf /app/infra/jobs/tarea.sh ga4
 # Carga de las tres bases SQLite a Postgres, cuando ya han podido terminar los reintentos
 30 8 * * * cdf /app/infra/jobs/tarea.sh cargar
 # Comprobación: carga lo que falte y anota en fuentes_estado si un scraper no tiene captura del día
 0 9 * * * cdf /app/infra/jobs/tarea.sh comprobar
 # Precálculo del panel (tablas panel_mercado_*): los 8 últimos días, con la carga ya comprobada
 10 9 * * * cdf /app/infra/jobs/tarea.sh precalcular
+# Motor de alertas y envío por Telegram por rol, con el precálculo ya hecho
+15 9 * * * cdf /app/infra/jobs/tarea.sh alertas
+# Avisos de los botones de Ventas (el panel no tiene el token de Telegram): cada minuto
+* * * * * cdf /app/infra/jobs/tarea.sh avisos
 # Copia cifrada de Postgres al bucket, con la carga del día ya dentro
 30 9 * * * cdf /app/infra/jobs/tarea.sh copia

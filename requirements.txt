@@ -13,3 +13,5 @@ Jinja2==3.1.5
 python-multipart==0.0.20
 argon2-cffi==23.1.0
 argon2-cffi-bindings==21.2.0
+# Conector de GA4 (hito 1b, sesión 3): firma RS256 del JWT de la cuenta de servicio
+cryptography==44.0.0

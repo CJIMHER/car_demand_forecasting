@@ -28,6 +28,15 @@ ventas, y baja solo si el scraper la retira; días publicado como cota inferior 
 mediano solo con precio). Zonas: la provincia del concesionario, su comunidad y España, según
 `config/concesionario.yaml`.
 
+## competidores.py · por concesionario y modelo (en el mismo precálculo)
+
+`panel_mercado_competidor`: para cada día válido y tipo, en la provincia propia, los anuncios y el
+precio mediano de cada concesionario por modelo y por modelo + acabado (acabado del catálogo; sin
+acabado reconocido, solo en el modelo). La usa la alerta de presión de un competidor
+(`alertas/reglas.yaml`). Cuadra con `panel_mercado_modelo` (por modelo) y con
+`panel_mercado_concesionario` (por concesionario); se prueba en `tests/test_alertas.py`. Tras
+desplegar, `make precalcular` la rellena hacia atrás.
+
 ## segmentos.py y versiones.py · detalle de un modelo (en el mismo precálculo)
 
 Para cada día, tipo y zona, `panel_mercado_segmento` guarda solo los niveles que muestra el detalle

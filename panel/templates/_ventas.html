@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, segmentos %}
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas %}
 {% macro contenido_detalle(dd, suf, h) -%}
       {% set v = dd.v %}
       <div>
@@ -20,11 +20,26 @@
       <ul class="puntos">
         {% for p in dd.puntos %}<li>{{ p }}</li>{% endfor %}
       </ul>
+      {% if dd.mensaje %}<p class="aviso-accion{% if not dd.mensaje_ok %} aviso-accion-mal{% endif %}" role="status">{{ dd.mensaje }}</p>{% endif %}
       <div class="acciones">
-        <button type="button" class="boton-accion" disabled aria-describedby="acciones-nota{{ suf }}">Pedir campaña a marketing</button>
-        <button type="button" class="boton-accion secundario" disabled aria-describedby="acciones-nota{{ suf }}">Revisar precio</button>
+        {% for b in dd.botones %}
+        <form method="post" action="/ventas/accion" hx-post="/ventas/accion" hx-target="#ventas" hx-swap="outerHTML" class="form-accion">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="stock_id" value="{{ v.stock_id }}">
+          <input type="hidden" name="accion" value="{{ b.accion }}">
+          <input type="hidden" name="tipo" value="{{ d.tipo }}">
+          <input type="hidden" name="riesgo" value="{{ '1' if d.solo_riesgo else '' }}">
+          <input type="hidden" name="n" value="{{ d.mostrar }}">
+          <button type="submit" class="boton-accion{% if b.secundario %} secundario{% endif %}" data-accion="{{ b.accion }}"{% if b.bloqueado %} disabled{% endif %} aria-describedby="acciones-nota{{ suf }}">{{ b.titulo }}</button>
+        </form>
+        {% endfor %}
       </div>
-      <p class="nota" id="acciones-nota{{ suf }}">Estos dos botones se activarán cuando esté listo su circuito.</p>
+      {% if dd.hechas %}
+      <ul class="acciones-hechas">
+        {% for h in dd.hechas %}<li data-accion="{{ h.accion }}">{{ h.texto }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      <p class="nota" id="acciones-nota{{ suf }}">Envían un aviso por Telegram ({{ 'al grupo técnico: son datos de ejemplo' if dd.ejemplo else 'campaña, a marketing; precio, al jefe de ventas' }}) con el vehículo, sus días en stock y su probabilidad de venta. La misma petición no se repite sobre un vehículo en 7 días. No cambian nada en Walcu.</p>
 {%- endmacro %}
 <div id="ventas" class="vista">
   <div class="vista-cabecera">
@@ -118,4 +133,6 @@
       {% endif %}
     </section>
   </div>
+
+  {{ lista_alertas(d.alertas, "Alertas para ventas", "t-alertas-ventas") }}
 </div>

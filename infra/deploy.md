@@ -345,6 +345,51 @@ curl -sI "https://$PANEL_DOMINIO/static/css/panel.css?v=<huella>" | grep -i cach
                                                     # public, max-age=31536000, immutable
 ```
 
+### 7.9 Alertas, botones de Ventas y conectores (sesión 3)
+
+```bash
+# 1. Chats de Telegram por rol (el bot tiene que estar en cada grupo). Sin uno, sus mensajes van al
+#    chat del técnico (TELEGRAM_CHAT_ID) con el rol delante.
+nano /opt/cdf/.env        # TELEGRAM_CHAT_DIRECCION, TELEGRAM_CHAT_VENTAS, TELEGRAM_CHAT_MARKETING
+
+# 2. Carpeta de credenciales en fichero (GA4), aunque aún no haya ninguna: se monta en cdf_jobs
+install -d -m 700 -o cdf -g cdf /opt/cdf/secretos
+
+# 3. Desplegar (migración 0009) y rehacer el precálculo (rellena panel_mercado_competidor)
+make deploy
+make precalcular
+
+# 4. Primera pasada del motor, sin enviar, y luego de verdad
+SIN_TELEGRAM=1 make alertas
+make alertas
+make estado               # fuente «alertas» en ok
+```
+
+Desde ese momento el cron de `cdf_jobs` lanza `meta` (06:00), `ga4` (06:10), `alertas` (09:15) y
+`avisos` (cada minuto: los botones de Ventas). Sin credenciales de Meta y GA4, sus tareas anotan
+`sin_credenciales` y no hacen nada.
+
+**Meta** (cuando se quiera activar):
+1. En el Business Manager del concesionario: Configuración del negocio → Usuarios del sistema →
+   añadir uno (rol Empleado), asignarle la cuenta publicitaria con permiso de solo ver
+   rendimiento (no administrar) y la app del proyecto.
+2. Generar su token con el permiso **`ads_read`** (ningún otro: ni `ads_management` ni
+   `business_management`).
+3. En `/opt/cdf/.env`: `META_ACCESS_TOKEN=<token>` y `META_AD_ACCOUNT_ID=<id de la cuenta>`. Comprobar
+   la versión de la API en `config/campanas.yaml` (`meta.version_api`) y `make meta`.
+
+**GA4**:
+1. En Google Cloud (proyecto del concesionario): activar la **Google Analytics Data API** y crear una
+   cuenta de servicio sin roles de proyecto; crear una clave JSON.
+2. En GA4 → Administrar → Gestión de acceso a la propiedad: añadir el correo de la cuenta de servicio
+   con el rol **Lector** (sin permisos de datos de coste ni de ingresos si no hacen falta).
+3. Copiar la clave al servidor: `install -m 600 -o cdf -g cdf clave.json /opt/cdf/secretos/ga4.json`
+   (y borrarla del Mac). En `/opt/cdf/.env`: `GA4_PROPERTY_ID=<id numérico>` y
+   `GA4_CREDENCIALES=/secretos/ga4.json`. Luego `make ga4`.
+
+Después, rellenar `config/campanas.yaml` con las reglas de las campañas que salgan en «Estado de las
+fuentes» → «Campañas sin regla».
+
 ## 8. Día a día
 
 ```bash

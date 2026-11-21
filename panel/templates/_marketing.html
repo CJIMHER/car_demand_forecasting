@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, segmentos %}
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas %}
 <div id="marketing" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -200,4 +200,6 @@
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
   </div>
+
+  {{ lista_alertas(d.alertas, "Alertas para marketing", "t-alertas-marketing") }}
 </div>

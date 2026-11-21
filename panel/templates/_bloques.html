@@ -7,3 +7,24 @@
   {% for o in opciones %}<a class="segmento" href="{{ o.url }}" hx-get="{{ o.url }}" hx-target="{{ objetivo }}" hx-swap="outerHTML" hx-push-url="true"{% if o.activa %} aria-current="true"{% endif %}>{{ o.etiqueta }}</a>{% endfor %}
 </div>
 {%- endmacro %}
+{% macro lista_alertas(b, titulo, id) -%}
+<section aria-labelledby="{{ id }}" class="tarjeta bloque-alertas"{{ attrs("alertas", b) }}>
+  <h2 id="{{ id }}">{{ titulo }}</h2>
+  {{ marca(b) }}
+  {% if b.hay %}
+  <ul class="alertas">
+    {% for a in b.filas %}
+    <li class="alerta">
+      <span class="punto punto-{{ a.nivel }}" aria-hidden="true"></span>
+      <div>
+        <span class="alerta-texto">{{ a.texto }}{% if a.nueva %} <span class="nueva">Nueva hoy</span>{% endif %}</span>
+        <span class="alerta-pie">{{ a.pie }}</span>
+      </div>
+    </li>
+    {% else %}
+    <li class="alerta"><span class="alerta-texto">Ninguna alerta abierta.</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}{{ sin_datos() }}{% endif %}
+</section>
+{%- endmacro %}

@@ -5,7 +5,7 @@
   <div class="vista-cabecera">
     <div>
       <h1>Estado de las fuentes</h1>
-      <p class="subtitulo">Capturas de los scrapers, cargas, comprobaciones, copias, avisos y precálculo</p>
+      <p class="subtitulo">Capturas de los scrapers, cargas, comprobaciones, copias, avisos, precálculo, alertas y conectores</p>
     </div>
   </div>
 
@@ -70,6 +70,69 @@
     </div>
     {% endif %}
     <p class="nota">El acabado se lee del texto de versión con el catálogo config/versiones.yaml. Un texto cuyo acabado no está en el catálogo cuenta como «Sin clasificar» (nunca se adivina): añadir sus acabados al catálogo y ejecutar make precalcular.</p>
+  </section>
+
+  <section class="tarjeta" aria-labelledby="t-motor" data-bloque="motor">
+    <h2 id="t-motor">Motor de alertas</h2>
+    {% if motor.ultima %}
+    <p class="nota">Última pasada: {{ motor.ultima.cuando }} (día {{ motor.ultima.dia }}), <span class="estado-{{ 'ok' if motor.ultima.estado == 'ok' else 'mal' }}">{{ motor.ultima.estado }}</span>.</p>
+    {% else %}
+    <p class="sin-datos">Sin datos todavía: el motor corre cada día a las 09:15 (make alertas).</p>
+    {% endif %}
+    {% if motor.reglas %}
+    <div class="tabla-scroll">
+      <table class="tabla tabla-reglas">
+        <thead><tr><th scope="col" class="izq">Regla</th><th scope="col" class="izq">Resultado</th></tr></thead>
+        <tbody>
+        {% for r in motor.reglas %}
+          <tr><th scope="row" class="izq">{{ r.regla }}</th><td class="izq detalle{% if not r.activa %} inactiva{% endif %}">{{ r.texto }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <h3 class="h3-tabla">Alertas del técnico{% if motor.dia %} · {{ motor.dia }}{% endif %}</h3>
+    <ul class="alertas">
+      {% for a in motor.tecnico %}
+      <li class="alerta"><span class="punto punto-{{ 'info' if a.estado == 'cerrada' else 'aviso' }}" aria-hidden="true"></span><div><span class="alerta-texto">{{ a.texto }}</span><span class="alerta-pie">{{ a.estado }} · desde el {{ a.desde }}</span></div></li>
+      {% else %}
+      <li class="alerta"><span class="alerta-texto">Ninguna.</span></li>
+      {% endfor %}
+    </ul>
+    {% if motor.salidas %}
+    <h3 class="h3-tabla">Últimos envíos por Telegram</h3>
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead><tr><th scope="col">Cuándo</th><th scope="col" class="izq">Qué</th><th scope="col" class="izq">Para</th><th scope="col" class="izq">Chat</th><th scope="col" class="izq">Estado</th><th scope="col" class="izq">Mensaje</th></tr></thead>
+        <tbody>
+        {% for s in motor.salidas %}
+          <tr><td>{{ s.cuando }}</td><td class="izq">{{ s.que }}</td><td class="izq">{{ s.rol }}</td><td class="izq">{{ s.destino }}</td>
+            <td class="izq estado-{{ 'ok' if s.estado == 'enviado' else 'mal' }}">{{ s.estado }}</td><td class="izq detalle">{{ s.texto }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <p class="nota">Reglas y umbrales en alertas/reglas.yaml. Una regla preparada se activa cuando su tabla del panel tiene filas reales; con filas de ejemplo calcula solo para el técnico, con «[EJEMPLO]» delante.</p>
+  </section>
+
+  <section class="tarjeta" aria-labelledby="t-campanas" data-bloque="campanas-sin-regla">
+    <h2 id="t-campanas">Campañas sin regla en config/campanas.yaml</h2>
+    {% if motor.campanas %}
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead><tr><th scope="col" class="izq">Fuente</th><th scope="col" class="izq">Campaña</th><th scope="col">Días</th><th scope="col">Gasto o sesiones</th></tr></thead>
+        <tbody>
+        {% for c in motor.campanas %}
+          <tr><th scope="row" class="izq">{{ c.fuente }}</th><td class="izq detalle">{{ c.campana }}</td><td>{{ c.fechas }}</td><td>{{ c.cifra }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="nota">Sin regla no se sabe a qué modelo ni a qué stock (VN, VO o general) va la campaña, ni se pueden unir sus leads de Walcu (por utm_campaign). Añadir su regla y esperar a la descarga siguiente.</p>
+    {% else %}
+    <p class="nota">Ninguna: todas las campañas descargadas de Meta y GA4 tienen regla (o los conectores aún no tienen credenciales).</p>
+    {% endif %}
   </section>
 
   <section class="tarjeta" aria-labelledby="t-anotaciones">

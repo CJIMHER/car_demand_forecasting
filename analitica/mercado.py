@@ -2,7 +2,8 @@
 
 Lee las tablas de hechos (stock_externo_snapshot, eventos_externos, scraper_runs) y rellena las
 tablas derivadas panel_mercado_dia, panel_mercado_modelo, panel_mercado_concesionario,
-panel_mercado_capturas y, para el detalle de cada modelo, panel_mercado_segmento y
+panel_mercado_capturas, panel_mercado_competidor (analitica/competidores.py, para la alerta de
+presión de un competidor) y, para el detalle de cada modelo, panel_mercado_segmento y
 panel_mercado_sin_clasificar (analitica/segmentos.py). El panel solo lee estas tablas: nunca
 calcula sobre las de hechos al servir una página. Recalcular un día sustituye ese día en las
 derivadas; las tablas de hechos no se tocan.
@@ -53,7 +54,7 @@ from datetime import date, timedelta
 import psycopg
 from psycopg.types.json import Jsonb
 
-from analitica import segmentos, versiones
+from analitica import competidores, segmentos, versiones
 from ingesta import aviso_copia, telegram
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
 from ingesta.db import conectar
@@ -353,14 +354,14 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                 "filas_concesionario": 0, "filas_segmento": 0}
     desde = max(desde or min(todos), min(todos))
     resumen = {"desde": str(desde), "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0,
-               "filas_concesionario": 0, "filas_segmento": 0}
+               "filas_concesionario": 0, "filas_competidor": 0, "filas_segmento": 0}
     por_nivel: Counter = Counter()
     t_segmentos = 0.0
     d = desde
     while d <= hasta:
         with pg.transaction():
             for tabla in ("panel_mercado_concesionario", "panel_mercado_modelo", "panel_mercado_dia",
-                          "panel_mercado_segmento", "panel_mercado_sin_clasificar"):
+                          "panel_mercado_segmento", "panel_mercado_sin_clasificar", "panel_mercado_competidor"):
                 pg.execute(f"DELETE FROM {tabla} WHERE dia = %s", (d,))
             calculado = False
             for tipo in TIPOS:
@@ -369,6 +370,9 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                     _insertar(pg, "panel_mercado_dia", COLS_DIA, filas_dia)
                     _insertar(pg, "panel_mercado_modelo", COLS_MODELO, filas_modelo)
                     _insertar(pg, "panel_mercado_concesionario", COLS_CONCESIONARIO, filas_conc)
+                    filas_comp = competidores.calcular(h, d, tipo, catalogo)
+                    _insertar(pg, "panel_mercado_competidor", competidores.COLS, filas_comp)
+                    resumen["filas_competidor"] += len(filas_comp)
                     t = time.monotonic()
                     filas_seg, sin_clasificar = segmentos.calcular(h, d, tipo, catalogo)
                     _insertar(pg, "panel_mercado_segmento", segmentos.COLS_SEGMENTO, filas_seg)

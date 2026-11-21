@@ -1,5 +1,45 @@
 # Cambios
 
+## 2026-11-21 · Hito 1b, sesión 3: alertas por rol, botones de Ventas y conectores de Meta y GA4 (rama hito-1b-sesion-3)
+
+Encargo en `docs/hitos/hito_1b_sesion_3.md`.
+
+- **Motor de alertas** (`alertas/`, cron de `cdf_jobs` a las 09:15, tras el precálculo). Determinista,
+  sin modelos de lenguaje.
+  - Reglas, umbrales, destinatarios y textos en `alertas/reglas.yaml`; el código solo hace la
+    comparación (`alertas/reglas.py`).
+  - Con datos reales: fuente caída (técnico), presión de un competidor (stock de un modelo y precio
+    mediano de un segmento) y pérdida de peso (ventas y dirección). Las de mercado no saltan sin la
+    captura de hoy y la de hace 7 días, ni por debajo del n mínimo de `config/concesionario.yaml`.
+  - Preparadas: vehículo envejecido, riesgo de inmovilización, ventas fuera de la banda, caída de
+    leads, coste por lead, campaña en vigilar/revisar con su eslabón, campaña sin citas y ventana
+    favorable. Se activan cuando sus tablas `panel_*` tienen filas reales. Sobre filas de ejemplo
+    calculan solo para el técnico con «[EJEMPLO]» delante (la base lo exige).
+  - Tablas `alertas` (nueva/abierta/cerrada; la abierta no se reenvía y se cierra sola) y
+    `alertas_evaluacion`. Dirección, Ventas y Marketing leen sus alertas de ahí; el bloque deja de
+    ser de ejemplo con la primera evaluación real.
+  - `make alertas`; `SIN_TELEGRAM=1 make alertas` calcula sin enviar.
+- **Telegram por rol** (`alertas/envio.py`): un mensaje por rol y día con sus alertas nuevas.
+  `TELEGRAM_CHAT_DIRECCION`, `_VENTAS` y `_MARKETING` (sin ellos, al técnico con el rol delante).
+  Cada envío en `alertas_salida`; un fallo, también en `fuentes_estado`, y la tarea sigue. Lo que no
+  salió por un fallo sale en la pasada siguiente.
+- **Botones de Ventas** activos: POST con CSRF a `/ventas/accion`; anotación en `acciones` (solo
+  añadir); aviso a marketing o al jefe de ventas enviado por `cdf_jobs` cada minuto (el panel no
+  tiene el token). Bloqueo de 7 días por vehículo y acción; la ficha dice quién, cuándo y si el aviso
+  salió. Con datos de ejemplo, solo al técnico. Nada en Walcu.
+- **Conectores** de Meta Marketing API (`ads_read`) y GA4 Data API (Lector), inactivos sin
+  credenciales (anotan «sin credenciales», sin alerta y sin ninguna petición). Recargan 7 días cada
+  noche (06:00 y 06:10) en tablas de solo añadir (`campanas_meta_dia`, `ga4_trafico_dia`) que solo
+  añaden lo que cambia; brutos comprimidos al bucket antes de escribir; 429 con espera; nada
+  personal. `config/campanas.yaml` documenta la unión por `utm_campaign` y las reglas de cada
+  campaña; las que no tienen regla salen en «Estado de las fuentes».
+- **Precálculo**: tabla `panel_mercado_competidor` (anuncios y precio mediano por concesionario,
+  modelo y modelo + acabado en la provincia propia).
+- **Migración `0009`**. `cryptography` en `requirements.txt` (firma del JWT de GA4).
+- **Pruebas**: `tests/test_alertas.py` (34 pruebas), `tests/test_acciones.py` (10) y
+  `tests/test_conectores.py` (16); la limpieza del entorno de `tests/conftest.py` cubre `META_*`,
+  `GA4_*` y `CDF_CAMPANAS`. 277 en verde.
+
 ## 2026-11-21 · make test en el contenedor sin .env.example (rama hito-1b-pruebas-2)
 
 - `tests/test_entorno.py::test_cubre_todo_el_env_de_ejemplo` fallaba en el servidor

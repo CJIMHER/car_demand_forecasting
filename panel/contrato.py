@@ -27,21 +27,29 @@ TABLAS = (
     "panel_campana_resultado",
 )
 
+# Tablas del motor de alertas (migración 0009) con el mismo formato (dia, origen, calculado_at). No
+# son del contrato de datos de ejemplo (make ejemplo-cargar no las toca): las escribe alertas/motor.py.
+# alertas_evaluacion dice qué reglas se han evaluado y con qué origen; con una fila real, el bloque
+# de alertas es real aunque no salte ninguna, y las alertas se leen de la tabla alertas.
+MOTOR = ("alertas_evaluacion",)
+ALERTAS = ("alertas_evaluacion", "panel_alertas")
+
 # Bloques de cada vista y las tablas que leen
 BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
     "direccion": {
         "stock": ("panel_stock_vehiculo",),
         "antiguedad": ("panel_stock_vehiculo",),
         "ventas_kpi": ("panel_ventas_mes",),
-        "alertas_kpi": ("panel_alertas",),
+        "alertas_kpi": ALERTAS,
         "ventas_mes": ("panel_ventas_mes",),
-        "alertas": ("panel_alertas",),
+        "alertas": ALERTAS,
         "edad": ("panel_stock_vehiculo",),
     },
     "ventas": {
         "resumen": ("panel_riesgo_vehiculo",),
         "lista": ("panel_riesgo_vehiculo",),
         "detalle": ("panel_riesgo_vehiculo", "panel_curva_grupo"),
+        "alertas": ALERTAS,
     },
     "marketing": {
         "kpis": ("panel_campana_dia", "panel_leads_dia"),
@@ -51,6 +59,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "ocasion": ("panel_riesgo_vehiculo",),      # solo en VO: stock de ocasión que mover
         "semanas": ("panel_semana_campana",),
         "pasadas": ("panel_campana_resultado",),
+        "alertas": ALERTAS,
     },
 }
 VISTAS = tuple(BLOQUES)
@@ -63,10 +72,11 @@ class Modo:
 
 
 def modos(pg: psycopg.Connection) -> dict[str, Modo]:
-    """Para cada tabla del contrato, si tiene filas reales y si tiene filas de ejemplo (una consulta)."""
+    """Para cada tabla del contrato (y alertas_evaluacion), si tiene filas reales y si tiene filas de
+    ejemplo (una consulta)."""
     partes = [sql.SQL("SELECT {nombre}, EXISTS (SELECT 1 FROM {t} WHERE origen = 'real'), "
                       "EXISTS (SELECT 1 FROM {t} WHERE origen = 'ejemplo')").format(
-                          nombre=sql.Literal(t), t=sql.Identifier(t)) for t in TABLAS]
+                          nombre=sql.Literal(t), t=sql.Identifier(t)) for t in TABLAS + MOTOR]
     return {t: Modo(r, e) for t, r, e in pg.execute(sql.SQL(" UNION ALL ").join(partes))}
 
 

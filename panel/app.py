@@ -16,6 +16,7 @@ import os
 from collections.abc import Callable, Iterator
 from datetime import date
 from pathlib import Path
+from urllib.parse import quote
 
 import psycopg
 from fastapi import Depends, FastAPI, Form, Request
@@ -24,7 +25,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
-from panel import contrato, direccion, formato, marketing, mercado, permisos, ventas
+from panel import alertas, contrato, direccion, formato, marketing, mercado, permisos, ventas
 from panel import seguridad as seg
 from panel.estaticos import Estaticos, Huellas
 
@@ -346,6 +347,32 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
             "d": ventas.datos(pg, app.state.conc, modos_de(request, pg), tipo, riesgo == "1", v[:40] or None,
                               app.state.hoy(), mostrar)})
 
+    @app.post("/ventas/accion")
+    def accion_ventas(request: Request, stock_id: str = Form(""), accion: str = Form(""), tipo: str = Form("todo"),
+                      riesgo: str = Form(""), n: str = Form(""), csrf: str = Form(""), pg=Depends(bd)):
+        """«Pedir campaña a marketing» y «Revisar precio»: anota la acción (tabla acciones); el aviso por
+        Telegram lo envía cdf_jobs en el minuto siguiente. Nada se escribe en Walcu."""
+        u = exigir(request, pg, "ventas")
+        if not permisos.visible(u["rol"], "ventas", estados_de(request, pg), app.state.ejemplo_para):
+            raise Prohibido()
+        if not csrf_ok(request, csrf):
+            return pintar(request, "error.html", {"titulo": "Formulario caducado", "texto": MENSAJE_CSRF},
+                          pg=pg, status=403, usuario=u)
+        stock_id = stock_id.strip()[:40]
+        tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
+        hecha, mensaje = ventas.pedir(pg, modos_de(request, pg), stock_id, accion, u["usuario"])
+        LOG.info("Acción %s sobre %s pedida por %s: %s", accion[:20], stock_id, u["usuario"], "anotada" if hecha else "no")
+        if not es_htmx(request):
+            return redirigir(f"/ventas?tipo={tipo}{'&riesgo=1' if riesgo == '1' else ''}&v={quote(stock_id, safe='')}")
+        mostrar = min(int(n), 10_000) if n.isdigit() else ventas.POR_PAGINA
+        d = ventas.datos(pg, app.state.conc, modos_de(request, pg), tipo, riesgo == "1", stock_id, app.state.hoy(),
+                         mostrar)
+        if d["detalle"].get("hay"):
+            d["detalle"].update(mensaje=mensaje, mensaje_ok=hecha)
+        return pintar(request, "_ventas.html", {"vista": "ventas", "d": d,
+                                                "banda_ejemplo": estados_de(request, pg).get("ventas") == "ejemplo"},
+                      pg=pg, usuario=u)
+
     @app.get("/marketing")
     def vista_marketing(request: Request, tipo: str = "todo", orden: str = "venta", pg=Depends(bd)):
         tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
@@ -356,7 +383,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
     @app.get("/estado-fuentes")
     def estado(request: Request, pg=Depends(bd)):
         u = exigir(request, pg, "estado")
-        return pintar(request, "estado_fuentes.html", {"e": mercado.estado_fuentes(pg), "vista": "estado"},
-                      pg=pg, usuario=u)
+        return pintar(request, "estado_fuentes.html", {"e": mercado.estado_fuentes(pg), "vista": "estado",
+                                                       "motor": alertas.estado_motor(pg)}, pg=pg, usuario=u)
 
     return app
