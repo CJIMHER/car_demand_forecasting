@@ -28,9 +28,7 @@ probabilidades sustituirán a los umbrales (docs/diseno.md, Señales y alertas).
 | Riesgo de inmovilización | ventas, dirección | `panel_riesgo_vehiculo` | Preparada |
 | Ventas fuera de la banda | dirección | `panel_ventas_mes` | Preparada |
 | Caída de leads | marketing | `panel_leads_dia` | Preparada |
-| Coste por lead fuera de rango | marketing | `panel_campana_dia` + `panel_leads_dia` | Preparada |
-| Campaña en «vigilar» o «revisar», con su eslabón | marketing | `panel_campana_salud` | Preparada |
-| Campaña sin citas | marketing | `panel_campana_dia` + `panel_leads_dia` | Preparada |
+| Campañas de Meta: reglas a, b, c, d, f y subir presupuesto | marketing | `panel_campana_dia` + `panel_leads_dia` (y Mercado en la zona cercana para la d) | Preparadas |
 | Ventana favorable para una campaña general | marketing | `panel_semana_campana` | Preparada |
 
 Reglas de mercado: solo evalúan un tipo (VN, VO) si hoy tiene captura completa y la tiene también el
@@ -41,6 +39,25 @@ precio). Si no se puede evaluar, sus alertas abiertas siguen abiertas: ni se cie
 Preparadas: se activan solas cuando sus tablas del panel tienen filas reales. Con solo filas de
 ejemplo, calculan sobre el ejemplo y su alerta va únicamente al técnico, con «[EJEMPLO]» delante
 (la base de datos no admite otra cosa). Sin filas, inactivas.
+
+### Criterios de las campañas de Meta
+
+Los de Cayetano, tal cual en `docs/criterios_marketing_meta.md`, con todos sus umbrales en
+`reglas.yaml` («criterios_meta»), los mismos para VN y VO. `criterios.py` los aplica a cada campaña
+activa desde su segundo día de vida y de ahí salen, con las mismas cifras: las alertas `meta_*` para
+marketing, la decisión de cada campaña (`panel_campana_decision`: continuar, revisar, parar o subir
+presupuesto) y la recomendación por modelo (`panel_recomendacion_modelo`).
+
+- a) lead → cita < 5 % (con al menos 20 leads) o fuera de zona > 30 %: revisar.
+- b) leads por visualización < 3 %, o menos de la mitad que las campañas del mismo modelo y mes de años anteriores: revisar.
+- c) coste por lead > 10 €: continuar si el coste por cita está en su media (la de las demás campañas de los últimos 90 días, +20 %); si no, parar. Sustituye a «el doble de su media de 28 días».
+- d) tasa de venta < 33 % (con al menos 6 citas) con coste por lead y por cita en su media: revisar, con los similares de la zona cercana (mismo modelo, acabado y motor).
+- e) lanzar solo con al menos 3 unidades propias en la zona cercana y nuestro precio por debajo de la mediana de la competencia (mismo modelo, acabado y motor); primero los de más stock y mejor precio. Es real desde ya: sale del precálculo de Mercado.
+- f) cansancio: leads por día de los 3 últimos días al menos un 30 % por debajo de los 7 anteriores, y coste por lead de esos 3 días > 10 €: revisar.
+- Subir presupuesto: todo a la vez (coste por lead < 10 €, por cita < 100 €, lead → cita > 5 %, tasa de venta > 33 %, por venta < 400 €, la regla e) y ninguna regla de revisión activa.
+
+Con poco volumen se muestra la cifra y la regla no salta. La comparación con la referencia por días
+de vida (`panel_campana_salud`) es solo detalle explicativo.
 
 ### Estados
 
@@ -53,7 +70,8 @@ abrieron: las nuevas y las que no salieron por un fallo de Telegram.
 
 Destinos en el `.env`: `TELEGRAM_CHAT_ID` (técnico), `TELEGRAM_CHAT_DIRECCION`,
 `TELEGRAM_CHAT_VENTAS` y `TELEGRAM_CHAT_MARKETING`. Si falta el de un rol, sus mensajes van al
-técnico con «[Para ventas]» delante. Cada envío queda en `alertas_salida`; un fallo se anota además
+técnico con «[Para ventas]» delante. Las alertas calculadas sobre filas de ejemplo no se envían salvo
+con `ALERTAS_ENVIAR_EJEMPLO=1` en el `.env` (se guardan y se ven en el panel igual). Cada envío queda en `alertas_salida`; un fallo se anota además
 en `fuentes_estado` y no rompe la tarea.
 
 ### Botones de Ventas

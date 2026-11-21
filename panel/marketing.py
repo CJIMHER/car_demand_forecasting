@@ -25,7 +25,16 @@ from panel import formato as fmt
 from panel import negocio as ng
 
 VENTANA = 28
-ACCIONES = (("aumentar", "Aumentar"), ("mantener", "Mantener"), ("reducir_cambiar", "Reducir o cambiar"))
+# Columnas de la recomendación por modelo (criterios de Meta, docs/criterios_marketing_meta.md). Las
+# acciones «reducir» y «cambiar» (datos de ejemplo de antes) y «parar» van en «Revisar o parar».
+ACCIONES = (("aumentar", "Subir presupuesto"), ("lanzar", "Lanzar"), ("mantener", "Continuar"),
+            ("revisar", "Revisar o parar"), ("no_lanzar", "No lanzar"))
+COLUMNA = {"reducir": "revisar", "cambiar": "revisar", "parar": "revisar"}
+CHIP = {"reducir": "Reducir", "cambiar": "Cambiar", "parar": "Parar"}
+DECISIONES = {"continuar": "Continuar", "revisar": "Revisar", "parar": "Parar", "subir": "Subir presupuesto",
+              "sin_juzgar": "Sin juzgar todavía"}
+NOMBRE_REGLA = {"a": "Regla a", "b": "Regla b", "c": "Regla c", "d": "Regla d", "e": "Regla e", "f": "Regla f",
+                "subir": "Subir presupuesto"}
 ESTADOS = {"bien": "Bien", "vigilar": "Vigilar", "revisar": "Revisar", "sin_datos": "Sin datos suficientes"}
 GRAVEDAD = {"revisar": 3, "vigilar": 2, "bien": 1}
 ESLABONES = {"entrega": "Entrega", "anuncio": "Anuncio", "web": "Web", "calidad_lead": "Calidad del lead",
@@ -176,6 +185,10 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
                 """SELECT campana_id, dias_vida, eslabon, medida, unidad, valor, ref_p10, ref_p50, ref_p90, prob_peor,
                           estado, n FROM panel_campana_salud WHERE origen = %s AND dia = %s""", (origen, salud_dia)):
             salud[fila[0]].append(fila)
+    decision_dia = ng.ultimo_dia(pg, "panel_campana_decision", origen)
+    decisiones = {c: (d, r) for c, d, r in pg.execute(
+        "SELECT campana_id, decision, reglas FROM panel_campana_decision WHERE origen = %s AND dia = %s",
+        (origen, decision_dia))} if decision_dia else {}
     filas = []
     for cid, titulo, ambito, modelo, inicio, gasto, ultimo in pg.execute(
             """SELECT campana_id, max(titulo), max(ambito), max(modelo), min(inicio),
@@ -198,6 +211,12 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
                     if s[10] in ("vigilar", "revisar"):
                         fallos.append(diagnostico(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[1], s[9], s[11]))
         coste = (lambda n: None) if comun else (lambda n: _div(gasto, n) if n else None)
+        decision, reglas = decisiones.get(cid, (None, []))
+        criterios = [f"{NOMBRE_REGLA[r['regla']]}: {r['texto']}" + (f". {r['revisar']}" if r.get("revisar") else "")
+                     + ("" if r["estado"] == "activa" else " (no salta)")
+                     for r in reglas if r["estado"] in ("activa", "sin_volumen") and r["regla"] != "e"]
+        salud_texto = (f"Frente a campañas con los mismos días de vida: {ESTADOS[estado]}"
+                       + (f" (n = {n_salud} campañas)" if n_salud else "")) if salud.get(cid) else ""
         filas.append({
             "nombre": titulo, "cpv_num": coste(ve), "gasto_num": gasto, "ambito": ambito, "comun": comun,
             "nota": AMBITOS[ambito] + (f" · {modelo}" if modelo else "")
@@ -206,16 +225,17 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
                     + ("" if ultimo == fin else " · terminada"),
             "gasto": _euros(gasto), "leads": fmt.miles(l), "citas": fmt.miles(c), "ventas": fmt.miles(ve),
             "cpl": _euros(coste(l)), "cpc": _euros(coste(c)), "cpv": _euros(coste(ve)),
-            "estado": estado if salud.get(cid) else None,
-            "estado_texto": ESTADOS[estado] if salud.get(cid) else "Sin datos todavía",
-            "fallos": fallos, "alerta": estado in ("vigilar", "revisar"),
-            "titulo_salud": f"n = {n_salud} campañas" if n_salud else "",
+            # La decisión sale de los criterios de Meta; la salud frente a su referencia es solo detalle
+            "decision": decision, "decision_texto": DECISIONES[decision] if decision else "Sin decidir todavía",
+            "criterios": criterios, "salud_texto": salud_texto, "estado": estado if salud.get(cid) else None,
+            "fallos": fallos, "alerta": decision in ("revisar", "parar"),
         })
     if orden == "gasto":
         filas.sort(key=lambda f: (-f["gasto_num"], f["nombre"]))
     else:
         filas.sort(key=lambda f: (f["cpv_num"] is None, f["cpv_num"] or 0, f["nombre"]))
     return ng.bloque(origen, filas=filas, orden=orden, hay_leads=hay_leads, hay_salud=bool(salud_dia),
+                     hay_decision=bool(decisiones),
                      tipo=tipo, hay_comun=any(f["comun"] for f in filas),
                      ordenes=[{"id": o, "etiqueta": e, "activa": o == orden, "url": f"/marketing?tipo={tipo}&orden={o}"}
                               for o, e in (("venta", "Por coste por venta"), ("gasto", "Por gasto"))])
@@ -229,12 +249,13 @@ def recomendacion(pg, origen, tipo: str = "todo") -> dict:
     grupos = {k: [] for k, _ in ACCIONES}
     for tipo_r, modelo, accion, motivo in pg.execute(
             """SELECT tipo, modelo, accion, motivo FROM panel_recomendacion_modelo
-               WHERE origen = %s AND dia = %s AND (%s = 'todo' OR tipo = %s) ORDER BY modelo, tipo""",
-            (origen, dia, tipo, tipo)):
-        clave = "reducir_cambiar" if accion in ("reducir", "cambiar") else accion
-        grupos[clave].append({"modelo": modelo, "motivo": motivo, "tipo": tipo_r if tipo == "todo" else None,
-                              "accion": {"reducir": "Reducir", "cambiar": "Cambiar"}.get(accion)})
-    return ng.bloque(origen, columnas=[{"clave": k, "titulo": t, "elementos": grupos[k]} for k, t in ACCIONES])
+               WHERE origen = %s AND dia = %s AND (%s = 'todo' OR tipo = %s)
+               ORDER BY prioridad NULLS LAST, modelo, tipo""", (origen, dia, tipo, tipo)):
+        grupos[COLUMNA.get(accion, accion)].append({"modelo": modelo, "motivo": motivo,
+                                                     "tipo": tipo_r if tipo == "todo" else None,
+                                                     "accion": CHIP.get(accion)})
+    return ng.bloque(origen, columnas=[{"clave": k, "titulo": t, "elementos": grupos[k]} for k, t in ACCIONES
+                                       if grupos[k]])
 
 
 def atencion(pg, origen) -> dict:

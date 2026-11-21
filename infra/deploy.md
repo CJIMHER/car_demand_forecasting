@@ -390,6 +390,18 @@ Desde ese momento el cron de `cdf_jobs` lanza `meta` (06:00), `ga4` (06:10), `al
 Después, rellenar `config/campanas.yaml` con las reglas de las campañas que salgan en «Estado de las
 fuentes» → «Campañas sin regla».
 
+### 7.10 Criterios de las campañas de Meta
+
+```bash
+make deploy          # migración 0010: zona cercana, decisión de cada campaña, recuento de código postal
+make precalcular     # rellena la zona cercana y las medianas propia y de la competencia (regla e)
+make alertas         # primera recomendación por modelo con la regla e
+```
+
+Las provincias de la zona cercana están en `config/concesionario.yaml` (`propio.provincias_cercanas`).
+Para recibir por Telegram también las alertas calculadas sobre datos de ejemplo: `ALERTAS_ENVIAR_EJEMPLO=1`
+en `/opt/cdf/.env` (por defecto, no).
+
 ## 8. Día a día
 
 ```bash

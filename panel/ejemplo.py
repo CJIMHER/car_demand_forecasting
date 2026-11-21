@@ -166,8 +166,13 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
         d += UN_DIA
     for (d, modelo, tipo, campana), (n, citas, ventas) in sorted(
             leads.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][3] or "")):
+        # Código postal (sesión criterios de Meta): de cada 10 leads, ~1 sin código postal y ~2 de fuera de
+        # la zona cercana; determinista. Solo el recuento: nunca el código.
+        con_cp = n - n // 10
+        fuera = (con_cp * (2 + (d.toordinal() + len(modelo)) % 2)) // 10
         filas["panel_leads_dia"].append({"dia": d, "modelo": modelo, "tipo": tipo, "campana_id": campana, "leads": n,
-                                         "citas": citas, "ventas": ventas})
+                                         "citas": citas, "ventas": ventas, "leads_cp_zona": con_cp - fuera,
+                                         "leads_cp_fuera": fuera})
 
     def leads_modelo(modelo, tipo, desde, hasta):
         return sum(v[0] for (d, m, t, _), v in leads.items() if m == modelo and t == tipo and desde <= d <= hasta)

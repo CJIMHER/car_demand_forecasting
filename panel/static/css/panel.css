@@ -286,10 +286,12 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .reco { border-top-width: 4px; }
 .reco-aumentar { border-top-color: var(--azul); }
 .reco-mantener { border-top-color: var(--eje); }
-.reco-reducir_cambiar { border-top-color: var(--ambar); }
+.reco-revisar { border-top-color: var(--ambar); }
+.reco-lanzar { border-top-color: var(--verde); }
+.reco-no_lanzar { border-top-color: var(--eje); }
 .reco-titulo { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gris-oscuro); }
 .reco-aumentar .reco-titulo { color: var(--azul-oscuro); }
-.reco-reducir_cambiar .reco-titulo { color: var(--marron); }
+.reco-revisar .reco-titulo { color: var(--marron); }
 .reco-modelo { font-size: 17px; font-weight: 600; }
 .reco-motivo { margin: 4px 0 0; font-size: 14px; color: var(--gris-oscuro); }
 .campana-nombre { display: block; font-weight: 600; color: var(--tinta); }
@@ -306,6 +308,12 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .chip-salud-vigilar { background: var(--aviso-fondo); color: var(--marron); }
 .chip-salud-revisar { background: #FBE3DC; color: #9A3412; }
 .chip-salud-sin_datos, .chip-salud-ninguno { background: var(--borde-suave); color: var(--gris-oscuro); }
+.chip-decision-continuar { background: #E3F4EC; color: #1F6E4F; }
+.chip-decision-subir { background: #E2EBFB; color: var(--azul-oscuro); }
+.chip-decision-revisar { background: var(--aviso-fondo); color: var(--marron); }
+.chip-decision-parar { background: #FBE3DC; color: #9A3412; }
+.chip-decision-sin_juzgar, .chip-decision-ninguna { background: var(--borde-suave); color: var(--gris-oscuro); }
+.criterio { margin: 0 0 4px; font-size: 14px; overflow-wrap: anywhere; }
 .atencion { display: grid; grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr) 36px; align-items: center; gap: 0 6px; }
 .atencion-modelo { font-size: 14px; }
 .atencion-barra { width: 100%; height: 18px; display: block; }

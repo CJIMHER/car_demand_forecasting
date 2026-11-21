@@ -94,8 +94,8 @@ def test_reglas_en_yaml_con_todo_lo_necesario():
     assert version
     assert {r.id for r in todas} == {
         "fuente_caida", "competidor_stock", "competidor_precio", "perdida_peso", "vehiculo_envejecido",
-        "riesgo_inmovilizacion", "ventas_fuera_banda", "caida_leads", "coste_lead", "campana_salud",
-        "campana_sin_citas", "ventana_favorable"}
+        "riesgo_inmovilizacion", "ventas_fuera_banda", "caida_leads", "meta_a", "meta_b", "meta_c", "meta_d",
+        "meta_f", "meta_subir", "ventana_favorable"}
     for r in todas:
         assert r.calculo in CALCULOS and r.roles and r.fuente and (r.datos.get("texto") or r.datos.get("textos"))
     assert {r.id: r.roles for r in todas}["fuente_caida"] == ("tecnico",)
@@ -291,7 +291,7 @@ def _curva(pg, origen="real", grupo="G1"):
 
 def test_preparadas_inactivas_sin_filas_reales(pg, conc):
     resumen = evaluar(pg, conc, "vehiculo_envejecido", "riesgo_inmovilizacion", "ventas_fuera_banda", "caida_leads",
-                      "coste_lead", "campana_salud", "campana_sin_citas", "ventana_favorable")
+                      "meta_a", "meta_b", "meta_c", "meta_d", "meta_f", "meta_subir", "ventana_favorable")
     assert all(t.startswith("inactiva: sin filas reales en panel_") for t in resumen["reglas"].values())
     assert alertas(pg) == [] and pg.execute("SELECT count(*) FROM alertas_evaluacion").fetchone() == (0,)
 
@@ -349,48 +349,6 @@ def _campana(pg, cid, titulo, gasto_por_dia, dias=35, inicio=None, ambito="VN"):
              gasto_cents=gasto_por_dia(i), impresiones=1000, clics=10)
 
 
-def test_coste_por_lead_disparado(pg, conc):
-    _campana(pg, "C1", "Golf noviembre", lambda i: 10_000)
-    _campana(pg, "C2", "Polo noviembre", lambda i: 10_000)
-    for i in range(35):
-        d = HOY - timedelta(days=i)
-        fila(pg, "panel_leads_dia", dia=d, modelo="Golf", tipo="VN", campana_id="C1", leads=1 if i >= 7 else 0,
-             citas=0, ventas=0)
-        fila(pg, "panel_leads_dia", dia=d, modelo="Polo", tipo="VN", campana_id="C2", leads=1, citas=0, ventas=0)
-    pg.execute("UPDATE panel_leads_dia SET leads = 2 WHERE campana_id = 'C1' AND dia = %s", (HOY - timedelta(days=1),))
-    evaluar(pg, conc, "coste_lead")
-    a = alertas(pg, "coste_lead")
-    # C1: 700 € / 2 leads = 350 € frente a 2.800 € / 28 = 100 €: 3,5 veces. C2: igual que siempre.
-    assert [(x["clave"], x["rol"]) for x in a] == [("C1", "marketing")]
-    assert a[0]["texto"] == ("Campaña «Golf noviembre»: coste por lead de 350 € en los últimos 7 días, 3,5 veces su "
-                             "media de 28 días (100 €).")
-
-
-def test_campana_en_vigilar_con_su_eslabon(pg, conc):
-    _campana(pg, "C1", "Golf noviembre", lambda i: 10_000, dias=1, inicio=HOY - timedelta(days=20))
-    for esl, estado, valor in (("anuncio", "vigilar", 0.8), ("web", "bien", 6.0)):
-        fila(pg, "panel_campana_salud", campana_id="C1", dias_vida=20, eslabon=esl, medida="Clics por impresión",
-             unidad="%", mejor="alto", valor=valor, ref_p10=1, ref_p50=1.4, ref_p90=2, prob_peor=0.82, estado=estado,
-             modelo_version="v", n=12)
-    evaluar(pg, conc, "campana_salud")
-    a = alertas(pg, "campana_salud")
-    assert [(x["clave"], x["rol"]) for x in a] == [("C1|anuncio", "marketing")]
-    assert a[0]["texto"] == ("Campaña «Golf noviembre»: el anuncio en «vigilar» (clics por impresión 0,8 % frente a "
-                             "1,4 % de referencia a los 20 días; probabilidad de ir peor, 82 %).")
-
-
-def test_campana_sin_citas(pg, conc):
-    _campana(pg, "C1", "Golf noviembre", lambda i: 10_000, dias=20)
-    _campana(pg, "C2", "Polo noviembre", lambda i: 10_000, dias=20)
-    _campana(pg, "C3", "Taigo noviembre", lambda i: 10_000, dias=5)       # demasiado joven
-    for c, citas in (("C1", 0), ("C2", 1), ("C3", 0)):
-        fila(pg, "panel_leads_dia", modelo="Golf", tipo="VN", campana_id=c, leads=8, citas=citas, ventas=0)
-    evaluar(pg, conc, "campana_sin_citas")
-    a = alertas(pg, "campana_sin_citas")
-    assert [(x["clave"], x["texto"]) for x in a] == [
-        ("C1", "Campaña «Golf noviembre»: 8 leads y ninguna cita en sus 19 días de vida.")]
-
-
 def test_ventana_favorable(pg, conc):
     lunes = HOY - timedelta(days=HOY.weekday())
     for k, nivel in enumerate(("favorable", "favorable", "normal", "favorable")):
@@ -411,17 +369,17 @@ def test_con_filas_de_ejemplo_solo_va_al_tecnico_y_con_ejemplo_delante(pg, conc)
     ejemplo.cargar(pg, HOY, conc)
     resumen = motor.evaluar(pg, HOY, conc)
     origenes = dict(pg.execute("SELECT regla, origen FROM alertas_evaluacion").fetchall())
-    for r in ("vehiculo_envejecido", "riesgo_inmovilizacion", "ventas_fuera_banda", "caida_leads", "coste_lead",
-              "campana_salud", "campana_sin_citas", "ventana_favorable"):
+    for r in ("vehiculo_envejecido", "riesgo_inmovilizacion", "ventas_fuera_banda", "caida_leads", "meta_a",
+              "meta_b", "meta_c", "meta_d", "meta_f", "meta_subir", "ventana_favorable"):
         assert origenes[r] == "ejemplo", (r, resumen["reglas"][r])
     de_ejemplo = [a for a in alertas(pg) if a["origen"] == "ejemplo"]
     assert len(de_ejemplo) > 5
     assert {a["rol"] for a in de_ejemplo} == {"tecnico"}
     assert all(a["texto"].startswith("[EJEMPLO] ") for a in de_ejemplo)
-    # Y por Telegram: solo el chat del técnico recibe algo
+    # Por Telegram, solo con ALERTAS_ENVIAR_EJEMPLO=1, y entonces solo al chat del técnico
     t = Telegram()
-    envio.enviar_dia(pg, HOY, enviar=t, entorno=CHATS)
-    assert {c for c, _ in t.enviados} == {"-100"}
+    envio.enviar_dia(pg, HOY, enviar=t, entorno={**CHATS, "ALERTAS_ENVIAR_EJEMPLO": "1"})
+    assert {c for c, _ in t.enviados} == {"-100"} and any("[EJEMPLO]" in x for _, x in t.enviados)
     # La base no admite una alerta de ejemplo para otro rol
     with pytest.raises(psycopg.errors.CheckViolation):
         pg.execute("""INSERT INTO alertas (fecha, regla, rol, clave, tema, nivel, texto, origen, estado, abierta_desde)
@@ -565,7 +523,7 @@ def test_la_tarea_entera_anota_y_un_fallo_de_telegram_no_la_rompe(pg, conc, monk
     assert motor.ejecutar(HOY, enviar=fallo, entorno=CHATS) == 0
     estado, detalle = pg.execute("SELECT estado, detalle FROM fuentes_estado WHERE fuente = 'alertas'").fetchone()
     assert estado == "ok" and detalle["nuevas"] >= 2 and detalle["envio"]["tecnico"].startswith("error")
-    assert "inactiva" in detalle["reglas"]["coste_lead"]
+    assert "inactiva" in detalle["reglas"]["meta_c"]
 
 
 def test_sin_ningun_modelo_de_lenguaje():
@@ -667,3 +625,31 @@ def test_migracion_0009_ida_y_vuelta(pg_url, pg):
     anotar(pg, "alertas", "alertas", "ok")
     with pytest.raises(Exception):
         command.downgrade(cfg, "0008")
+
+
+def test_alertas_de_ejemplo_no_se_envian_por_defecto(pg, conc):
+    """Se guardan y se ven en el panel, pero no salen por Telegram sin ALERTAS_ENVIAR_EJEMPLO=1."""
+    ejemplo.cargar(pg, HOY, conc)
+    todo_en_orden(pg)
+    motor.evaluar(pg, HOY, conc)
+    de_ejemplo = [a for a in alertas(pg) if a["origen"] == "ejemplo"]
+    assert de_ejemplo
+    for valor in (None, "", "0", "si"):
+        t = Telegram()
+        entorno = dict(CHATS) if valor is None else {**CHATS, "ALERTAS_ENVIAR_EJEMPLO": valor}
+        envio.enviar_dia(pg, HOY, enviar=t, entorno=entorno)
+        assert t.enviados == [], valor
+    assert pg.execute("SELECT count(*) FROM alertas_salida").fetchone() == (0,)
+    # Con una alerta real el mismo día, esa sí sale, y sin las de ejemplo
+    anotar(pg, "vo", "comprobacion", "sin_captura", ultima_captura="2026-11-18")
+    motor.evaluar(pg, HOY, conc, reglas("fuente_caida"))
+    t = Telegram()
+    envio.enviar_dia(pg, HOY, enviar=t, entorno=CHATS)
+    (chat, texto), = t.enviados
+    assert chat == "-100" and "[EJEMPLO]" not in texto and "Scraper VO" in texto
+    salida = pg.execute("SELECT alertas FROM alertas_salida").fetchone()[0]
+    assert {a["origen"] for a in salida} == {"real"}
+    # Y con la variable a 1, salen las de ejemplo que faltaban
+    t = Telegram()
+    envio.enviar_dia(pg, HOY, enviar=t, entorno={**CHATS, "ALERTAS_ENVIAR_EJEMPLO": "1"})
+    assert len(t.enviados) == 1 and "[EJEMPLO]" in t.enviados[0][1]

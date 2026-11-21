@@ -14,6 +14,9 @@ Qué se envía:
   Las pide el panel (tabla acciones) y las envía cdf_jobs cada minuto: el panel no tiene el token.
   Con datos de ejemplo, solo al técnico y con «[EJEMPLO]» delante.
 
+Las alertas calculadas sobre filas de ejemplo (solo para el técnico, con «[EJEMPLO]») no se envían
+salvo con ALERTAS_ENVIAR_EJEMPLO=1 en el .env; se guardan igual y se ven en el panel.
+
 Cada envío queda en alertas_salida (enviado o error). Un fallo se anota también en fuentes_estado
 (fuente 'telegram', tipo 'aviso') y no rompe la tarea.
 """
@@ -114,8 +117,11 @@ def enviar_dia(pg: psycopg.Connection, dia: date, enviar=None, entorno: Mapping[
     entorno = os.environ if entorno is None else entorno
     enviar = enviar or telegram.enviar
     resultado = {}
+    con_ejemplo = (entorno.get("ALERTAS_ENVIAR_EJEMPLO") or "").strip() == "1"
     for rol in ROLES:
-        filas = pendientes(pg, dia, rol)
+        # Las calculadas sobre filas de ejemplo se guardan y se ven en el panel, pero no se envían
+        # salvo con ALERTAS_ENVIAR_EJEMPLO=1 en el .env
+        filas = [f for f in pendientes(pg, dia, rol) if con_ejemplo or f["origen"] != "ejemplo"]
         if not filas:
             continue
         dest, chat = destino(rol, entorno)

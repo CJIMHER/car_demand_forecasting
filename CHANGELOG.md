@@ -1,5 +1,33 @@
 # Cambios
 
+## 2026-11-21 · Criterios de Cayetano para las campañas de Meta (rama hito-1b-criterios-meta)
+
+- **Criterios** guardados tal cual en `docs/criterios_marketing_meta.md` y llevados a
+  `alertas/reglas.yaml` («criterios_meta»: todos los umbrales y volúmenes, iguales para VN y VO).
+  `alertas/criterios.py` los aplica a cada campaña desde su segundo día de vida, con fracciones exactas
+  (4,99 % salta, 5 % no).
+  - Reglas a, b, c, d y f, y subir presupuesto. Lead → cita solo con al menos 20 leads y tasa de
+    venta con al menos 6 citas; con menos se muestra la cifra sin saltar.
+  - Cada alerta y cada recomendación lleva su regla, sus cifras frente al umbral y su n.
+  - Sustituyen a tres reglas de la sesión 3: «coste por lead del doble de su media de 28 días»,
+    «campaña en vigilar o revisar» y «campaña sin citas».
+- **Decisión de cada campaña** (tabla nueva `panel_campana_decision`): continuar, revisar, parar o
+  subir presupuesto. En Marketing es la columna de la tabla de campañas; la salud frente a su
+  referencia queda como detalle.
+- **Recomendación por modelo**: la de sus campañas o, sin campaña, la regla e (lanzar o no lanzar,
+  con prioridad por stock y precio). Es real desde ya, con el mercado.
+- **Zona cercana** (provincia propia + `propio.provincias_cercanas` de `config/concesionario.yaml`)
+  como zona del precálculo y del selector de Mercado. En los segmentos, nuestra mediana de precio y la
+  de la competencia por separado.
+- **Contrato**: `panel_leads_dia.leads_cp_zona` y `leads_cp_fuera` (recuento dentro y fuera de la zona
+  cercana; el código postal nunca se guarda), preparados para Walcu.
+- **Alertas de ejemplo**: no se envían por Telegram salvo con `ALERTAS_ENVIAR_EJEMPLO=1`; se guardan
+  y se ven igual.
+- **Migración `0010`**.
+- **Pruebas**: `tests/test_criterios_meta.py` (casos en el borde de cada umbral, volumen mínimo,
+  subir con una regla de revisión activa, regla e con el mismo modelo, acabado y motor en la zona
+  cercana, zona cercana frente a SQL directo, migración) y la de `ALERTAS_ENVIAR_EJEMPLO`.
+
 ## 2026-11-21 · Hito 1b, sesión 3: alertas por rol, botones de Ventas y conectores de Meta y GA4 (rama hito-1b-sesion-3)
 
 Encargo en `docs/hitos/hito_1b_sesion_3.md`.

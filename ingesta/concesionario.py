@@ -43,6 +43,18 @@ class Concesionario:
     # configuración no los trae: entonces no se calcula la matriz de antigüedad y km.
     tramos_antiguedad: tuple[tuple[int | None, str], ...] = ()
     tramos_km: tuple[tuple[int | None, str], ...] = ()
+    # Zona cercana: la provincia propia y las de propio.provincias_cercanas (criterios de Meta, regla e;
+    # zona «cercana» de Mercado). Sin provincias cercanas, solo la propia.
+    provincias_cercanas: tuple[str, ...] = ()
+
+    @property
+    def zona_cercana(self) -> tuple[str, ...]:
+        return (self.provincia_codigo,) + tuple(p for p in self.provincias_cercanas if p != self.provincia_codigo)
+
+    @property
+    def zona_cercana_nombre(self) -> str:
+        nombres = [PROVINCIAS[p] for p in self.zona_cercana]
+        return nombres[0] if len(nombres) == 1 else ", ".join(nombres[:-1]) + " y " + nombres[-1]
 
 
 def ruta() -> Path:
@@ -60,6 +72,9 @@ def cargar(fichero: Path | None = None) -> Concesionario:
     if prov not in PROVINCIAS:
         raise ErrorConfiguracion(f"config/concesionario.yaml: provincia_codigo {prov!r} no es un código INE (01–52)")
     ccaa_codigo, ccaa, provincias = comunidad(prov)
+    cercanas = tuple(str(c).strip().zfill(2) for c in (propio.get("provincias_cercanas") or []))
+    if any(c not in PROVINCIAS for c in cercanas):
+        raise ErrorConfiguracion("config/concesionario.yaml: provincias_cercanas lleva un código que no es INE (01–52)")
     return Concesionario(
         nombre=str(propio["nombre"]),
         nombre_panel=str(propio["nombre_panel"]),
@@ -78,6 +93,7 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         n_minimo_mostrar=int(panel.get("n_minimo_mostrar", 3)),
         tramos_antiguedad=_tramos(cfg, "antiguedad_anios"),
         tramos_km=_tramos(cfg, "km"),
+        provincias_cercanas=cercanas,
     )
 
 

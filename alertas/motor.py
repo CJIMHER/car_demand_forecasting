@@ -41,7 +41,7 @@ import psycopg
 import yaml
 from psycopg.types.json import Jsonb
 
-from alertas import envio
+from alertas import criterios, envio
 from alertas.reglas import CALCULOS, TODOS, Contexto, Resultado
 from ingesta import telegram
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
@@ -101,6 +101,17 @@ def cargar_reglas(fichero: Path | None = None) -> tuple[str, list[Regla]]:
     return str(cfg.get("version") or "sin versión"), reglas
 
 
+def cargar_criterios(fichero: Path | None = None) -> dict:
+    """«criterios_meta» de alertas/reglas.yaml (docs/criterios_marketing_meta.md)."""
+    cfg = yaml.safe_load((fichero or AQUI / "reglas.yaml").read_text(encoding="utf-8")) or {}
+    crit = cfg.get("criterios_meta")
+    faltan = [k for k in ("dias_vida_minimos", "media_dias", "media_tolerancia_pct", "a", "b", "c", "d", "e", "f",
+                          "subir") if not crit or k not in crit]
+    if faltan:
+        raise ErrorReglas(f"alertas/reglas.yaml: faltan en criterios_meta {', '.join(faltan)}")
+    return crit
+
+
 def origen_regla(regla: Regla, modos: dict[str, contrato.Modo]) -> tuple[str | None, str | None]:
     """(origen, motivo si queda inactiva). Real si todas sus tablas del contrato tienen filas reales;
     si no, ejemplo si todas tienen filas de ejemplo; si no, inactiva."""
@@ -156,11 +167,15 @@ COLS = ("fecha", "regla", "rol", "clave", "tema", "nivel", "tipo", "texto", "cif
 
 
 def evaluar(pg: psycopg.Connection, dia: date, conc: Concesionario | None = None,
-            reglas: list[Regla] | None = None) -> dict:
-    """Evalúa todas las reglas el día `dia` y escribe alertas y alertas_evaluacion. Devuelve el resumen."""
+            reglas: list[Regla] | None = None, criterios: dict | None = None, version: str | None = None) -> dict:
+    """Evalúa las reglas el día `dia` y escribe alertas y alertas_evaluacion; con las de los criterios
+    de Meta, también la decisión de cada campaña y la recomendación por modelo. Devuelve el resumen."""
     conc = conc or cargar_concesionario()
-    if reglas is None:
-        _, reglas = cargar_reglas()
+    if reglas is None or version is None:
+        v, todas = cargar_reglas()
+        reglas = todas if reglas is None else reglas
+        version = version or v
+    memo = {"criterios": criterios or cargar_criterios()}
     modos = contrato.modos(pg)
     resumen: dict = {"dia": str(dia), "reglas": {}, "nuevas": 0, "abiertas": 0, "cerradas": 0}
     for regla in reglas:
@@ -168,7 +183,7 @@ def evaluar(pg: psycopg.Connection, dia: date, conc: Concesionario | None = None
         if origen is None:
             resumen["reglas"][regla.id] = f"inactiva: {motivo}"
             continue
-        res = CALCULOS[regla.calculo](Contexto(pg, dia, conc, origen, regla.datos))
+        res = CALCULOS[regla.calculo](Contexto(pg, dia, conc, origen, regla.datos, memo))
         previas = _anteriores(pg, regla.id, origen, dia)
         filas = filas_de(regla, origen, dia, res, previas)
         with pg.transaction():
@@ -189,7 +204,30 @@ def evaluar(pg: psycopg.Connection, dia: date, conc: Concesionario | None = None
             resumen[clave] += estados.count(e)
         resumen["reglas"][regla.id] = (f"{origen}: {len(res.disparos)} disparadas"
                                        + (f" (sin evaluar: {res.motivo})" if res.motivo else ""))
+    if any(r.calculo == "criterio_meta" for r in reglas):
+        resumen["criterios_meta"] = _criterios_meta(pg, dia, conc, reglas, modos, memo, version)
     return resumen
+
+
+def _criterios_meta(pg, dia: date, conc, reglas: list[Regla], modos, memo: dict, version: str) -> dict:
+    """Decisión de cada campaña (con el origen de sus datos) y recomendación por modelo (real: la de sus
+    campañas reales o, sin campaña, la regla e con el mercado, que siempre es real)."""
+    regla = next(r for r in reglas if r.calculo == "criterio_meta")
+    origen, _ = origen_regla(regla, modos)
+    crit = memo["criterios"]
+    modelos_e = memo.get("modelos_e")
+    if modelos_e is None:
+        modelos_e = memo["modelos_e"] = criterios.regla_e(pg, dia, conc, crit)
+    juicios = []
+    if origen:
+        clave = ("juicios", origen)
+        if clave not in memo:
+            memo[clave] = criterios.juzgar(pg, dia, origen, conc, crit, modelos_e)
+        juicios = memo[clave][1]
+        criterios.escribir_decisiones(pg, dia, origen, juicios, version)
+    filas = criterios.recomendaciones(dia, modelos_e, juicios if origen == contrato.REAL else [], version)
+    criterios.escribir_recomendaciones(pg, dia, filas)
+    return {"origen_campanas": origen, "campanas": len(juicios), "recomendaciones": len(filas)}
 
 
 # --------------------------------------------------------------------------- línea de órdenes
@@ -209,7 +247,7 @@ def ejecutar(dia: date | None = None, sin_telegram: bool = False, enviar=None, e
             paso = "reglas"
             version, reglas = cargar_reglas()
             paso = "evaluación"
-            resumen = evaluar(pg, dia, reglas=reglas)
+            resumen = evaluar(pg, dia, reglas=reglas, version=version)
             resumen["version"] = version
             paso = "envío"
             resumen["envio"] = envio.enviar_dia(pg, dia, enviar=enviar, entorno=entorno, sin_telegram=sin_telegram)

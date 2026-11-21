@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # servidor, «make test» corre en cdf_jobs, que recibe /opt/cdf/.env entero como env_file (y
 # CDF_SCRAPERS_DATA del compose): sin esto, las pruebas verían la configuración de producción.
 # Se quedan PG* y CDF_TEST_PG, que dicen a las pruebas dónde está el Postgres de pruebas.
-PREFIJOS_DEL_HOST = ("PANEL_", "TELEGRAM_", "RCLONE_", "POSTGRES_", "META_", "GA4_")
+PREFIJOS_DEL_HOST = ("PANEL_", "TELEGRAM_", "RCLONE_", "POSTGRES_", "META_", "GA4_", "ALERTAS_")
 VARIABLES_DEL_HOST = ("BUCKET", "BACKUP_PASSPHRASE", "CDF_DATABASE_URL", "CDF_SCRAPERS_DATA", "CDF_CONCESIONARIO",
                       "CDF_VERSIONES", "CDF_CAMPANAS", "CDF_ENV_FILE", "CDF_PYTHON")
 

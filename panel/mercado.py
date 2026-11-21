@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 from ingesta.concesionario import Concesionario
 from panel import formato as fmt
 
-ZONAS = ("provincia", "comunidad", "espana")
+ZONAS = ("provincia", "cercana", "comunidad", "espana")
 TIPOS = ("VN", "VO")
 FUENTES = (
     ("vo", "Ocasión"),
@@ -29,7 +29,9 @@ MOTIVO_VENTANA = "falta alguna captura completa de los últimos 7 días"
 
 
 def etiquetas_zona(conc: Concesionario) -> dict[str, str]:
-    return {"provincia": conc.provincia, "comunidad": conc.comunidad, "espana": "España"}
+    """La zona cercana (provincia propia y propio.provincias_cercanas) se llama así en el selector; qué
+    provincias son lo dice zona_cercana_nombre."""
+    return {"provincia": conc.provincia, "cercana": "Zona cercana", "comunidad": conc.comunidad, "espana": "España"}
 
 
 def capturas(pg: psycopg.Connection, hoy: date) -> list[dict]:

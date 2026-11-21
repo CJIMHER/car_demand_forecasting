@@ -726,7 +726,9 @@ def test_migracion_0008_ida_y_vuelta(pg_url, pg, datos):
               "acabado_motor_antiguedad_km")
     assert pg.execute("SELECT count(DISTINCT nivel) FROM panel_mercado_segmento WHERE nivel = ANY(%s)",
                       (list(nuevos),)).fetchone() == (4,)
-    antes = pg.execute("SELECT count(*) FROM panel_mercado_segmento WHERE nivel <> ALL(%s)", (list(nuevos),)).fetchone()
+    # (bajar a 0007 pasa por 0010, que quita la zona cercana)
+    antes = pg.execute("SELECT count(*) FROM panel_mercado_segmento WHERE nivel <> ALL(%s) AND zona <> 'cercana'",
+                       (list(nuevos),)).fetchone()
     command.downgrade(cfg, "0007")
     assert pg.execute("SELECT count(*) FROM panel_mercado_segmento").fetchone() == antes
     command.upgrade(cfg, "head")

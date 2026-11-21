@@ -64,7 +64,7 @@ LOG = logging.getLogger("analitica.mercado")
 
 TIPOS = {"VO": ("vo",), "VN": ("vn", "vn_otros")}
 FUENTES = ("vo", "vn", "vn_otros")
-ZONAS = ("provincia", "comunidad", "espana")
+ZONAS = ("provincia", "cercana", "comunidad", "espana")
 SIN_MODELO = "Sin modelo"
 UN_DIA = timedelta(days=1)
 
@@ -194,11 +194,14 @@ class Hechos:
         return {k: v for k, v in self._dias[dia].items() if k[0] in fuentes}
 
     def zonas(self, provincia: str | None) -> tuple[str, ...]:
-        if provincia == self.conc.provincia_codigo:
-            return ZONAS
-        if provincia in self.conc.provincias_comunidad:
-            return ("comunidad", "espana")
-        return ("espana",)
+        """Zonas en que cuenta un anuncio: la provincia propia; la zona cercana (la propia y las de
+        propio.provincias_cercanas); la comunidad; España."""
+        if provincia is None:
+            return ("espana",)
+        return tuple(z for z, dentro in (("provincia", provincia == self.conc.provincia_codigo),
+                                         ("cercana", provincia in self.conc.zona_cercana),
+                                         ("comunidad", provincia in self.conc.provincias_comunidad),
+                                         ("espana", True)) if dentro)
 
 
 # --------------------------------------------------------------------------- cálculo de un día
@@ -225,7 +228,8 @@ def calcular_dia(h: Hechos, dia: date, tipo: str) -> tuple[list[dict], list[dict
                 if h.primero[clave] == d:
                     altas7[clave] = fila
 
-    nombres = {"provincia": h.conc.provincia, "comunidad": h.conc.comunidad, "espana": "España"}
+    nombres = {"provincia": h.conc.provincia, "cercana": h.conc.zona_cercana_nombre, "comunidad": h.conc.comunidad,
+               "espana": "España"}
     filas_dia, filas_modelo, filas_conc = [], [], []
     for zona in ZONAS:
         en_zona = lambda f: zona in h.zonas(f.provincia)  # noqa: E731

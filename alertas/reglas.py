@@ -28,8 +28,6 @@ TIPOS = ("VN", "VO")
 TIPO_TEXTO = {"VN": "nuevos", "VO": "de ocasión"}
 SCRAPERS = {"vo": "VO", "vn": "VN", "vn_otros": "VN eléctricos e híbridos"}
 CONECTORES = {"meta": "Meta", "ga4": "GA4"}
-ESLABONES = {"entrega": "la entrega", "anuncio": "el anuncio", "web": "la web", "calidad_lead": "la calidad del lead",
-             "stock": "el stock"}
 
 
 @dataclass
@@ -55,6 +53,7 @@ class Contexto:
     conc: Concesionario
     origen: str
     regla: dict
+    memo: dict = field(default_factory=dict)   # compartido por las reglas de una pasada (criterios de Meta)
 
     @property
     def u(self) -> dict:
@@ -331,103 +330,27 @@ def caida_leads(ctx: Contexto) -> Resultado:
     return r
 
 
-def _campanas(ctx: Contexto) -> tuple[date | None, dict]:
-    dia = ctx.ultimo_dia("panel_campana_dia")
-    if dia is None:
-        return None, {}
-    filas = ctx.pg.execute(
-        """SELECT DISTINCT ON (campana_id) campana_id, titulo, ambito, inicio FROM panel_campana_dia
-           WHERE origen = %s AND dia <= %s ORDER BY campana_id, dia DESC""", (ctx.origen, dia)).fetchall()
-    return dia, {c: {"titulo": t, "ambito": a, "inicio": i} for c, t, a, i in filas}
-
-
-def _tipo_ambito(ambito: str) -> str | None:
-    return ambito if ambito in TIPOS else None
-
-
-def coste_lead(ctx: Contexto) -> Resultado:
+def criterio_meta(ctx: Contexto) -> Resultado:
+    """Reglas a, b, c, d, f y subir presupuesto de los criterios de Meta (alertas/criterios.py)."""
+    from alertas import criterios as cr
+    clave = ("juicios", ctx.origen)
+    if clave not in ctx.memo:
+        crit = ctx.memo["criterios"]
+        if "modelos_e" not in ctx.memo:
+            ctx.memo["modelos_e"] = cr.regla_e(ctx.pg, ctx.hoy, ctx.conc, crit)
+        ctx.memo[clave] = cr.juzgar(ctx.pg, ctx.hoy, ctx.origen, ctx.conc, crit, ctx.memo["modelos_e"])
+    _, juicios = ctx.memo[clave]
+    letra = ctx.regla["criterio"]
     r = Resultado()
-    dia, campanas = _campanas(ctx)
-    if dia is None:
-        return r
-    u = ctx.u
-    corto, largo = int(u["dias"]), int(u["dias_referencia"])
-    corte, inicio = dia - timedelta(days=corto), dia - timedelta(days=corto + largo)
-    gasto: dict[str, list[int]] = defaultdict(lambda: [0, 0])
-    leads: dict[str, list[int]] = defaultdict(lambda: [0, 0])
-    for c, d, g in ctx.pg.execute("SELECT campana_id, dia, gasto_cents FROM panel_campana_dia WHERE origen = %s "
-                                  "AND dia > %s AND dia <= %s", (ctx.origen, inicio, dia)):
-        gasto[c][0 if d > corte else 1] += int(g)
-    for c, d, n in ctx.pg.execute("SELECT campana_id, dia, sum(leads) FROM panel_leads_dia WHERE origen = %s "
-                                  "AND campana_id IS NOT NULL AND dia > %s AND dia <= %s GROUP BY 1, 2",
-                                  (ctx.origen, inicio, dia)):
-        leads[c][0 if d > corte else 1] += int(n)
-    for c in sorted(gasto):
-        (g7, gref), (l7, lref) = gasto[c], leads[c]
-        if lref < u["leads_minimos"] or l7 == 0 or gref == 0:
+    for j in juicios:
+        res = j.reglas.get(letra)
+        if res is None or not res.activa:
             continue
-        cpl, ref = g7 / l7, gref / lref
-        factor = cpl / ref
-        if factor >= u["factor_maximo"]:
-            info = campanas.get(c, {"titulo": c, "ambito": None})
-            r.disparos.append(Disparo(
-                c, {"campana_id": c, "cpl_cents": round(cpl), "cpl_referencia_cents": round(ref), "factor": round(factor, 2),
-                    "leads": l7, "leads_referencia": lref},
-                {"titulo": info["titulo"], "cpl": fmt.euros(cpl), "cpl_ref": fmt.euros(ref), "factor": _pct(factor),
-                 "dias": str(corto), "dias_referencia": str(largo)}, tipo=_tipo_ambito(info["ambito"])))
-    return r
-
-
-def _medida(valor, unidad: str) -> str:
-    if valor is None:
-        return fmt.GUION
-    v = float(valor)
-    if unidad == "%":
-        return f"{_pct(v)} %"
-    if unidad == "€":
-        return f"{fmt.decimal(v, 2)} €"
-    return f"{fmt.decimal(v, 0 if v == int(v) else 1)} {unidad}"
-
-
-def campana_salud(ctx: Contexto) -> Resultado:
-    r = Resultado()
-    dia = ctx.ultimo_dia("panel_campana_salud")
-    if dia is None:
-        return r
-    _, campanas = _campanas(ctx)
-    for c, vida, eslabon, medida, unidad, valor, ref, prob, estado in ctx.pg.execute(
-            """SELECT campana_id, dias_vida, eslabon, medida, unidad, valor, ref_p50, prob_peor, estado
-               FROM panel_campana_salud WHERE origen = %s AND dia = %s AND estado IN ('vigilar', 'revisar')
-               ORDER BY campana_id, eslabon""", (ctx.origen, dia)):
-        info = campanas.get(c, {"titulo": c, "ambito": None})
+        decision = {"subir": "subir presupuesto"}.get(res.decision, res.decision)
         r.disparos.append(Disparo(
-            f"{c}|{eslabon}", {"campana_id": c, "eslabon": eslabon, "estado": estado, "valor": float(valor),
-                               "referencia_p50": float(ref), "prob_peor": float(prob), "dias_vida": vida},
-            {"titulo": info["titulo"], "eslabon": ESLABONES[eslabon], "estado": estado, "medida": medida.lower(),
-             "valor": _medida(valor, unidad), "referencia": _medida(ref, unidad), "dias_vida": str(vida),
-             "prob": _pct(float(prob) * 100, 0)}, tipo=_tipo_ambito(info["ambito"])))
-    return r
-
-
-def campana_sin_citas(ctx: Contexto) -> Resultado:
-    r = Resultado()
-    dia, campanas = _campanas(ctx)
-    if dia is None:
-        return r
-    activas = {c for (c,) in ctx.pg.execute("SELECT campana_id FROM panel_campana_dia WHERE origen = %s AND dia = %s "
-                                            "AND gasto_cents > 0", (ctx.origen, dia))}
-    for c in sorted(activas):
-        info = campanas[c]
-        vida = (dia - info["inicio"]).days
-        if vida < ctx.u["dias_vida_minimos"]:
-            continue
-        leads, citas = ctx.pg.execute(
-            "SELECT coalesce(sum(leads), 0), coalesce(sum(citas), 0) FROM panel_leads_dia WHERE origen = %s "
-            "AND campana_id = %s AND dia >= %s AND dia <= %s", (ctx.origen, c, info["inicio"], dia)).fetchone()
-        if leads >= ctx.u["leads_minimos"] and citas == 0:
-            r.disparos.append(Disparo(c, {"campana_id": c, "leads": int(leads), "citas": 0, "dias_vida": vida},
-                                      {"titulo": info["titulo"], "leads": fmt.miles(leads), "dias_vida": str(vida)},
-                                      tipo=_tipo_ambito(info["ambito"])))
+            j.campana_id, {"campana_id": j.campana_id, "regla": letra, "decision": res.decision, **res.cifras},
+            {"titulo": j.titulo, "decision": decision, "cifras": res.cifras_texto, "revisar": res.revisar},
+            tipo=j.tipo))
     return r
 
 
@@ -454,4 +377,4 @@ def ventana_favorable(ctx: Contexto) -> Resultado:
 
 CALCULOS = {f.__name__: f for f in (fuente_caida, competidor_stock, competidor_precio, perdida_peso,
                                     vehiculo_envejecido, riesgo_inmovilizacion, ventas_fuera_banda, caida_leads,
-                                    coste_lead, campana_salud, campana_sin_citas, ventana_favorable)}
+                                    criterio_meta, ventana_favorable)}

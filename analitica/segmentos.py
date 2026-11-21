@@ -14,7 +14,8 @@ se guarda en el nivel motor y en los niveles de la matriz con combustible o moto
 identifica por su combustible y su texto («eTSI 150 CV · Gasolina · Automático»).
 
 Por segmento: anuncios, propios, precio p25/p50/p75 de los que tienen precio (interpolación lineal,
-como percentile_cont de Postgres) y días publicado (mediana inferior con la cota «≥ N», la misma
+como percentile_cont de Postgres), la mediana de los nuestros y la de la competencia por separado,
+y días publicado (mediana inferior con la cota «≥ N», la misma
 regla que la tabla por modelo).
 
 Antigüedad: años cumplidos desde la primera matriculación hasta el día de la captura. Km: el del
@@ -68,7 +69,7 @@ def percentil(orden: list[int], p: float) -> int | None:
 
 
 def _vacio() -> dict:
-    return {"anuncios": 0, "propios": 0, "precios": [], "edades": []}
+    return {"anuncios": 0, "propios": 0, "precios": [], "precios_propios": [], "edades": []}
 
 
 def calcular(h, dia: date, tipo: str, catalogo: Catalogo) -> tuple[list[dict], list[dict]]:
@@ -110,11 +111,15 @@ def calcular(h, dia: date, tipo: str, catalogo: Catalogo) -> tuple[list[dict], l
                 g["propios"] += f.es_propio
                 if f.precio_cents is not None:
                     g["precios"].append(f.precio_cents)
+                    if f.es_propio:
+                        g["precios_propios"].append(f.precio_cents)
                 g["edades"].append(edad)
 
     filas = []
     for (zona, nivel, modelo, acabado, comb, motor, ant, km, color), g in grupos.items():
         precios = sorted(g["precios"])
+        propios = sorted(g["precios_propios"])
+        competencia = sorted((Counter(precios) - Counter(propios)).elements()) if propios else precios
         med, cota = dias_publicado(g["edades"])
         filas.append({
             "dia": dia, "tipo": tipo, "zona": zona, "nivel": nivel, "modelo": modelo,
@@ -125,6 +130,9 @@ def calcular(h, dia: date, tipo: str, catalogo: Catalogo) -> tuple[list[dict], l
             "color": color, "anuncios": g["anuncios"], "propios": g["propios"], "n_precio": len(precios),
             "precio_p25_cents": percentil(precios, 0.25), "precio_p50_cents": percentil(precios, 0.5),
             "precio_p75_cents": percentil(precios, 0.75), "dias_mediana": med, "dias_cota": cota,
+            # Nuestro precio y el de la competencia por separado (criterios de Meta, reglas d y e)
+            "n_precio_propios": len(propios), "precio_propios_p50_cents": percentil(propios, 0.5),
+            "n_precio_competencia": len(competencia), "precio_competencia_p50_cents": percentil(competencia, 0.5),
         })
     otras = [{"dia": dia, "tipo": tipo, "modelo": m, "version": t, "anuncios": n}
              for (m, t), n in sin_clasificar.items()]
@@ -133,5 +141,6 @@ def calcular(h, dia: date, tipo: str, catalogo: Catalogo) -> tuple[list[dict], l
 
 COLS_SEGMENTO = ["dia", "tipo", "zona", "nivel", "modelo", "acabado", "acabado_reconocido", "combustible", "motor",
                  "antiguedad", "antiguedad_orden", "km", "km_orden", "color", "anuncios", "propios", "n_precio",
-                 "precio_p25_cents", "precio_p50_cents", "precio_p75_cents", "dias_mediana", "dias_cota"]
+                 "precio_p25_cents", "precio_p50_cents", "precio_p75_cents", "dias_mediana", "dias_cota",
+                 "n_precio_propios", "precio_propios_p50_cents", "n_precio_competencia", "precio_competencia_p50_cents"]
 COLS_SIN_CLASIFICAR = ["dia", "tipo", "modelo", "version", "anuncios"]

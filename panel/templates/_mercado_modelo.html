@@ -24,7 +24,7 @@
     <div>
       <p class="miga"><a href="{{ d.volver }}">← Mercado</a></p>
       <h1>{{ d.modelo }}</h1>
-      <p class="subtitulo">{{ d.nombre_tipo }} en {{ d.zona_nombre }} · por segmentos, con su precio mediano</p>
+      <p class="subtitulo">{{ d.nombre_tipo }} en {{ conc.zona_cercana_nombre if d.zona == "cercana" else d.zona_nombre }} · por segmentos, con su precio mediano</p>
     </div>
     <div class="selectores">
       <div role="group" aria-label="Zona" class="segmentos">

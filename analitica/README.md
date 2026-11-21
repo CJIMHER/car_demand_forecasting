@@ -28,6 +28,11 @@ ventas, y baja solo si el scraper la retira; días publicado como cota inferior 
 mediano solo con precio). Zonas: la provincia del concesionario, su comunidad y España, según
 `config/concesionario.yaml`.
 
+**Zona cercana** (`cercana`): la provincia propia y las de `propio.provincias_cercanas` de
+`config/concesionario.yaml`. Es una zona más de todo el precálculo (y del selector de Mercado). En los
+segmentos, además, la mediana de nuestro precio y la de la competencia por separado, con su n: las
+usan los criterios de Meta (regla e y contexto de la d).
+
 ## competidores.py · por concesionario y modelo (en el mismo precálculo)
 
 `panel_mercado_competidor`: para cada día válido y tipo, en la provincia propia, los anuncios y el

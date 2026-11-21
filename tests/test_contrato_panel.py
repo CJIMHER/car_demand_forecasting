@@ -423,24 +423,26 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     assert f'<span class="kpi-valor">{fmt.miles(gasto)} €</span>' in b["kpis"][1]
     assert f'<span class="kpi-valor">{fmt.miles(leads)}</span>' in b["kpis"][1]
     assert f'{fmt.miles(gasto / leads)} €' in b["kpis"][1]
-    # Salud dentro de la tabla de campañas: tipo, días de vida, estado y eslabón que falla con cifras
+    # La salud frente a su referencia queda como detalle de cada campaña (la decisión es de los criterios
+    # de Meta: sin pasar el motor, «Sin decidir todavía»)
     camp = b["campanas"][1]
     for estado in ("Bien", "Vigilar", "Revisar", "Sin datos suficientes"):
-        assert f">{estado}</span>" in camp, estado
+        assert f"Frente a campañas con los mismos días de vida: {estado}" in camp, estado
     assert "Nuevos (VN) · " in camp and "Ocasión (VO) · " in camp and "General (VN y VO) · " in camp
     assert "días de vida" in camp and "gasto común" not in camp           # en Todo, la general con sus costes
-    # El diagnóstico va en su propia fila, a todo el ancho; en «Salud» queda solo el estado
-    assert re.search(r'<tr class="fila-diagnostico">\s*<td colspan="9"><p class="diagnostico">Dónde falla: el anuncio\. '
-                     r"Clics por impresión: [\d,]+ %, frente a [\d,]+ % de referencia \([\d,]+–[\d,]+ %\) en "
-                     r"campañas con los mismos \d+ días de vida\. Probabilidad de ir peor: 95 % \(n = 31 campañas\)</p>",
-                     camp)
+    # El detalle va en su propia fila, a todo el ancho; en «Decisión» queda solo la decisión
+    assert re.search(r'<tr class="fila-diagnostico">\s*<td colspan="9">\s*<p class="diagnostico">Detalle · [^<]*'
+                     r"Dónde falla: el anuncio\. Clics por impresión: [\d,]+ %, frente a [\d,]+ % de referencia "
+                     r"\([\d,]+–[\d,]+ %\) en campañas con los mismos \d+ días de vida\. Probabilidad de ir peor: "
+                     r"95 % \(n = 31 campañas\)", camp)
     assert "Dónde falla: la web. Leads por clic:" in camp
-    salud = re.findall(r'<td data-etiqueta="Salud"[^>]*>(.*?)</td>', camp, re.S)
-    assert salud and all(re.fullmatch(r'\s*<span class="chip [^"]+">[^<]+</span>\s*', c) for c in salud)
-    assert "se compara con su referencia en campañas anteriores con los mismos días de vida" in camp
-    assert "La referencia son campañas anteriores de su mismo ámbito (VN, VO o general)." in camp
+    decision = re.findall(r'<td data-etiqueta="Decisión"[^>]*>(.*?)</td>', camp, re.S)
+    assert decision and all(re.fullmatch(r'\s*<span class="chip [^"]+">Sin decidir todavía</span>\s*', c)
+                            for c in decision)
+    assert "se compara con su referencia en campañas anteriores de su mismo ámbito (VN, VO o general)" in camp
+    assert "explica, pero no decide" in camp
     # Recomendación, atención, semanas y campañas pasadas
-    for accion in ("Aumentar", "Mantener", "Reducir o cambiar"):
+    for accion in ("Subir presupuesto", "Continuar", "Revisar o parar"):
         assert f'<span class="reco-titulo">{accion}</span>' in b["recomendacion"][1]
     assert "Es una señal direccional" in b["atencion"][1]
     sem = b["semanas"][1]
@@ -667,7 +669,7 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     a_real(pg, "panel_campana_dia")
     b = bloques(tec.get("/marketing").text)
     assert "Sin datos todavía" not in b["kpis"][1]
-    assert ">Sin datos todavía</span>" in b["campanas"][1]              # la salud aún no es real: sin cifra
+    assert ">Sin decidir todavía</span>" in b["campanas"][1]            # sin pasar el motor: sin decisión
     a_real(pg, "panel_campana_salud", "panel_recomendacion_modelo", "panel_atencion_relativa",
            "panel_semana_campana", "panel_campana_resultado")
     html = dentro(app, "marketing").get("/marketing").text

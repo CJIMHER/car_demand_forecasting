@@ -44,7 +44,7 @@
       </div>
       {% endfor %}
     </div>
-    <p class="nota">Son sugerencias; decide marketing. Cada una combina cuatro cosas: coste real por venta, stock envejecido, atención frente a los rivales y tendencia de los leads.{% if d.tipo == "VO" %} En ocasión, por modelo del stock de ocasión.{% elif d.tipo == "todo" %} Cada modelo lleva su etiqueta: VN, del stock nuevo; VO, del de ocasión.{% endif %}</p>
+    <p class="nota">Son sugerencias; decide marketing. Siguen los criterios de las campañas de Meta: para un modelo con campaña, la decisión de su campaña (con la regla y sus cifras); sin campaña, si se puede lanzar (regla e: al menos 3 unidades propias y nuestro precio por debajo de la mediana de la competencia en la zona cercana, mismo modelo, acabado y motor), primero los de más stock y mejor precio.{% if d.tipo == "VO" %} En ocasión, por modelo del stock de ocasión.{% elif d.tipo == "todo" %} Cada modelo lleva su etiqueta: VN, del stock nuevo; VO, del de ocasión.{% endif %}</p>
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 
@@ -68,7 +68,7 @@
               <th scope="col">€ / lead</th>
               <th scope="col">€ / cita</th>
               <th scope="col">€ / venta</th>
-              <th scope="col" class="izq">Salud</th>
+              <th scope="col" class="izq">Decisión</th>
             </tr>
           </thead>
           <tbody>
@@ -85,13 +85,16 @@
               <td data-etiqueta="€ / lead"{% if c.comun %} title="Gasto común a VN y VO: no se reparte"{% endif %}>{{ c.cpl }}</td>
               <td data-etiqueta="€ / cita"{% if c.comun %} title="Gasto común a VN y VO: no se reparte"{% endif %}>{{ c.cpc }}</td>
               <td data-etiqueta="€ / venta" class="fuerte"{% if c.comun %} title="Gasto común a VN y VO: no se reparte"{% endif %}>{{ c.cpv }}</td>
-              <td data-etiqueta="Salud" class="izq c-salud"{% if c.titulo_salud %} title="{{ c.titulo_salud }}"{% endif %}>
-                <span class="chip chip-salud-{{ c.estado or 'ninguno' }}">{{ c.estado_texto }}</span>
+              <td data-etiqueta="Decisión" class="izq c-salud">
+                <span class="chip chip-decision-{{ c.decision or 'ninguna' }}">{{ c.decision_texto }}</span>
               </td>
             </tr>
-            {% if c.fallos %}
+            {% if c.criterios or c.salud_texto %}
             <tr class="fila-diagnostico">
-              <td colspan="9">{% for t in c.fallos %}<p class="diagnostico">{{ t }}</p>{% endfor %}</td>
+              <td colspan="9">
+                {% for t in c.criterios %}<p class="criterio">{{ t }}</p>{% endfor %}
+                {% if c.salud_texto %}<p class="diagnostico">Detalle · {{ c.salud_texto }}.{% for t in c.fallos %} {{ t }}.{% endfor %}</p>{% endif %}
+              </td>
             </tr>
             {% endif %}
             {% else %}
@@ -102,7 +105,7 @@
       </div>
       {% if not d.campanas.hay_leads %}<p class="nota motivo">Leads, citas y ventas: sin datos todavía.</p>{% endif %}
       {% if d.campanas.hay_comun %}<p class="nota">Campaña general (VN y VO): leads, citas y ventas solo de {{ d.tipo }}. Su gasto es común a VN y VO y no se reparte con ninguna regla, así que aquí no tiene coste por lead, por cita ni por venta; se ve completo en «Todo».</p>{% endif %}
-      <p class="nota">Salud: cada medida de la campaña (entrega, anuncio, web, calidad del lead y stock) se compara con su referencia en campañas anteriores con los mismos días de vida, y el estado sale de la probabilidad de que vaya peor que esa referencia, con el n de campañas en que se apoya. La referencia son campañas anteriores de su mismo ámbito (VN, VO o general).</p>
+      <p class="nota">Decisión (continuar, revisar, parar o subir presupuesto): con los criterios de las campañas de Meta, desde el segundo día de vida; cada regla dice sus cifras frente a su umbral y su n, y con poco volumen se muestra sin saltar. Detalle: cada medida de la campaña (entrega, anuncio, web, calidad del lead y stock) se compara con su referencia en campañas anteriores de su mismo ámbito (VN, VO o general) con los mismos días de vida; explica, pero no decide.</p>
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
 

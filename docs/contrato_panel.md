@@ -218,6 +218,7 @@ con bloques reales se abre a sus roles aunque los demás bloques digan «Sin dat
 | --- | --- | --- |
 | `tipo` | VN / VO | Tipo del vehículo por el que pregunta el lead (no el ámbito de la campaña) |
 | `leads`, `citas`, `ventas` | número | Citas y ventas cuentan el día en que ocurren, atribuidas a la campaña del lead |
+| `leads_cp_zona`, `leads_cp_fuera` | número | Leads con código postal dentro y fuera de la zona cercana (la provincia propia y `propio.provincias_cercanas` de `config/concesionario.yaml`). NULL: sin dato. Los leads sin código postal son `leads` menos los dos. El código postal se lee del lead de Walcu al agregar y **nunca se guarda**: solo este recuento |
 
 Nada que identifique a una persona: el agregado se hace antes de guardar.
 
@@ -284,14 +285,34 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 | `estado` | bien, vigilar, revisar, sin_datos | |
 | `modelo_version`, `n` | | `n` = campañas anteriores de la referencia |
 
-### panel_recomendacion_modelo · recomendación por modelo
+### panel_campana_decision · decisión de cada campaña (criterios de Meta)
 
-- **Grano**: día × tipo × modelo. `tipo` VN: por modelo del stock nuevo; VO: del stock de ocasión.
-- **Fuente**: reglas en YAML del hito 4. Combinan coste por venta, stock envejecido, atención relativa y tendencia de leads.
+- **Grano**: día × campaña activa.
+- **Fuente**: motor de alertas (`alertas/criterios.py`) con los criterios de `docs/criterios_marketing_meta.md`
+  y sus umbrales en `alertas/reglas.yaml` («criterios_meta»). Origen: el de las filas de Meta y Walcu
+  de las que sale. No la carga `make ejemplo-cargar`: con datos de ejemplo, la calcula el motor sobre ellos.
 
 | Columna | Unidad | Significado |
 | --- | --- | --- |
-| `accion` | aumentar, mantener, reducir, cambiar | «Cambiar» es cambiar la creatividad, no el presupuesto |
+| `decision` | continuar, revisar, parar, subir, sin_juzgar | Se juzga desde el segundo día de vida |
+| `reglas` | JSON | Cada regla (a, b, c, d, e, f, subir) con su estado (activa, no, sin_volumen, sin_dato), su texto con las cifras frente al umbral y su n, y qué revisar |
+| `leads`, `citas`, `ventas`, `dias_vida` | | Desde el inicio de la campaña |
+| `modelo_version`, `n` | | Versión de las reglas; `n` = leads |
+
+En la vista Marketing, la decisión es la columna de cada campaña; la salud frente a su referencia
+(`panel_campana_salud`) queda como detalle explicativo, no decide.
+
+### panel_recomendacion_modelo · recomendación por modelo
+
+- **Grano**: día × tipo × modelo. `tipo` VN: por modelo del stock nuevo; VO: del stock de ocasión.
+- **Fuente**: el motor de alertas con los criterios de Meta (`docs/criterios_marketing_meta.md`). Las
+  filas reales salen ya con la regla e (stock y precio en la zona cercana, del precálculo de Mercado);
+  la decisión de las campañas, cuando Meta y Walcu tengan filas reales.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `accion` | aumentar, mantener, revisar, parar, lanzar, no_lanzar (y reducir, cambiar de los datos de ejemplo anteriores) | Criterios de Meta: la decisión de las campañas del modelo (subir → aumentar, continuar → mantener) o, sin campaña, la regla e |
+| `regla`, `cifras`, `prioridad` | | La regla que la decide, sus cifras y, en «lanzar», el orden (más stock y mejor precio primero) |
 | `motivo` | texto | Una frase con las cifras que la justifican |
 | `modelo_version`, `n` | | Versión de las reglas; `n` = días de datos en que se apoyan |
 

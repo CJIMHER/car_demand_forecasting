@@ -18,6 +18,10 @@ propio:
   # Código INE de la provincia del concesionario: zona por defecto del panel («Nuestro peso en
   # <provincia>»). La comunidad autónoma sale de la provincia.
   provincia_codigo: "41"
+  # Zona cercana: la provincia del concesionario y estas (códigos INE). La usan los criterios de las
+  # campañas de Meta (docs/criterios_marketing_meta.md: regla e, leads de fuera de zona) y la zona
+  # «cercana» de Mercado. Tras cambiarla: make precalcular.
+  provincias_cercanas: ["21", "11", "14"]     # Huelva, Cádiz y Córdoba
   dealer_ids:
     - ESP00710
   # Nombres con que aparece en los scrapers (dealer_name). Comprobar con  make concesionarios

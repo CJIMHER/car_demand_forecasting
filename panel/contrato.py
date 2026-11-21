@@ -31,7 +31,8 @@ TABLAS = (
 # son del contrato de datos de ejemplo (make ejemplo-cargar no las toca): las escribe alertas/motor.py.
 # alertas_evaluacion dice qué reglas se han evaluado y con qué origen; con una fila real, el bloque
 # de alertas es real aunque no salte ninguna, y las alertas se leen de la tabla alertas.
-MOTOR = ("alertas_evaluacion",)
+# panel_campana_decision: la decisión de cada campaña según los criterios de Meta (alertas/criterios.py).
+MOTOR = ("alertas_evaluacion", "panel_campana_decision")
 ALERTAS = ("alertas_evaluacion", "panel_alertas")
 
 # Bloques de cada vista y las tablas que leen
@@ -54,7 +55,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
     "marketing": {
         "kpis": ("panel_campana_dia", "panel_leads_dia"),
         "recomendacion": ("panel_recomendacion_modelo",),
-        "campanas": ("panel_campana_dia", "panel_leads_dia", "panel_campana_salud"),
+        "campanas": ("panel_campana_dia", "panel_leads_dia", "panel_campana_salud", "panel_campana_decision"),
         "atencion": ("panel_atencion_relativa",),
         "ocasion": ("panel_riesgo_vehiculo",),      # solo en VO: stock de ocasión que mover
         "semanas": ("panel_semana_campana",),

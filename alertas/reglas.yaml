@@ -128,40 +128,69 @@ reglas:
       base_minima: 10         # leads en los 14 días anteriores
     texto: "Leads de {modelo} {tipo_texto}: {ahora} en los últimos {dias} días frente a {antes} en los {dias} anteriores (−{caida_pct} %)."
 
-  - id: coste_lead
-    nombre: Coste por lead fuera de rango
-    calculo: coste_lead
+  # ------------------------------------------------------------------ campañas de Meta: criterios de Cayetano
+  # (docs/criterios_marketing_meta.md). Umbrales, volúmenes y textos en «criterios_meta», más abajo:
+  # son los mismos para las alertas, la decisión de cada campaña y la recomendación por modelo. La
+  # comparación con la referencia por días de vida (panel_campana_salud) es solo detalle explicativo.
+  - id: meta_a
+    nombre: "Campaña: leads que no se convierten en citas (regla a)"
+    calculo: criterio_meta
+    criterio: a
     roles: [marketing]
     fuente: [panel_campana_dia, panel_leads_dia]
     tema: campanas
     nivel: aviso
-    umbrales:
-      dias: 7                 # coste por lead de los últimos 7 días…
-      dias_referencia: 28     # … frente a su media de los 28 anteriores
-      factor_maximo: 2
-      leads_minimos: 5        # leads en los 28 días de referencia
-    texto: "Campaña «{titulo}»: coste por lead de {cpl} en los últimos {dias} días, {factor} veces su media de {dias_referencia} días ({cpl_ref})."
+    texto: "Campaña «{titulo}» · {decision} (regla a): {cifras}. Revisar: {revisar}"
 
-  - id: campana_salud
-    nombre: Campaña en vigilar o revisar
-    calculo: campana_salud
-    roles: [marketing]
-    fuente: [panel_campana_salud, panel_campana_dia]
-    tema: campanas
-    nivel: aviso
-    texto: "Campaña «{titulo}»: {eslabon} en «{estado}» ({medida} {valor} frente a {referencia} de referencia a los {dias_vida} días; probabilidad de ir peor, {prob} %)."
-
-  - id: campana_sin_citas
-    nombre: Campaña sin citas
-    calculo: campana_sin_citas
+  - id: meta_b
+    nombre: "Campaña: pocos leads para lo que se muestra (regla b)"
+    calculo: criterio_meta
+    criterio: b
     roles: [marketing]
     fuente: [panel_campana_dia, panel_leads_dia]
     tema: campanas
     nivel: aviso
-    umbrales:
-      dias_vida_minimos: 14
-      leads_minimos: 5        # leads atribuidos desde su inicio
-    texto: "Campaña «{titulo}»: {leads} leads y ninguna cita en sus {dias_vida} días de vida."
+    texto: "Campaña «{titulo}» · {decision} (regla b): {cifras}. Revisar: {revisar}"
+
+  - id: meta_c
+    nombre: "Campaña: lead caro (regla c)"
+    calculo: criterio_meta
+    criterio: c
+    roles: [marketing]
+    fuente: [panel_campana_dia, panel_leads_dia]
+    tema: campanas
+    nivel: aviso
+    texto: "Campaña «{titulo}» · {decision} (regla c): {cifras}. {revisar}"
+
+  - id: meta_d
+    nombre: "Campaña: leads y citas en precio, pocas ventas (regla d)"
+    calculo: criterio_meta
+    criterio: d
+    roles: [marketing]
+    fuente: [panel_campana_dia, panel_leads_dia]
+    tema: campanas
+    nivel: aviso
+    texto: "Campaña «{titulo}» · {decision} (regla d): {cifras}. Revisar: {revisar}"
+
+  - id: meta_f
+    nombre: "Campaña: cansancio del anuncio (regla f)"
+    calculo: criterio_meta
+    criterio: f
+    roles: [marketing]
+    fuente: [panel_campana_dia, panel_leads_dia]
+    tema: campanas
+    nivel: aviso
+    texto: "Campaña «{titulo}» · {decision} (regla f): {cifras}. Revisar: {revisar}"
+
+  - id: meta_subir
+    nombre: "Campaña: subir presupuesto"
+    calculo: criterio_meta
+    criterio: subir
+    roles: [marketing]
+    fuente: [panel_campana_dia, panel_leads_dia]
+    tema: campanas
+    nivel: info
+    texto: "Campaña «{titulo}» · subir presupuesto: {cifras}."
 
   - id: ventana_favorable
     nombre: Ventana favorable para una campaña general
@@ -173,3 +202,55 @@ reglas:
     umbrales:
       semanas: 2              # las dos semanas siguientes
     texto: "Semana del {semana} favorable para una campaña general ({tipo_texto}): {indice} veces una semana media ({p10}–{p90}). {motivos}"
+
+# ------------------------------------------------------------------ criterios de las campañas de Meta
+# Los de docs/criterios_marketing_meta.md, iguales para VN y VO. Importes en euros; tasas en %.
+# Una campaña se juzga desde su segundo día de vida, con sus cifras desde que empezó. Una regla sin
+# su dato no se aplica (p. ej., «fuera de zona» sin código postal en los leads).
+criterios_meta:
+  dias_vida_minimos: 1            # el segundo día de vida: día 0 = el primero
+  # «En su media» (reglas c y d): el coste de la campaña no pasa de la media de todas las campañas
+  # de los últimos `media_dias` (sin ella misma) más esta tolerancia
+  media_dias: 90
+  media_tolerancia_pct: 20
+  a:
+    lead_cita_minima_pct: 5       # revisar si citas/leads < 5 %
+    n_minimo_leads: 20            # con menos leads se muestra la tasa, pero no salta
+    fuera_zona_maxima_pct: 30     # revisar si fuera de zona > 30 % (desde el segundo día)
+    n_minimo_leads_con_cp: 1      # leads con código postal: sin mínimo
+    revisar: "la localización y las audiencias de la campaña; los motivos de descarte que anota el comercial."
+    revisar_fuera_zona: "si dominan los de fuera de zona, que el copy, el reel y la foto nombren la provincia, y que el formulario pida como obligatorios el código postal y si quiere ver el coche en la provincia."
+  b:
+    leads_por_visualizacion_minimo_pct: 3   # leads / impresiones de Meta
+    # «Claramente por debajo» de campañas del mismo modelo y mismo mes del año (años anteriores)
+    factor_historico: 0.5
+    revisar: "la creatividad, el mensaje, la llamada a la acción y la oferta."
+  c:
+    coste_lead_maximo: 10         # si se pasa: continuar si el coste por cita está en su media; si no, parar
+    continuar: "El coste por cita está en su media: se continúa."
+    parar: "Parar y revisar audiencias y creatividad."
+    sin_media: "Sin media de coste por cita para decidir: revisar audiencias y creatividad."
+  d:
+    tasa_venta_minima_pct: 33     # revisar si ventas/citas < 33 % con coste por lead y por cita en su media
+    n_minimo_citas: 6
+    segmentos_mostrados: 3        # vehículos similares en la zona cercana que se citan
+    revisar: "el motivo de descarte del comercial; los similares en la zona cercana{similares}; el desempeño del comercial."
+  e:
+    unidades_minimas: 3           # unidades propias del modelo publicadas en la zona cercana
+    # Precio: el nuestro por debajo de la mediana de la competencia en la zona cercana, mismo modelo,
+    # acabado y motor. Solo cuentan los segmentos con al menos este n de la competencia (clave de
+    # config/concesionario.yaml) y el modelo cumple si están por debajo más de la mitad de nuestras
+    # unidades con comparables.
+    n_minimo_competencia: n_minimo_medianas
+  f:
+    dias_recientes: 3             # leads por día de los últimos 3 días…
+    dias_anteriores: 7            # … frente a la media de los 7 anteriores
+    caida_minima_pct: 30          # al menos un 30 % menos
+    coste_lead_maximo: 10         # y coste por lead de esos 3 días por encima de 10 €
+    revisar: "renovar la creatividad (reel, foto, copy) antes de seguir invirtiendo."
+  subir:                          # todos a la vez, la regla e y ninguna regla de revisión activa
+    coste_lead_maximo: 10
+    coste_cita_maximo: 100
+    lead_cita_minima_pct: 5
+    tasa_venta_minima_pct: 33
+    coste_venta_maximo: 400

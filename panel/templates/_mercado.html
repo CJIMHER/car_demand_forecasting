@@ -3,6 +3,7 @@
     <div>
       <h1>El mercado {{ conc.marca }}, {{ 'hoy' if (not m.hay_datos or m.es_hoy) else 'el ' ~ f.fecha_corta(m.dia) }}</h1>
       <p class="subtitulo">Stock publicado en la web oficial de {{ conc.marca }} por toda la red de concesionarios</p>
+      {% if m.zona == "cercana" %}<p class="nota">Zona cercana: {{ conc.zona_cercana_nombre }}.</p>{% endif %}
     </div>
     <div class="selectores">
       <div role="group" aria-label="Zona" class="segmentos">
