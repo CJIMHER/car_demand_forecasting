@@ -1,0 +1,139 @@
+{% macro precio(c) -%}
+{%- if c.pocos -%}
+<span class="pocos">{{ f.GUION }}<span class="n">{{ 'pocos anuncios' if c.n else 'sin anuncios con precio' }}</span></span>
+{%- else -%}
+<span class="{{ 'atenuado' if c.atenuado }}">{{ c.texto }}{% if c.atenuado %} <span class="n">n = {{ c.n }}</span>{% endif %}</span>
+{%- if c.rango %}<span class="rango">{{ c.rango }}</span>{% endif -%}
+{%- endif -%}
+{%- endmacro %}
+{% macro dias(c) -%}
+{%- if c.pocos -%}
+<span class="pocos">{{ f.GUION }}<span class="n">pocos anuncios</span></span>
+{%- else -%}
+<span class="{{ 'atenuado' if c.atenuado }}"{% if c.cota %} title="Cota inferior: parte de los anuncios ya estaban en la primera captura o tras un día sin captura"{% endif %}>{{ c.texto }}{% if c.atenuado %} <span class="n">n = {{ c.n }}</span>{% endif %}</span>
+{%- endif -%}
+{%- endmacro %}
+{% macro cifras(s) %}
+<span class="seg-c"><span class="seg-et">Anuncios</span>{{ s.anuncios }}</span>
+<span class="seg-c"{% if s.nuestros.motivo %} title="Sin cifra: {{ s.nuestros.motivo }}"{% endif %}><span class="seg-et">Nuestros</span>{{ s.nuestros.texto }}{% if s.nuestros.peso %} <span class="pct">{{ s.nuestros.peso }}</span>{% endif %}</span>
+<span class="seg-c seg-precio" data-n="{{ s.precio.n }}"><span class="seg-et">Precio mediano</span>{{ precio(s.precio) }}</span>
+<span class="seg-c"><span class="seg-et">Días publicado</span>{{ dias(s.dias) }}</span>
+{% endmacro %}
+<div id="detalle-modelo" class="vista">
+  <div class="vista-cabecera">
+    <div>
+      <p class="miga"><a href="{{ d.volver }}">← Mercado</a></p>
+      <h1>{{ d.modelo }}</h1>
+      <p class="subtitulo">{{ d.nombre_tipo }} en {{ d.zona_nombre }} · por segmentos, con su precio mediano</p>
+    </div>
+    <div class="selectores">
+      <div role="group" aria-label="Zona" class="segmentos">
+        {% for z in d.zonas %}
+        <a class="segmento" href="{{ z.url }}" hx-get="{{ z.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true"{% if z.activa %} aria-current="true"{% endif %}>{{ z.etiqueta }}</a>
+        {% endfor %}
+      </div>
+      <div role="group" aria-label="Tipo de stock" class="segmentos">
+        {% for t in d.tipos %}
+        <a class="segmento" href="{{ t.url }}" hx-get="{{ t.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true"{% if t.activa %} aria-current="true"{% endif %}>{{ t.etiqueta }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {% if not d.hay_datos %}
+  <section class="tarjeta">
+    <h2>Todavía no hay datos de {{ 'nuevos' if d.tipo == 'VN' else 'ocasión' }}</h2>
+    <p class="nota">Aparecen tras el primer día con captura completa y el precálculo de las 09:10.</p>
+  </section>
+  {% elif not d.hay_modelo %}
+  <p class="dia-datos">Datos del {{ d.dia_largo }}</p>
+  <section class="tarjeta">
+    <h2>Sin anuncios de {{ d.modelo }} en {{ d.zona_nombre }}</h2>
+    <p class="nota">No hay anuncios de {{ 'nuevos' if d.tipo == 'VN' else 'ocasión' }} de este modelo en la zona elegida ese día. Prueba otra zona o tipo, o vuelve a <a href="{{ d.volver }}">Mercado</a>.</p>
+  </section>
+  {% else %}
+  <p class="dia-datos">Datos del {{ d.dia_largo }}{% if not d.es_hoy %}<span class="aviso-dia"> · Falta la captura completa de hoy: se muestran los datos del último día completo.</span>{% endif %}</p>
+
+  <p class="recuadro aviso-precio" role="note">{{ d.nota_precio }}</p>
+  {% if d.nota_espana %}
+  <p class="recuadro aviso-zona" role="note">{{ d.nota_espana.texto }} <a href="{{ d.nota_espana.url }}" hx-get="{{ d.nota_espana.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true">Ver {{ d.modelo }} en España</a>, con más anuncios por segmento.</p>
+  {% endif %}
+
+  <section aria-labelledby="t-acabados" class="tarjeta">
+    <h2 id="t-acabados">Por acabado y motor</h2>
+    <div class="segs">
+      <div class="seg-fila seg-cabecera" aria-hidden="true">
+        <span class="seg-nombre">Acabado · motor</span><span class="seg-c">Anuncios</span><span class="seg-c">Nuestros</span>
+        <span class="seg-c seg-precio">Precio mediano<span class="rango">p25–p75</span></span><span class="seg-c">Días publicado</span>
+      </div>
+      <div class="seg-fila seg-total">
+        <span class="seg-nombre">Todos los acabados</span>
+        {{ cifras(d.total) }}
+      </div>
+      {% for a in d.acabados %}
+      <details class="seg-acabado{% if not a.reconocido %} sin-clasificar{% endif %}">
+        <summary class="seg-fila">
+          <span class="seg-nombre"><span class="seg-flecha" aria-hidden="true"></span>{{ a.nombre }}<span class="n seg-motores">{{ a.motores|length }} {{ 'motor' if a.motores|length == 1 else 'motores' }}</span></span>
+          {{ cifras(a) }}
+        </summary>
+        {% for m in a.motores %}
+        <div class="seg-fila seg-motor">
+          <span class="seg-nombre">{{ m.nombre }}</span>
+          {{ cifras(m) }}
+        </div>
+        {% endfor %}
+      </details>
+      {% endfor %}
+    </div>
+    <p class="nota">Pulsa un acabado para ver sus motores.</p>
+  </section>
+
+  {% if d.matriz %}
+  <section aria-labelledby="t-matriz" class="tarjeta">
+    <h2 id="t-matriz">Precio por antigüedad y km{% if d.matriz.acabado %} · {{ d.matriz.acabado }}{% endif %}</h2>
+    <div role="group" aria-label="Acabado" class="filtro-acabado">
+      {% for a in d.matriz.filtro %}
+      <a class="chip-filtro" href="{{ a.url }}" hx-get="{{ a.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true"{% if a.activa %} aria-current="true"{% endif %}>{{ a.etiqueta }}</a>
+      {% endfor %}
+    </div>
+    <table class="tabla matriz">
+      <thead>
+        <tr><th scope="col" class="izq">Antigüedad</th>{% for k in d.matriz.columnas %}<th scope="col">{{ k }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for fila in d.matriz.filas %}
+        <tr>
+          <th scope="row" class="izq">{{ fila.etiqueta }}</th>
+          {% for c in fila.celdas %}
+          <td data-etiqueta="{{ c.km }}" data-n="{{ c.n }}" class="{{ 'casilla-pocos' if c.precio.pocos }}">
+            {%- if c.precio.pocos -%}
+            <span class="pocos">{{ f.GUION }}<span class="n">{% if c.n %}pocos anuncios · n = {{ c.n }}{% else %}sin anuncios{% endif %}</span></span>
+            {%- else -%}
+            <span class="{{ 'atenuado' if c.precio.atenuado }}">{{ c.precio.texto }}</span><span class="n">n = {{ c.n }}</span>
+            {%- endif -%}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="nota">En cada casilla, el precio mediano y n, el número de anuncios con precio.</p>
+  </section>
+  {% endif %}
+
+  {% if d.colores %}
+  <section aria-labelledby="t-colores" class="tarjeta">
+    <h2 id="t-colores">Por color exterior</h2>
+    <div class="segs">
+      {% for c in d.colores %}
+      <div class="seg-fila"><span class="seg-nombre">{{ c.nombre }}</span>{{ cifras(c) }}</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="tarjeta notas-detalle">
+    {% for t in d.notas %}<p class="nota">{{ t }}</p>{% endfor %}
+  </section>
+  {% endif %}
+</div>

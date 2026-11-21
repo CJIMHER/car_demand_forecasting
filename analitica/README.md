@@ -28,8 +28,31 @@ ventas, y baja solo si el scraper la retira; días publicado como cota inferior 
 mediano solo con precio). Zonas: la provincia del concesionario, su comunidad y España, según
 `config/concesionario.yaml`.
 
+## segmentos.py y versiones.py · detalle de un modelo (en el mismo precálculo)
+
+Para cada día, tipo y zona, `panel_mercado_segmento` guarda solo los niveles que muestra el detalle
+de un modelo: modelo; modelo+acabado; modelo+acabado+motor; en VO, además, modelo+antigüedad×km y
+modelo+acabado+antigüedad×km; y modelo+color (vacío mientras la web publique el color vacío). Por
+segmento: anuncios, propios, precio p25/p50/p75 de los que tienen precio (como `percentile_cont`) y
+días publicado con la regla «≥ N».
+
+- **Acabado y motor** (`versiones.py`): se leen del texto de versión con el catálogo
+  `config/versiones.yaml` (acabados por modelo con sinónimos; comillas, tildes, mayúsculas y espacios
+  normalizados). Un acabado que no está en el catálogo es «Sin clasificar»: nunca se adivina. El motor
+  es tecnología (TSI, eTSI, TDI, eHybrid…) + CV del campo `power_cv` + combustible + cambio cuando el
+  texto lo dice. Los textos sin clasificar van a `panel_mercado_sin_clasificar` y salen en «Estado de
+  las fuentes» con la cobertura por modelo: se añaden al catálogo y `make precalcular`.
+- **Antigüedad y km**: años cumplidos desde la primera matriculación hasta el día de la captura, y
+  km del anuncio; los tramos, en `config/concesionario.yaml` (`segmentos`). Sin tramos en la
+  configuración no se calcula la matriz.
+- La potencia, la cilindrada y el color salen de columnas generadas de `stock_externo_snapshot`
+  (migración `0007`), que Postgres rellena desde `datos` sin tocar la carga.
+
 ## Cómo se prueba
 
 `tests/test_mercado.py`: una prueba por regla, con capturas sintéticas escritas por el código real
 de los scrapers (huecos, una fuente que empieza más tarde, retiradas). `tests/test_panel.py`
 comprueba además que las cifras de la vista cuadran con una consulta SQL directa.
+`tests/test_segmentos.py`: lectura de versiones reales de VO y VN, «Sin clasificar», cortes de
+antigüedad y km en sus bordes, percentiles y n frente a SQL directo, migración, cobertura y la vista
+(con n < 3 nunca se muestra un precio).

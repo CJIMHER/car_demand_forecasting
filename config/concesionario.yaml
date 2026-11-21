@@ -41,6 +41,23 @@ panel:
   n_minimo_porcentaje: 10
   # Dirección: antigüedad media del stock propio frente a este objetivo (días)
   objetivo_antiguedad_dias: 60
+  # Detalle de un modelo en Mercado: con menos anuncios que esto, un segmento muestra «—» y «pocos
+  # anuncios» en vez de su precio y sus días (entre esto y n_minimo_medianas, la cifra va atenuada)
+  n_minimo_mostrar: 3
+
+# Segmentos de ocasión (VO) en el detalle de un modelo: tramos de antigüedad y de km. «hasta» es
+# inclusive; el último tramo no lleva «hasta». Tras cambiarlos: make precalcular.
+segmentos:
+  # Años cumplidos desde la primera matriculación hasta el día de la captura
+  antiguedad_anios:
+    - {hasta: 2, etiqueta: "0–2 años"}
+    - {hasta: 4, etiqueta: "3–4 años"}
+    - {etiqueta: "más de 4 años"}
+  km:
+    - {hasta: 20000, etiqueta: "0–20.000 km"}
+    - {hasta: 60000, etiqueta: "20.001–60.000 km"}
+    - {hasta: 100000, etiqueta: "60.001–100.000 km"}
+    - {etiqueta: "más de 100.000 km"}
 
 # Modelos de la marca, de más a menos habituales. Hoy solo los usan los datos de ejemplo del panel
 # (make ejemplo-cargar); el catálogo de versiones llega con Walcu.

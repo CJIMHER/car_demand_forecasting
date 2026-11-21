@@ -38,6 +38,11 @@ class Concesionario:
     objetivo_antiguedad_dias: int = 60  # Dirección: antigüedad media del stock frente a este objetivo
     modelos_vn: tuple[str, ...] = ()  # modelos de la marca (datos de ejemplo del panel)
     modelos_vo: tuple[str, ...] = ()
+    n_minimo_mostrar: int = 3         # segmentos: por debajo, «—» y «pocos anuncios» en vez de la cifra
+    # Segmentos de VO: tramos (hasta inclusive o None en el último, etiqueta). Vacíos si la
+    # configuración no los trae: entonces no se calcula la matriz de antigüedad y km.
+    tramos_antiguedad: tuple[tuple[int | None, str], ...] = ()
+    tramos_km: tuple[tuple[int | None, str], ...] = ()
 
 
 def ruta() -> Path:
@@ -70,7 +75,30 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         objetivo_antiguedad_dias=int(panel.get("objetivo_antiguedad_dias", 60)),
         modelos_vn=_lista((cfg.get("modelos") or {}).get("VN")),
         modelos_vo=_lista((cfg.get("modelos") or {}).get("VO")),
+        n_minimo_mostrar=int(panel.get("n_minimo_mostrar", 3)),
+        tramos_antiguedad=_tramos(cfg, "antiguedad_anios"),
+        tramos_km=_tramos(cfg, "km"),
     )
+
+
+def _tramos(cfg: dict, clave: str) -> tuple[tuple[int | None, str], ...]:
+    """Tramos de segmentos.<clave>: cada uno con «hasta» (inclusive) y «etiqueta»; el último, sin «hasta»."""
+    lista = (cfg.get("segmentos") or {}).get(clave) or []
+    tramos, anterior = [], None
+    for i, t in enumerate(lista):
+        hasta = t.get("hasta")
+        etiqueta = str(t.get("etiqueta") or "").strip()
+        ultimo = i == len(lista) - 1
+        if not etiqueta or (hasta is None) != ultimo:
+            raise ErrorConfiguracion(f"config/concesionario.yaml: segmentos.{clave}: cada tramo lleva etiqueta y "
+                                     "«hasta», salvo el último, que no lleva «hasta»")
+        if hasta is not None:
+            hasta = int(hasta)
+            if anterior is not None and hasta <= anterior:
+                raise ErrorConfiguracion(f"config/concesionario.yaml: segmentos.{clave}: «hasta» tiene que crecer")
+            anterior = hasta
+        tramos.append((hasta, etiqueta))
+    return tuple(tramos)
 
 
 def _lista(valor) -> tuple[str, ...]:

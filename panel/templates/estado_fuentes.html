@@ -32,6 +32,46 @@
     <p class="nota">«Sin provincia»: anuncios de la última captura completa cuyo código postal no permite saber la provincia; cuentan en España pero no en la provincia ni en la comunidad.</p>
   </section>
 
+  <section class="tarjeta" aria-labelledby="t-cobertura">
+    <h2 id="t-cobertura">Acabados reconocidos en el texto de versión</h2>
+    {% if not e.cobertura.tipos %}
+    <p class="sin-datos">Sin datos todavía: aparecen tras el primer precálculo con segmentos.</p>
+    {% endif %}
+    {% for t in e.cobertura.tipos %}
+    <h3 class="h3-tabla">{{ 'Nuevos (VN)' if t.tipo == 'VN' else 'Ocasión (VO)' }} · {{ t.total }} de {{ t.anuncios }} anuncios en España, {{ t.dia }}</h3>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-cobertura">
+        <thead><tr>
+          <th scope="col" class="izq">Modelo</th><th scope="col">Anuncios</th><th scope="col">Con acabado reconocido</th>
+          <th scope="col">%</th>
+        </tr></thead>
+        <tbody>
+        {% for m in t.modelos %}
+          <tr><th scope="row" class="izq">{{ m.modelo }}</th><td>{{ m.anuncios }}</td><td>{{ m.reconocidos }}</td><td>{{ m.porcentaje }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+    {% if e.cobertura.textos %}
+    <h3 class="h3-tabla">Los {{ e.cobertura.textos|length }} textos sin clasificar más frecuentes</h3>
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead><tr>
+          <th scope="col" class="izq">Tipo</th><th scope="col" class="izq">Modelo</th><th scope="col" class="izq">Texto de versión</th>
+          <th scope="col">Anuncios</th>
+        </tr></thead>
+        <tbody>
+        {% for x in e.cobertura.textos %}
+          <tr><th scope="row" class="izq">{{ x.tipo }}</th><td class="izq">{{ x.modelo }}</td><td class="izq detalle">{{ x.version }}</td><td>{{ x.anuncios }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <p class="nota">El acabado se lee del texto de versión con el catálogo config/versiones.yaml. Un texto cuyo acabado no está en el catálogo cuenta como «Sin clasificar» (nunca se adivina): añadir sus acabados al catálogo y ejecutar make precalcular.</p>
+  </section>
+
   <section class="tarjeta" aria-labelledby="t-anotaciones">
     <h2 id="t-anotaciones">Últimas anotaciones por fuente y tipo</h2>
     <div class="tabla-scroll">

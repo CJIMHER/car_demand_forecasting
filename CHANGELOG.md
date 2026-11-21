@@ -1,5 +1,45 @@
 # Cambios
 
+## 2026-11-21 · Hito 1b: Mercado por segmentos (rama hito-1b-segmentos)
+
+- Encargo guardado en `docs/hitos/hito_1b_segmentos.md`.
+- **Detalle de un modelo**: en la tabla por modelo de Mercado, el nombre enlaza a
+  `/mercado/modelo/<modelo>?tipo=…&zona=…`, con el mismo selector de zona y tipo.
+  - «Por acabado y motor»: cada acabado es una fila desplegable con sus motores dentro. Columnas:
+    anuncios, nuestros, precio mediano con su rango p25–p75 y días publicado («≥ N» como en la tabla).
+  - Solo en VO, «Precio por antigüedad y km»: matriz 3 × 4 con la mediana y su n en cada casilla y
+    filtro de acabado (Todos por defecto). En el móvil pasa a una lista por antigüedad.
+  - Reglas de muestra: con n < 5, cifra atenuada con su n; con n < 3, «—» y «pocos anuncios» (nunca
+    el precio). Si la zona deja más de la mitad de las casillas en «—», una nota propone ver España.
+  - Nota fija: «Precio publicado, no precio de venta. Los segmentos con pocos anuncios no son representativos».
+  - Bloque «Por color exterior» preparado: sale solo cuando la web publique el color (hoy, vacío).
+- **Lectura de la versión** (`analitica/versiones.py`, catálogo `config/versiones.yaml`): acabado por
+  modelo con sinónimos y comillas, tildes y espacios normalizados (VO y VN dan el mismo acabado); lo que
+  no está en el catálogo va a «Sin clasificar», nunca se adivina. Motor: tecnología + CV de `power_cv`
+  (no del texto) + combustible + cambio cuando el texto lo dice. Con los textos reales de los históricos
+  locales: 94,5 % de los anuncios de VO y 99,6 % de VN con acabado reconocido.
+- **Segmentos** (`analitica/segmentos.py`, en el precálculo de las 09:10): tabla
+  `panel_mercado_segmento` con solo los niveles que se muestran, por zona (provincia, comunidad,
+  España): n, propios, precio p25/p50/p75 de los que tienen precio y días publicado. Los tramos de
+  antigüedad (años cumplidos de la primera matriculación al día de la captura) y de km, en
+  `config/concesionario.yaml` (`segmentos`); umbral `panel.n_minimo_mostrar: 3`.
+- **Migración `0007`**: `stock_externo_snapshot` ya tenía versión, combustible, matriculación y km;
+  le faltaban los CV. Se añaden `potencia_cv`, `cilindrada_cc` y `color_exterior` como columnas
+  generadas desde `datos` (sin UPDATE, sin tocar scrapers, carga ni SQLite). `cdf_solo_anadir` deja de
+  compararlas al cambiar `es_propio`. Tablas nuevas `panel_mercado_segmento` y
+  `panel_mercado_sin_clasificar`, de solo lectura para `cdf_panel`.
+- **Estado de las fuentes**: % de anuncios con acabado reconocido por modelo y tipo, y los 20 textos
+  sin clasificar más frecuentes del último día.
+- **Datos sintéticos**: versiones con el formato de VO y de VN (y acabados fuera del catálogo),
+  matriculación y km; `make panel-dev` usa flotas cuatro veces mayores. En el escenario de pruebas,
+  «Tiguan eHybrid» y «Golf eHybrid» pasan a «Tiguan» y «Golf».
+- **Pruebas**: `tests/test_segmentos.py` (27) y ampliaciones de `tests/test_panel.py` (detalle en la
+  prueba del concesionario ficticio, cabeceras y «sin scraper»). `tests/navegador/capturas.mjs`
+  revisa el detalle a 1440 y 390 px (también texto más ancho que su casilla) y el enlace desde la tabla.
+  Capturas nuevas: `docs/capturas/modelo_vn_*`, `modelo_vo_*` y `modelo_vo_provincia_*`.
+- Docstrings de `analitica/mercado.py` sin el nombre de la marca (prueba nueva: ni la marca, ni el
+  concesionario, ni su provincia en `panel/` ni `analitica/`).
+
 ## 2026-11-15 · Hito 1b: estáticos con huella y Marketing por tipo (rama hito-1b)
 
 - **Caché de los estáticos** (fallo en producción tras la sesión 2: Dirección, Ventas y Marketing

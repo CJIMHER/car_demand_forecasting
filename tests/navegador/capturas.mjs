@@ -10,8 +10,11 @@
 // en cada zona y tipo de Mercado y en cada vista y filtro de Dirección, Ventas y Marketing, que el
 // documento no desborda el ancho y que todas las celdas de cada fila de las tablas están en pantalla.
 // En Ventas, tras pulsar un vehículo de mitad de lista, comprueba que su detalle queda en pantalla
-// (1440 y 390 px). Guarda Mercado, Dirección, Ventas y Marketing (Todo, VN y VO) a 1440 px y a 390 px. Sale con código 1 si algo
-// falla o si hay errores de CSP.
+// (1440 y 390 px). En el detalle de un modelo (VN y VO, varias zonas y un filtro de acabado), con los
+// acabados desplegados, que nada desborda ni se sale de su tarjeta a 1440 y 390 px, y que el enlace de
+// la tabla por modelo lleva al detalle con la misma zona y tipo. Guarda Mercado, el detalle de un
+// modelo (VN, VO y VO en la provincia), Dirección, Ventas y Marketing (Todo, VN y VO) a 1440 px y a
+// 390 px. Sale con código 1 si algo falla o si hay errores de CSP.
 import fs from "node:fs";
 const [puerto, salida, usuario, clave] = process.argv.slice(2);
 const BASE = "http://localhost:8000";
@@ -141,6 +144,41 @@ for (const [ancho, movil] of [[1440, false], [390, true]]) {
   })()`)));
 }
 for (const d of detalles) console.log("detalle tras pulsar:", JSON.stringify(d));
+// Detalle de un modelo (Mercado → pulsar un modelo), a 1440 y a 390 px, con todos los acabados
+// desplegados: nada desborda y cada cifra de las filas por acabado y motor y de la matriz de
+// antigüedad y km queda dentro de su tarjeta y de la pantalla.
+const DETALLES_MODELO = ["/mercado/modelo/T-Roc?tipo=VN&zona=espana", "/mercado/modelo/T-Roc?tipo=VO&zona=espana",
+  "/mercado/modelo/T-Roc?tipo=VO&zona=provincia", "/mercado/modelo/Golf?tipo=VO&zona=espana&acabado=Life",
+  "/mercado/modelo/ID.4?tipo=VN&zona=comunidad"];
+const modeloRes = [];
+for (const [ancho, movil] of [[1440, false], [390, true]]) {
+  await tamano(ancho, movil);
+  for (const ruta of DETALLES_MODELO) {
+    await ir(`${BASE}${ruta}`);
+    modeloRes.push(JSON.parse(await evalua(`(() => {
+      document.querySelectorAll('details.seg-acabado').forEach(d => { d.open = true; });
+      const ancho = ${ancho}, doc = document.documentElement, malas = [];
+      for (const el of document.querySelectorAll('.seg-fila > *, .seg-fila .rango, .matriz th, .matriz td, .chip-filtro')) {
+        const caja = el.closest('.tarjeta').getBoundingClientRect(), r = el.getBoundingClientRect();
+        if (r.width > 0 && (r.left < Math.max(0, caja.left) - 0.5 || r.right > Math.min(ancho, caja.right) + 0.5))
+          malas.push(el.textContent.trim().slice(0, 40));
+      }
+      // ningún texto más ancho que su casilla (p. ej. «pocos anuncios» montado sobre la columna de al lado)
+      for (const el of document.querySelectorAll('.seg-c, .matriz td'))
+        if (el.getBoundingClientRect().width > 0 && el.scrollWidth > el.clientWidth + 1) malas.push('ancho: ' + el.textContent.trim().slice(0, 40));
+      return JSON.stringify({ancho, ruta: ${JSON.stringify(ruta)}, scrollWidth: doc.scrollWidth, desborda: doc.scrollWidth > ancho,
+        acabados: document.querySelectorAll('details.seg-acabado').length, motores: document.querySelectorAll('.seg-motor').length,
+        matriz: document.querySelectorAll('.matriz td').length, notaEspana: !!document.querySelector('.aviso-zona'), fuera: malas});
+    })()`)));
+  }
+}
+for (const r of modeloRes) console.log("detalle de modelo:", JSON.stringify(r));
+// Desde la tabla por modelo: el enlace lleva al detalle con la misma zona y tipo
+await tamano(1440, false); await ir(`${BASE}/mercado?zona=comunidad&tipo=VO`);
+await evalua(`document.querySelector('.tabla-modelos a.enlace-modelo').click(); true`); await espera(1500);
+const enlaceModelo = await evalua("location.pathname + location.search");
+console.log("enlace desde la tabla:", enlaceModelo);
+await tamano(390, true);
 for (const r of resultados) console.log("móvil 390:", JSON.stringify(r));
 const comprobacion = JSON.stringify({
   desborda: resultados.some(r => r.desborda),
@@ -152,6 +190,9 @@ const comprobacion = JSON.stringify({
   sinGrafico: resultados.filter(r => r.ruta && /direccion|ventas/.test(r.ruta) && r.graficos === 0).map(r => r.ruta),
   escritorioFuera: escritorio.filter(r => r.celdasFuera.length || r.desborda).map(r => r.ruta),
   detalleFuera: detalles.filter(d => !d.dentro || !d.deEse || !d.curva || d.scrollY === 0).map(d => d.ancho),
+  detalleModelo: modeloRes.filter(r => r.desborda || r.fuera.length || r.acabados === 0 ||
+                                       (r.ruta.includes("tipo=VO") ? r.matriz !== 12 : r.matriz !== 0)).map(r => r.ancho + " " + r.ruta),
+  enlaceModelo: /^\/mercado\/modelo\/[^?]+\?tipo=VO&zona=comunidad$/.test(enlaceModelo),
 });
 await ir(`${BASE}/mercado`); await espera(800);
 await captura("mercado_movil_390.png");
@@ -166,13 +207,24 @@ for (const [v, ruta] of Object.entries(PAGINAS)) {
   await ir(`${BASE}/${ruta}`); await espera(800);
   await captura(`${v}_escritorio_1440.png`);
 }
+// Detalle de un modelo en VN y en VO, con los dos primeros acabados desplegados
+const abrir = "document.querySelectorAll('details.seg-acabado').forEach((d, i) => { d.open = i < 2; }); true";
+for (const [nombre, ruta] of [["modelo_vn", "/mercado/modelo/T-Roc?tipo=VN&zona=espana"],
+                              ["modelo_vo", "/mercado/modelo/T-Roc?tipo=VO&zona=espana"],
+                              ["modelo_vo_provincia", "/mercado/modelo/T-Roc?tipo=VO&zona=provincia"]]) {
+  for (const [ancho, movil, sufijo] of [[1440, false, "escritorio_1440"], [390, true, "movil_390"]]) {
+    await tamano(ancho, movil); await ir(`${BASE}${ruta}`); await evalua(abrir); await espera(300);
+    await captura(`${nombre}_${sufijo}.png`);
+  }
+}
 await tamano(390, true); await ir(`${BASE}/mercado`); await espera(500);
 const zonas = await evalua(`JSON.stringify([...document.querySelectorAll('.segmento, .nav-movil-item, .boton-salir')].filter(e => getComputedStyle(e).display !== 'none').map(e => Math.round(e.getBoundingClientRect().height)))`);
 console.log("altos de zonas táctiles (px):", zonas);
 console.log("errores de consola/CSP:", errores.length ? errores : "ninguno");
 const c = JSON.parse(comprobacion);
 const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.sinConcesionariosEnProvincia ||
-  c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.escritorioFuera.length > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0 || c.detalleFuera.length > 0;
+  c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.escritorioFuera.length > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0 || c.detalleFuera.length > 0 ||
+  c.detalleModelo.length > 0 || !c.enlaceModelo;
 console.log("comprobación:", comprobacion);
 console.log(mal ? "RESULTADO: FALLA" : "RESULTADO: correcto");
 ws.close(); process.exit(mal ? 1 : 0);

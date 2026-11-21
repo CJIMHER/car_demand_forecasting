@@ -62,7 +62,7 @@
           <tbody>
             {% for r in m.modelos %}
             <tr>
-              <th scope="row" class="izq">{{ r.modelo }}</th>
+              <th scope="row" class="izq">{% if r.url %}<a class="enlace-modelo" href="{{ r.url }}">{{ r.modelo }}</a>{% else %}{{ r.modelo }}{% endif %}</th>
               <td data-etiqueta="Anuncios">{{ r.anuncios }}</td>
               <td data-etiqueta="En 7 días" class="var-{{ r.variacion.clase }}"{% if r.variacion.motivo %} title="Sin cifra: {{ r.variacion.motivo }}"{% endif %}>{{ r.variacion.texto }}{% if r.variacion.porcentaje %} <span class="pct">{{ r.variacion.porcentaje }}</span>{% endif %}</td>
               <td data-etiqueta="Nuestros"{% if r.nuestros.motivo %} title="Sin cifra: {{ r.nuestros.motivo }}"{% endif %}>{{ r.nuestros.texto }}{% if r.nuestros.peso %} <span class="pct">{{ r.nuestros.peso }}</span>{% endif %}</td>
@@ -79,6 +79,7 @@
       </div>
       {% for t in m.motivos %}<p class="nota motivo">«—» {{ t }}</p>{% endfor %}
       {% for t in m.notas %}<p class="nota">{{ t }}</p>{% endfor %}
+      <p class="nota">Pulsa un modelo para ver su detalle por acabado y motor{% if m.tipo == 'VO' %}, y su precio por antigüedad y km{% endif %}.</p>
     </section>
 
     <section aria-labelledby="t-serie" class="tarjeta tarjeta-estrecha">

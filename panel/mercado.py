@@ -5,6 +5,7 @@ prepara para la plantilla. Los textos propios del concesionario salen de config/
 from __future__ import annotations
 
 from datetime import date, timedelta
+from urllib.parse import quote
 
 import psycopg
 
@@ -19,6 +20,7 @@ FUENTES = (
     ("vn_otros", "Nuevos eléctricos e híbridos"),
 )
 DIAS_SERIE = 90
+SIN_MODELO = "Sin modelo"   # el de analitica/mercado.py: sin detalle
 
 MOTIVO_AYER = "falta la captura completa del día anterior"
 MOTIVO_HACE7 = "falta la captura completa de hace 7 días"
@@ -133,7 +135,8 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
                FROM panel_mercado_modelo WHERE dia = %s AND tipo = %s AND zona = %s
                ORDER BY anuncios DESC, modelo""", (dia, tipo, zona)):
         modelos.append({
-            "modelo": modelo, "anuncios": fmt.miles(n), "nuestros": nuestros(propios_m, n, n_pct, con_peso=zona == "provincia"),
+            "modelo": modelo, "url": None if modelo == SIN_MODELO else url_detalle(modelo, tipo, zona),
+            "anuncios": fmt.miles(n), "nuestros": nuestros(propios_m, n, n_pct, con_peso=zona == "provincia"),
             "variacion": variacion(n, hace7, MOTIVO_HACE7, conc.n_minimo_porcentaje),
             "altas": fmt.miles(altas7) if ventana_ok else fmt.GUION,
             "ausencias": fmt.miles(ausencias7) if ventana_ok else fmt.GUION,
@@ -213,4 +216,168 @@ def estado_fuentes(pg: psycopg.Connection) -> dict:
             "anuncios": fmt.miles(ultima[2]) if ultima else fmt.GUION,
             "sin_provincia": fmt.miles(ultima[3]) if ultima else fmt.GUION,
         })
-    return {"anotaciones": anotaciones, "dias": dias}
+    return {"anotaciones": anotaciones, "dias": dias, "cobertura": cobertura(pg)}
+
+
+# --------------------------------------------------------------------------- detalle de un modelo
+
+NOTA_PRECIO = "Precio publicado, no precio de venta. Los segmentos con pocos anuncios no son representativos."
+
+
+def _euros_rango(p25, p75) -> str:
+    return f"{fmt.miles(round(p25 / 100))}–{fmt.miles(round(p75 / 100))} €"
+
+
+def cifra_precio(p50, p25, p75, n: int, n_mostrar: int, n_min: int) -> dict:
+    """Precio mediano de un segmento con su rango p25–p75. Con n < n_mostrar, «—» y «pocos anuncios»
+    (nunca la cifra); con n < n_min, la cifra atenuada con su n."""
+    if n < n_mostrar or p50 is None:
+        return {"texto": fmt.GUION, "pocos": True, "n": n, "rango": None, "atenuado": False}
+    return {"texto": fmt.euros(p50), "pocos": False, "n": n, "rango": _euros_rango(p25, p75),
+            "atenuado": n < n_min}
+
+
+def cifra_dias(dias, cota: bool, n: int, n_mostrar: int, n_min: int) -> dict:
+    if n < n_mostrar or dias is None:
+        return {"texto": fmt.GUION, "pocos": True, "n": n, "atenuado": False, "cota": False}
+    return {"texto": f"≥ {fmt.miles(dias)}" if cota else fmt.miles(dias), "pocos": False, "n": n,
+            "atenuado": n < n_min, "cota": cota}
+
+
+def url_detalle(modelo: str, tipo: str, zona: str, acabado: str | None = None) -> str:
+    url = f"/mercado/modelo/{quote(modelo, safe='')}?tipo={tipo}&zona={zona}"
+    return url + (f"&acabado={quote(acabado, safe='')}" if acabado else "")
+
+
+def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, modelo: str, hoy: date,
+                   acabado: str | None = None) -> dict:
+    """Detalle de un modelo: por acabado y motor y, en VO, precio por antigüedad y km. Lee solo
+    panel_mercado_segmento (precalculada); nunca las tablas de hechos."""
+    nombres = etiquetas_zona(conc)
+    n_mostrar, n_min = conc.n_minimo_mostrar, conc.n_minimo_medianas
+    nombre_tipo = {"VN": "Nuevos", "VO": "Ocasión"}[tipo]
+    base = {
+        "tipo": tipo, "zona": zona, "zona_nombre": nombres[zona], "modelo": modelo, "nombre_tipo": nombre_tipo,
+        "capturas": capturas(pg, hoy), "volver": f"/mercado?zona={zona}&tipo={tipo}",
+        "zonas": [{"id": z, "etiqueta": nombres[z], "activa": z == zona, "url": url_detalle(modelo, tipo, z)}
+                  for z in ZONAS],
+        "tipos": [{"id": t, "etiqueta": e, "activa": t == tipo, "url": url_detalle(modelo, t, zona)}
+                  for t, e in (("VN", "Nuevos (VN)"), ("VO", "Ocasión (VO)"))],
+        "hay_datos": False, "hay_modelo": False, "nota_precio": NOTA_PRECIO, "n_minimo": n_min,
+        "n_mostrar": n_mostrar,
+    }
+    dia = pg.execute("SELECT max(dia) FROM panel_mercado_dia WHERE tipo = %s", (tipo,)).fetchone()[0]
+    if dia is None:
+        return base
+    base.update({"hay_datos": True, "dia": dia, "es_hoy": dia == hoy, "dia_largo": fmt.fecha_larga(dia)})
+    filas = pg.execute(
+        """SELECT nivel, acabado, acabado_reconocido, motor, antiguedad, antiguedad_orden, km, km_orden, color,
+                  anuncios, propios, n_precio, precio_p25_cents, precio_p50_cents, precio_p75_cents,
+                  dias_mediana, dias_cota
+           FROM panel_mercado_segmento WHERE dia = %s AND tipo = %s AND zona = %s AND modelo = %s""",
+        (dia, tipo, zona, modelo)).fetchall()
+    if not filas:
+        return base
+    con_peso = zona == "provincia"
+    pct = conc.n_minimo_porcentaje
+
+    def segmento(f) -> dict:
+        (_, _, _, _, _, _, _, _, _, n, propios, n_precio, p25, p50, p75, dias, cota) = f
+        return {"anuncios": fmt.miles(n), "n": n, "nuestros": nuestros(propios, n, pct, con_peso),
+                "precio": cifra_precio(p50, p25, p75, n_precio, n_mostrar, n_min),
+                "dias": cifra_dias(dias, cota, n, n_mostrar, n_min)}
+
+    por_nivel: dict[str, list] = {}
+    for f in filas:
+        por_nivel.setdefault(f[0], []).append(f)
+    total = por_nivel["modelo"][0]
+
+    acabados = []
+    for f in sorted(por_nivel.get("acabado", []), key=lambda f: (not f[2], -f[9], f[1])):
+        motores = [{"nombre": m[3], **segmento(m)}
+                   for m in sorted((m for m in por_nivel.get("motor", []) if m[1] == f[1]), key=lambda m: (-m[9], m[3]))]
+        acabados.append({"nombre": f[1], "reconocido": f[2], **segmento(f), "motores": motores})
+
+    matriz = None
+    if tipo == "VO" and conc.tramos_antiguedad and conc.tramos_km:
+        con_matriz = sorted({f[1] for f in por_nivel.get("acabado_antiguedad_km", [])})
+        elegido = acabado if acabado in con_matriz else None
+        celdas = {(f[5], f[7]): f for f in (
+            por_nivel.get("antiguedad_km", []) if elegido is None
+            else [f for f in por_nivel.get("acabado_antiguedad_km", []) if f[1] == elegido])}
+        filas_m = []
+        for i, (_, etiqueta) in enumerate(conc.tramos_antiguedad):
+            fila = []
+            for j, (_, km) in enumerate(conc.tramos_km):
+                c = celdas.get((i, j))
+                n = c[11] if c else 0
+                fila.append({"km": km, "n": n, "anuncios": c[9] if c else 0,
+                             "precio": cifra_precio(c[13] if c else None, c[12] if c else None,
+                                                    c[14] if c else None, n, n_mostrar, n_min)})
+            filas_m.append({"etiqueta": etiqueta, "celdas": fila})
+        en_matriz = sum(f[9] for f in por_nivel.get("antiguedad_km", []))
+        orden_acabados = [a["nombre"] for a in acabados if a["nombre"] in con_matriz]
+        matriz = {
+            "columnas": [km for _, km in conc.tramos_km], "filas": filas_m,
+            "filtro": [{"etiqueta": "Todos", "activa": elegido is None, "url": url_detalle(modelo, tipo, zona)}] + [
+                {"etiqueta": a, "activa": a == elegido, "url": url_detalle(modelo, tipo, zona, a)}
+                for a in orden_acabados],
+            "acabado": elegido, "fuera": total[9] - en_matriz,
+        }
+
+    colores = [{"nombre": f[8], **segmento(f)} for f in sorted(por_nivel.get("color", []), key=lambda f: -f[9])]
+
+    # Si en la zona elegida la mayoría de las casillas quedan en «—», se propone ver España
+    casillas = [a["precio"] for a in acabados] + [m["precio"] for a in acabados for m in a["motores"]]
+    if matriz:
+        casillas += [c["precio"] for fila in matriz["filas"] for c in fila["celdas"]]
+    pocos = sum(1 for c in casillas if c["pocos"])
+    nota_espana = None
+    if zona != "espana" and casillas and pocos * 2 > len(casillas):
+        nota_espana = {"texto": (f"En {nombres[zona]}, {pocos} de {len(casillas)} casillas tienen menos de "
+                                 f"{n_mostrar} anuncios con precio."),
+                       "url": url_detalle(modelo, tipo, "espana", matriz and matriz["acabado"])}
+
+    notas = [
+        f"Precio: mediana de los anuncios con precio publicados {'hoy' if dia == hoy else 'ese día'}; debajo, "
+        "el rango p25–p75 (la mitad central de los precios). Días publicado: mediana; «≥ N», como en la tabla "
+        "por modelo.",
+        f"Con menos de {n_min} anuncios, la cifra va atenuada con su n; con menos de {n_mostrar}, «—».",
+        "Acabado: el que figura en el texto de la versión. «Sin clasificar»: anuncios cuyo acabado no se "
+        "reconoce; no se adivina.",
+    ]
+    if matriz:
+        notas.append(("Antigüedad: años cumplidos desde la primera matriculación hasta el día de los datos. "
+                      + (f"{fmt.miles(matriz['fuera'])} anuncios sin fecha de matriculación o sin km no entran en "
+                         "la matriz." if matriz["fuera"] else "")).strip())
+    return {**base, "hay_modelo": True, "total": segmento(total), "acabados": acabados, "matriz": matriz,
+            "colores": colores, "nota_espana": nota_espana, "notas": notas}
+
+
+def cobertura(pg: psycopg.Connection) -> dict:
+    """«Estado de las fuentes»: anuncios con acabado reconocido por modelo y tipo (España, último día
+    calculado) y los 20 textos de versión sin clasificar más frecuentes."""
+    filas = pg.execute(
+        """SELECT s.tipo, s.dia, s.modelo, sum(s.anuncios),
+                  sum(s.anuncios) FILTER (WHERE s.acabado_reconocido)
+           FROM panel_mercado_segmento s
+           JOIN (SELECT tipo, max(dia) AS dia FROM panel_mercado_segmento GROUP BY tipo) u USING (tipo, dia)
+           WHERE s.zona = 'espana' AND s.nivel = 'acabado'
+           GROUP BY 1, 2, 3 ORDER BY 1, 4 DESC, 3""").fetchall()
+    tipos = []
+    for tipo in TIPOS:
+        mias = [f for f in filas if f[0] == tipo]
+        if not mias:
+            continue
+        n, ok = sum(f[3] for f in mias), sum(f[4] or 0 for f in mias)
+        tipos.append({
+            "tipo": tipo, "dia": fmt.fecha(mias[0][1]), "total": fmt.porcentaje(ok / n * 100, 1) if n else fmt.GUION,
+            "anuncios": fmt.miles(n),
+            "modelos": [{"modelo": f[2], "anuncios": fmt.miles(f[3]), "reconocidos": fmt.miles(f[4] or 0),
+                         "porcentaje": fmt.porcentaje((f[4] or 0) / f[3] * 100, 0)} for f in mias],
+        })
+    textos = [{"tipo": t, "modelo": m, "version": v, "anuncios": fmt.miles(n)} for t, m, v, n in pg.execute(
+        """SELECT s.tipo, s.modelo, s.version, s.anuncios FROM panel_mercado_sin_clasificar s
+           JOIN (SELECT tipo, max(dia) AS dia FROM panel_mercado_segmento GROUP BY tipo) u USING (tipo, dia)
+           ORDER BY s.anuncios DESC, s.tipo, s.modelo, s.version LIMIT 20""")]
+    return {"tipos": tipos, "textos": textos}

@@ -19,8 +19,38 @@ MODELOS = {
     "vn": [("T-Roc", 31900), ("T-Cross", 25400), ("Tiguan", 41200), ("Golf", 31500), ("Taigo", 26800),
            ("Polo", 21900), ("Tayron", 49900), ("Golf Variant", 33900), ("Passat", 47300)],
     "vn_otros": [("ID.3", 36900), ("ID.4", 44900), ("ID.5", 49900), ("ID.7", 56900), ("ID. Buzz", 64900),
-                 ("Tiguan eHybrid", 47900), ("Golf eHybrid", 39900)],
+                 ("Tiguan", 47900), ("Golf", 39900)],
 }
+# Versiones como las escribe la web: acabado (con su ortografía de VO o de VN) y motor. Hay acabados
+# fuera del catálogo («Dark», «Classic», ninguno) para que «Sin clasificar» tenga anuncios.
+ACABADOS = {
+    "vo": [("Life", 1.0), ("R-Line", 1.1), ("``Más``", 1.04), ("Style", 1.06), ("Sport", 1.0), ("Dark Line", 1.05),
+           ("Dark", 1.03), ("", 0.97)],
+    "vn": [('"Más"', 1.0), ("R-Line", 1.1), ("Style", 1.06), ("{modelo}", 0.93), ("Match", 0.98),
+           ("R-Line Classic", 1.08)],
+    "vn_otros": [('"Más"', 1.0), ("R-Line", 1.1), ("Style", 1.06), ("Pro", 1.0), ("Pro S", 1.08), ("GTX", 1.15)],
+}
+MOTORES = {   # (cilindrada, tecnología, kW, CV, combustible, factor de precio)
+    "termico": [("1.0", "TSI", 70, 95, "Gasolina", 0.92), ("1.0", "TSI", 85, 116, "Gasolina", 0.97),
+                ("1.5", "eTSI", 110, 150, "Gasolina", 1.06), ("1.5", "TSI", 110, 150, "Gasolina", 1.04),
+                ("2.0", "TDI", 110, 150, "Diésel", 1.08)],
+    "electrico": [("", "", 150, 204, "Eléctrico", 1.0), ("", "", 210, 286, "Eléctrico", 1.12)],
+    "hibrido": [("1.5", "TSI eHybrid", 150, 204, "Híbrido", 1.0), ("1.5", "TSI eHybrid", 200, 272, "Híbrido", 1.1)],
+}
+
+
+def version(fuente: str, modelo: str, acabado: str, motor: tuple, automatico: bool) -> str:
+    """Texto de versión con el formato de VO («<marca> T-Roc ``Más`` 1.5 TSI 110 kW (150 CV) DSG») o
+    de VN («T-Roc "Más"  1.5 eTSI 85 kW (116 CV)  Automático DSG 7 vel.»)."""
+    cil, tec, kw, cv, combustible, _ = motor
+    acabado = acabado.replace("{modelo}", modelo)
+    if fuente == "vo":
+        partes = ["Volkswagen", modelo, acabado, cil, tec, f"{kw} kW ({cv} CV)", "DSG" if automatico else ""]
+        return " ".join(p for p in partes if p)
+    if combustible == "Eléctrico":
+        return f"{modelo} {acabado}   {kw} kW ({cv} CV) 77 kWh Automático 1 vel."
+    cambio = "Automático DSG 7 vel." if automatico else "6 vel."
+    return f"{modelo} {acabado}  {cil} {tec} {kw} kW ({cv} CV)  {cambio}"
 TAMANO = {"vo": 260, "vn": 340, "vn_otros": 70}
 OTRAS = ["28", "08", "46", "50", "48", "15", "33", "30"]
 
@@ -32,6 +62,7 @@ def nombre_dealer(dealer_id: str) -> str:
 class Generador:
     def __init__(self, provincia: str, provincias_comunidad: tuple[str, ...], dealer_propio: str, semilla: int = 7):
         self.r = random.Random(semilla)
+        self.v = random.Random(semilla * 1000 + 1)   # versiones, matriculación y km, aparte de lo demás
         cercanas = [p for p in provincias_comunidad if p != provincia][:4]
         lejanas = [p for p in OTRAS if p not in provincias_comunidad and p != provincia]
         self.provincias = [(provincia, 0.3)] + [(p, 0.2 / max(len(cercanas), 1)) for p in cercanas] + \
@@ -52,15 +83,32 @@ class Generador:
             prov = r.choices([p for p, _ in self.provincias], [w for _, w in self.provincias])[0]
             cp = f"{prov}{r.randint(1, 999):03d}"
             dealer = self.propio if prov == self.provincia and r.random() < 0.25 else r.choice(self.dealers[prov])
-        precio = None if r.random() < 0.03 else int(base * r.uniform(0.85, 1.15)) * 100
+        precio = None if r.random() < 0.03 else base * r.uniform(0.85, 1.15)
+        v = self.v
+        acabado, f_acabado = v.choice(ACABADOS[fuente])
+        clase = "electrico" if modelo.startswith("ID.") else ("hibrido" if fuente == "vn_otros" else "termico")
+        motor = v.choice(MOTORES[clase])
+        automatico = clase != "termico" or v.random() < 0.6
+        factor = f_acabado * motor[5] * (1.03 if automatico else 1.0)
+        extra = {}
+        if fuente == "vo":
+            edad = v.randint(30, 9 * 365)
+            km = int(edad / 365 * v.uniform(6000, 24000))
+            factor *= max(0.4, 1 - 0.075 * edad / 365) * max(0.7, 1 - km / 500_000)
+            extra = {"matriculacion": (dia - timedelta(days=edad)).isoformat(), "km": km}
+        if precio is not None:
+            precio = int(precio * factor) * 100
         return coche(f"ESP{fuente.upper()}{self.n:07d}", fuente=fuente, dealer_id=dealer, dealer=nombre_dealer(dealer),
-                     cp=cp, modelo=modelo, precio=precio, dia=dia.isoformat(), ciudad="Ciudad prueba")
+                     cp=cp, modelo=modelo, precio=precio, dia=dia.isoformat(), ciudad="Ciudad prueba",
+                     version=version(fuente, modelo, acabado, motor, automatico), cv=motor[3],
+                     combustible=motor[4], **extra)
 
 
 def escenario(base: Path, fin: date, provincia: str, provincias_comunidad: tuple[str, ...], dealer_propio: str,
-              dias: int = 40, semilla: int = 7) -> dict:
+              dias: int = 40, semilla: int = 7, escala: float = 1.0) -> dict:
     """Capturas de `dias` días hasta `fin`. VO falla el día 12, VN no tiene pasada el día 25 y VN
-    eléctricos e híbridos empieza el día 8 (todos contados desde el primero).
+    eléctricos e híbridos empieza el día 8 (todos contados desde el primero). `escala` multiplica el
+    tamaño de cada flota (make panel-dev usa más anuncios para que los segmentos tengan muestra).
 
     En la provincia del concesionario propio, un concesionario (`calla`) no publica nada el
     antepenúltimo día y otro (`nuevo`) aparece cinco días antes del final."""
@@ -80,10 +128,10 @@ def escenario(base: Path, fin: date, provincia: str, provincias_comunidad: tuple
             if fuente not in stock:
                 if i in huecos[fuente]:
                     continue
-                stock[fuente] = [g.nuevo(fuente, dia) for _ in range(TAMANO[fuente])]
+                stock[fuente] = [g.nuevo(fuente, dia) for _ in range(int(TAMANO[fuente] * escala))]
             else:
                 vivos = [c for c in stock[fuente] if g.r.random() > 0.035]
-                vivos += [g.nuevo(fuente, dia) for _ in range(int(TAMANO[fuente] * g.r.uniform(0.02, 0.05)))]
+                vivos += [g.nuevo(fuente, dia) for _ in range(int(TAMANO[fuente] * escala * g.r.uniform(0.02, 0.05)))]
                 stock[fuente] = vivos
             if i in huecos[fuente]:
                 if fuente == "vo":

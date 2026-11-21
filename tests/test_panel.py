@@ -400,6 +400,8 @@ def test_cabeceras_de_seguridad_y_nada_de_terceros(app, pg, datos, personas):
     cl = dentro(app, "tecnico")
     paginas = [anonimo.get("/acceso"), anonimo.get("/salud"), anonimo.get("/robots.txt"),
                anonimo.get("/static/css/panel.css"), cl.get("/mercado"), cl.get("/estado-fuentes"),
+               cl.get("/mercado/modelo/T-Roc?tipo=VO&zona=espana"),
+               cl.get("/mercado/modelo/Golf?tipo=VN&zona=provincia", headers={"HX-Request": "true"}),
                cl.get("/direccion"), cl.get("/cambiar-clave"), cl.get("/mercado?zona=espana&tipo=VO",
                                                                          headers={"HX-Request": "true"})]
     for r in paginas:
@@ -442,7 +444,7 @@ def _filas(html, tabla="tabla-modelos"):
     html = html.split(f'{tabla}">', 1)[1].split("</table>", 1)[0]
     filas = {}
     for fila in re.findall(r"<tr[^>]*>\s*<th scope=\"row\" class=\"izq\">(.*?)</tr>", html, re.S):
-        modelo = fila.split("<", 1)[0]
+        modelo = re.sub(r"<[^>]+>", "", fila.split("</th>", 1)[0]).replace("(concesionario propio)", "").strip()
         celdas = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", fila, re.S)]
         filas[modelo] = celdas
     return filas
@@ -594,7 +596,7 @@ def test_variacion_en_unidades_y_porcentaje_desde_10(app, pg, personas):
     _poner_mercado(pg, HOY, [("Uno", 12, 10), ("Dos", 7, 9), ("Tres", 3, 3), ("Cuatro", 3, 0), ("Cinco", 30, 40)])
     html = dentro(app, "ventas").get("/mercado?zona=espana&tipo=VO").text
     celdas = {m: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", c)).strip()
-              for m, c in re.findall(r'<th scope="row" class="izq">([^<]+)</th>\s*<td[^>]*>[^<]*</td>\s*<td[^>]*>(.*?)</td>',
+              for m, c in re.findall(r'<th scope="row" class="izq">(?:<a [^>]*>)?([^<]+)(?:</a>)?</th>\s*<td[^>]*>[^<]*</td>\s*<td[^>]*>(.*?)</td>',
                                      html, re.S)}
     assert celdas == {"Uno": "+2 +20 %", "Dos": "−2", "Tres": "0", "Cuatro": "+3", "Cinco": "−10 −25 %"}
     assert '<span class="pct">+20 %</span>' in html                 # el porcentaje va atenuado
@@ -697,6 +699,7 @@ def test_mercado_sin_la_palabra_scraper(app, pg, datos, personas):
         for tipo in ("VN", "VO"):
             textos.append(cl.get(f"/mercado?zona={zona}&tipo={tipo}").text)
             textos.append(cl.get(f"/mercado?zona={zona}&tipo={tipo}", headers={"HX-Request": "true"}).text)
+            textos.insert(0, cl.get(f"/mercado/modelo/T-Roc?zona={zona}&tipo={tipo}").text)
     for html in textos:
         assert "scraper" not in html.lower()
     assert "anuncios que llevan tres capturas seguidas sin verse" in textos[-1]
@@ -717,6 +720,9 @@ propio:
   nombres_en_scrapers: [FICTICIO]
 panel:
   n_minimo_medianas: 4
+segmentos:
+  antiguedad_anios: [{hasta: 3, etiqueta: "hasta 3 años"}, {etiqueta: "más de 3 años"}]
+  km: [{hasta: 50000, etiqueta: "hasta 50.000 km"}, {etiqueta: "más de 50.000 km"}]
 """
 
 
@@ -742,7 +748,14 @@ def test_otro_concesionario_sin_rastro_del_propio(pg, datos, panel_url, tmp_path
         for tipo in ("VN", "VO"):
             paginas.append(tec.get(f"/mercado?zona={zona}&tipo={tipo}").text)
             paginas.append(tec.get(f"/mercado?zona={zona}&tipo={tipo}", headers={"HX-Request": "true"}).text)
+            for modelo in ("T-Roc", "Golf", "ID.4"):   # detalle de un modelo, con y sin htmx
+                url = f"/mercado/modelo/{modelo}?zona={zona}&tipo={tipo}"
+                paginas.append(tec.get(url).text)
+                paginas.append(tec.get(url, headers={"HX-Request": "true"}).text)
     paginas.append(dentro(app, "ventas").get("/estado-fuentes").text)  # página de «sin acceso»
+    assert "Por acabado y motor" in tec.get("/mercado/modelo/Golf?zona=espana&tipo=VN").text and \
+        "Precio por antigüedad y km" in tec.get(
+        "/mercado/modelo/T-Roc?zona=espana&tipo=VO").text
     for html in paginas:
         assert "avisa" not in html.lower() and "sevilla" not in html.lower()
     mercado = tec.get("/mercado").text

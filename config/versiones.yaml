@@ -1,0 +1,168 @@
+# Catálogo de acabados y motores para leer el texto de versión de los anuncios
+# (analitica/versiones.py). Lo usa el precálculo de Mercado para los segmentos por modelo.
+#
+# Cómo se lee una versión (VO: «<marca> T-Roc R-Line 1.5 eTSI 110 kW (150 CV) DSG»;
+# VN: «T-Roc R-Line  1.5 eTSI 110 kW (150 CV)  Automático DSG 7 vel.»):
+#   1. Se quitan la marca (de config/concesionario.yaml), las comillas (``Más``, "Más") y los espacios
+#      sobrantes, y se comparan sin mayúsculas, sin tildes y con el guion como espacio.
+#   2. Se quita el nombre del modelo (o uno de sus nombres en «en_texto»).
+#   3. El acabado es lo que queda hasta el motor (cilindrada «1.5» o potencia «110 kW»), quitando lo
+#      de «ignorar». Tiene que coincidir ENTERO con un acabado del modelo o de «comunes», o con uno
+#      de sus sinónimos. Si el modelo se repite y no queda nada («T-Roc T-Roc»), es el acabado básico.
+#   4. Si no coincide, va a «Sin clasificar»: nunca se adivina. Los textos sin clasificar más
+#      frecuentes salen en «Estado de las fuentes» para ir completando este catálogo.
+#
+# Tras cambiar este fichero: make precalcular (rehace los segmentos de todo el histórico).
+
+basico: Básico
+sin_clasificar: Sin clasificar
+
+# Palabras que pueden ir entre el acabado y el motor y no forman parte del acabado
+# (expresiones regulares sobre el texto ya sin tildes y en minúsculas).
+ignorar:
+  - '\d+ ?kwh'
+  - 'automatico'
+  - 'auto'
+  - 'dsg'
+  - '4motion'
+  - 'traccion 4 ruedas'
+  - 'ehybrid'
+  - 'phev'
+  - 'tsi'
+  - 'etsi'
+  - 'tdi'
+
+# Acabados válidos en cualquier modelo. nombre: como se muestra; sinonimos: otras formas de escribirlo.
+comunes:
+  - nombre: R-Line
+    sinonimos: [Rline]
+  - nombre: Life
+  - nombre: Style
+  - nombre: Más
+  - nombre: Match
+  - nombre: Sport
+  - nombre: Advance
+  - nombre: Edition
+  - nombre: Business
+  - nombre: Executive
+  - nombre: Elegance
+
+# Por modelo (el modelo tal como lo da la web, sin la marca). en_texto: cómo aparece el modelo al
+# principio de la versión si no es igual que su nombre (el nombre del modelo se prueba siempre).
+modelos:
+  T-Roc:
+    acabados:
+      - nombre: Dark Line
+      - nombre: R
+      - nombre: Launch Edition
+      - nombre: R-Line 1st Edition
+      - nombre: Special Edition
+  T-Roc Cabriolet:
+    en_texto: [T-Roc Cabrio]
+  T-Cross: {}
+  Taigo: {}
+  Polo:
+    acabados:
+      - nombre: GTI
+      - nombre: GTI Final Edition
+      - nombre: United
+  Golf:
+    acabados:
+      - nombre: GTI
+      - nombre: GTI Clubsport
+      - nombre: GTI Rabbit
+      - nombre: GTI Performance
+      - nombre: GTI 50 Aniversario
+      - nombre: GTD
+      - nombre: GTE
+      - nombre: R
+      - nombre: R Black Edition
+      - nombre: R 20 Aniversario
+      - nombre: 50 Aniversario
+      - nombre: Ready2Go
+      - nombre: Last Edition
+  Golf Variant:
+    acabados:
+      - nombre: R
+  Golf Sportsvan: {}
+  Tiguan:
+    acabados:
+      - nombre: Urban Sport
+      - nombre: 20 Aniversario
+      - nombre: Limited
+  Tiguan Allspace:
+    en_texto: [Tiguan Allspace]
+  Tayron:
+    acabados:
+      - nombre: Family
+  Touran: {}
+  Passat:
+    en_texto: [Passat Variant, Variant]
+    acabados:
+      - nombre: GTE
+  Passat Variant:
+    en_texto: [Passat]
+    acabados:
+      - nombre: GTE
+      - nombre: Alltrack
+        sinonimos: [Passat Alltrack]
+  Arteon: {}
+  Arteon Shooting Brake:
+    acabados:
+      - nombre: R
+  Touareg:
+    acabados:
+      - nombre: R
+      - nombre: Pure
+      - nombre: Premium Atmosphere
+      - nombre: Premium Elegance
+  ID.3:
+    acabados: &id_acabados
+      - nombre: Pure
+      - nombre: Pro
+      - nombre: Pro S
+      - nombre: Pro Performance
+      - nombre: Pro Black
+      - nombre: Pro Más
+      - nombre: Pure Más
+      - nombre: Pro S Más
+      - nombre: GTX
+      - nombre: GTX Más
+  ID.3 Neo:
+    acabados: *id_acabados
+  ID.4:
+    acabados: *id_acabados
+  ID.5:
+    acabados: *id_acabados
+  ID.7:
+    acabados: *id_acabados
+  ID.7 Tourer:
+    acabados: *id_acabados
+
+# Tecnología del motor, por orden: vale la primera cuyo patrón aparece en el texto (sin tildes y
+# en minúsculas). Si ninguna aparece, la del combustible («por_combustible»); si tampoco, sin dato.
+tecnologias:
+  - nombre: eHybrid
+    patrones: ['\behybrid\b', '\bphev\b', '\bgte\b', '\(\d+ ?cv ?\) ?/ ?\d+ ?kw']
+  - nombre: TSI Hybrid
+    patrones: ['\btsi hybrid\b']
+  - nombre: eTSI
+    patrones: ['\betsi\b']
+  - nombre: TSI
+    patrones: ['\btsi\b']
+  - nombre: TDI
+    patrones: ['\btdi\b']
+  - nombre: TGI
+    patrones: ['\btgi\b']
+  - nombre: Eléctrico
+    patrones: ['\d+ ?kwh\b', '\bepower\b']
+por_combustible:
+  Eléctrico: Eléctrico
+  Híbrido: Híbrido
+
+# Cambio, solo cuando viene en el texto. En VN, «6 vel.» sin «Automático» es manual (así escribe la
+# web los manuales en nuevos); en VO no se deduce nada de que falte «DSG».
+cambio:
+  automatico: ['\bdsg\b', '\bautomatico\b', '\bauto\b', '\b1 vel\b']
+  manual: ['\bmanual\b']
+  manual_vn: ['\b\d vel\b']

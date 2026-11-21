@@ -35,18 +35,21 @@ CONFIG = {
 
 def coche(vid: str, *, fuente: str = "vo", dealer_id: str = "ESP00217", dealer: str = "CONCESIONARIO PRUEBA",
           cp: str | None = "41001", modelo: str = "Golf", precio: int | None = 2_500_000,
-          km: float | None = 15000, dia: str = "2026-11-10", ciudad: str = "Sevilla") -> dict:
+          km: float | None = 15000, dia: str = "2026-11-10", ciudad: str = "Sevilla", version: str | None = None,
+          cv: int | None = 150, combustible: str | None = None, matriculacion: str | None = "2024-03-01",
+          color: str | None = None) -> dict:
     vn = fuente != "vo"
     business = {
         "brand": "Volkswagen", "model": modelo, "model_code": "5G1", "carline": modelo,
-        "version": f"{modelo} 1.5 TSI Life", "model_year": "2025", "vin": "WVWZZZ" + vid[-11:].rjust(11, "0"),
+        "version": version or f"{modelo} 1.5 TSI Life", "model_year": "2025",
+        "vin": "WVWZZZ" + vid[-11:].rjust(11, "0"),
         "price_retail_cents": precio, "price_basis_label": "al contado PVP Concesionario",
         "price_new_reference_cents": None, "price_reference_label": None, "currency": "EUR",
         "financing_terms": {"Rate": "199"}, "mileage_km": None if vn else km,
-        "first_registration_date": None if vn else "2024-03-01",
-        "fuel": "Gasolina" if fuente != "vn_otros" else "Eléctrico",
-        "power_kw": 110, "power_cv": 150, "engine_capacity_cc": 1498,
-        "exterior_color": "Blanco", "interior_color": "Negro", "reservation": None,
+        "first_registration_date": None if vn else matriculacion,
+        "fuel": combustible or ("Gasolina" if fuente != "vn_otros" else "Eléctrico"),
+        "power_kw": None if cv is None else round(cv / 1.36), "power_cv": cv, "engine_capacity_cc": 1498,
+        "exterior_color": color, "interior_color": "Negro", "reservation": None,
         "vat_reclaimable": False, "approved": not vn, "business_model": "retail",
         "dealer_id": dealer_id, "dealer_name": dealer, "dealer_city": ciudad, "dealer_postcode": cp,
         "campaign_codes": [],

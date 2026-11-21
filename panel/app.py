@@ -300,6 +300,17 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         ctx = {"m": mercado.datos(pg, app.state.conc, tipo, zona, app.state.hoy()), "vista": "mercado"}
         return pintar(request, "_mercado.html" if es_htmx(request) else "mercado.html", ctx, pg=pg, usuario=u)
 
+    @app.get("/mercado/modelo/{modelo}")
+    def vista_modelo(request: Request, modelo: str, zona: str = "provincia", tipo: str = "VN", acabado: str = "",
+                     pg=Depends(bd)):
+        u = exigir(request, pg, "mercado")
+        zona = zona if zona in mercado.ZONAS else "provincia"
+        tipo = tipo if tipo in mercado.TIPOS else "VN"
+        ctx = {"d": mercado.detalle_modelo(pg, app.state.conc, tipo, zona, modelo[:80], app.state.hoy(),
+                                           acabado[:80] or None), "vista": "mercado"}
+        return pintar(request, "_mercado_modelo.html" if es_htmx(request) else "mercado_modelo.html", ctx,
+                      pg=pg, usuario=u)
+
     def vista_contrato(request: Request, pg, clave: str, plantilla: str, parcial: str, ctx: Callable[[], dict]):
         """Dirección, Ventas y Marketing: abiertas según sus datos (permisos.visible); si no, «Se activa…»."""
         u = exigir(request, pg, clave)

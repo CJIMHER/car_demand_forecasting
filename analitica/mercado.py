@@ -1,9 +1,11 @@
 """Precálculo de la vista «Mercado» del panel (cron de cdf_jobs a las 09:10).
 
 Lee las tablas de hechos (stock_externo_snapshot, eventos_externos, scraper_runs) y rellena las
-tablas derivadas panel_mercado_dia, panel_mercado_modelo, panel_mercado_concesionario y
-panel_mercado_capturas. El panel solo lee estas tablas: nunca calcula sobre las de hechos al servir
-una página. Recalcular un día sustituye ese día en las derivadas; las tablas de hechos no se tocan.
+tablas derivadas panel_mercado_dia, panel_mercado_modelo, panel_mercado_concesionario,
+panel_mercado_capturas y, para el detalle de cada modelo, panel_mercado_segmento y
+panel_mercado_sin_clasificar (analitica/segmentos.py). El panel solo lee estas tablas: nunca
+calcula sobre las de hechos al servir una página. Recalcular un día sustituye ese día en las
+derivadas; las tablas de hechos no se tocan.
 
 Por concesionario (solo la provincia del concesionario propio): los concesionarios con anuncios ese
 día, con el nombre que publica la web (el más reciente si un código ha tenido varios).
@@ -24,7 +26,7 @@ Reglas (cada una con su prueba en tests/test_mercado.py):
 - Días publicado: mediana (inferior) de D − primer día visto de los publicados en D. Si algún
   anuncio en la mitad inferior (edad ≤ mediana) no tiene alta observada, su edad real puede ser
   mayor y la mediana es una cota inferior («≥ N»).
-- Modelo: el del scraper sin espacios sobrantes ni la marca delante («T-Cross», no «Volkswagen
+- Modelo: el del scraper sin espacios sobrantes ni la marca delante («T-Cross», no «<marca>
   T-Cross»), con la ortografía más frecuente entre las que solo cambian en mayúsculas.
 - Precio mediano: de los publicados en D con precio (mediana estadística: media de los dos
   centrales si el número es par).
@@ -51,6 +53,7 @@ from datetime import date, timedelta
 import psycopg
 from psycopg.types.json import Jsonb
 
+from analitica import segmentos, versiones
 from ingesta import aviso_copia, telegram
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
 from ingesta.db import conectar
@@ -72,6 +75,13 @@ class Fila:
     es_propio: bool
     modelo: str
     precio_cents: int | None
+    # Para los segmentos del detalle de un modelo (analitica/segmentos.py)
+    version: str | None = None
+    combustible: str | None = None
+    potencia_cv: int | None = None
+    matriculacion: date | None = None
+    km: int | None = None
+    color: str | None = None
 
 
 Clave = tuple[str, str]  # (fuente, id_anuncio)
@@ -81,7 +91,7 @@ Clave = tuple[str, str]  # (fuente, id_anuncio)
 
 def normalizar_modelo(valor, marca: str | None = None) -> str:
     """Modelo tal como lo da el scraper, sin espacios sobrantes y sin la marca delante
-    («Volkswagen T-Cross» → «T-Cross»; la marca sale de config/concesionario.yaml); vacío → «Sin modelo»."""
+    («<marca> T-Cross» → «T-Cross»; la marca sale de config/concesionario.yaml); vacío → «Sin modelo»."""
     if valor is None:
         return SIN_MODELO
     texto = re.sub(r"\s+", " ", str(valor)).strip()
@@ -174,9 +184,10 @@ class Hechos:
                 for viejo in sorted(self._dias)[:-9]:
                     del self._dias[viejo]
             self._dias[dia] = {
-                (f, i): Fila(p, d, bool(pr), self.modelo(m), pc)
-                for f, i, p, d, pr, m, pc in self.pg.execute(
-                    """SELECT fuente, id_anuncio, provincia_codigo, dealer_id, es_propio, modelo, precio_cents
+                (f, i): Fila(p, d, bool(pr), self.modelo(m), *resto)
+                for f, i, p, d, pr, m, *resto in self.pg.execute(
+                    """SELECT fuente, id_anuncio, provincia_codigo, dealer_id, es_propio, modelo, precio_cents,
+                              version, combustible, potencia_cv, fecha_matriculacion, km, color_exterior
                        FROM stock_externo_snapshot WHERE snapshot_day = %s""", (dia,))}
         fuentes = TIPOS[tipo]
         return {k: v for k, v in self._dias[dia].items() if k[0] in fuentes}
@@ -330,19 +341,21 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                 conc: Concesionario | None = None) -> dict:
     """Recalcula los días de [desde, hasta] (por defecto, todo el histórico hasta hoy)."""
     conc = conc or cargar_concesionario()
+    catalogo = versiones.cargar(conc.marca)
     h = Hechos(pg, conc)
     hasta = hasta or hoy_madrid()
     todos = set().union(*h.completos.values())
     if not todos:
         return {"desde": None, "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0,
-                "filas_concesionario": 0}
+                "filas_concesionario": 0, "filas_segmento": 0}
     desde = max(desde or min(todos), min(todos))
     resumen = {"desde": str(desde), "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0,
-               "filas_concesionario": 0}
+               "filas_concesionario": 0, "filas_segmento": 0}
     d = desde
     while d <= hasta:
         with pg.transaction():
-            for tabla in ("panel_mercado_concesionario", "panel_mercado_modelo", "panel_mercado_dia"):
+            for tabla in ("panel_mercado_concesionario", "panel_mercado_modelo", "panel_mercado_dia",
+                          "panel_mercado_segmento", "panel_mercado_sin_clasificar"):
                 pg.execute(f"DELETE FROM {tabla} WHERE dia = %s", (d,))
             calculado = False
             for tipo in TIPOS:
@@ -351,6 +364,10 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                     _insertar(pg, "panel_mercado_dia", COLS_DIA, filas_dia)
                     _insertar(pg, "panel_mercado_modelo", COLS_MODELO, filas_modelo)
                     _insertar(pg, "panel_mercado_concesionario", COLS_CONCESIONARIO, filas_conc)
+                    filas_seg, sin_clasificar = segmentos.calcular(h, d, tipo, catalogo)
+                    _insertar(pg, "panel_mercado_segmento", segmentos.COLS_SEGMENTO, filas_seg)
+                    _insertar(pg, "panel_mercado_sin_clasificar", segmentos.COLS_SIN_CLASIFICAR, sin_clasificar)
+                    resumen["filas_segmento"] += len(filas_seg)
                     resumen["filas_dia"] += len(filas_dia)
                     resumen["filas_modelo"] += len(filas_modelo)
                     resumen["filas_concesionario"] += len(filas_conc)

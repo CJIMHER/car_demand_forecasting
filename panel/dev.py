@@ -29,8 +29,10 @@ USUARIOS = {
 }
 
 
-def preparar(base: Path, fin: date | None = None, dias: int = 60) -> str:
-    """Postgres local con datos sintéticos y usuarios de prueba. Devuelve la URL de cdf_panel."""
+def preparar(base: Path, fin: date | None = None, dias: int = 60, escala: float = 4.0) -> str:
+    """Postgres local con datos sintéticos y usuarios de prueba. Devuelve la URL de cdf_panel.
+    `escala`: flotas cuatro veces mayores que en las pruebas, para que los segmentos del detalle de un
+    modelo tengan muestra."""
     try:
         import pgserver
     except ImportError:
@@ -61,7 +63,8 @@ def preparar(base: Path, fin: date | None = None, dias: int = 60) -> str:
     conc = cargar_concesionario()
     fin = fin or sv.hoy_madrid()
     print(f"Escribiendo {dias} días de capturas sintéticas hasta el {fin:%d/%m/%Y}…")
-    escenario(base / "scrapers", fin, conc.provincia_codigo, conc.provincias_comunidad, conc.dealer_ids[0], dias=dias)
+    escenario(base / "scrapers", fin, conc.provincia_codigo, conc.provincias_comunidad, conc.dealer_ids[0], dias=dias,
+              escala=escala)
     with psycopg.connect(url, autocommit=True) as pg:
         sv.cargar(pg, dia=fin)
         am.precalcular(pg, hasta=fin, conc=conc)

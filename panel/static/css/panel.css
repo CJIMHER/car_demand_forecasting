@@ -445,3 +445,79 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
   .nav-movil-item[aria-current="page"] { font-weight: 700; color: var(--azul); }
   .nav-movil-item.desactivada::after { left: 50%; white-space: normal; width: 160px; text-align: center; }
 }
+
+/* ------------------------------------------------------------------ Mercado: detalle de un modelo */
+.enlace-modelo { font-weight: 600; text-decoration: none; }
+.enlace-modelo:hover { text-decoration: underline; }
+.miga { margin: 0 0 6px; font-size: 14px; }
+.miga a { display: inline-flex; align-items: center; min-height: var(--toque); text-decoration: none; font-weight: 600; }
+.aviso-zona { background: var(--aviso-fondo); color: var(--aviso-texto); }
+.aviso-zona a { color: var(--aviso-texto); font-weight: 700; }
+.h3-tabla { margin: 8px 0 0; font-size: 14px; font-weight: 600; color: var(--gris-oscuro); }
+
+/* Por acabado y motor: filas en rejilla; el acabado es un <details> que despliega sus motores */
+.segs { display: flex; flex-direction: column; font-size: 14px; }
+.seg-fila {
+  display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 0.7fr) minmax(0, 0.8fr) minmax(0, 1.3fr) minmax(0, 0.9fr);
+  column-gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--borde-suave);
+}
+.seg-c { text-align: right; overflow-wrap: anywhere; }
+.seg-precio .rango { display: block; font-size: 12px; color: var(--gris); }
+.seg-cabecera { border-top: 0; padding-top: 0; color: var(--gris); font-size: 13px; font-weight: 600; }
+.seg-cabecera .rango { font-weight: 500; }
+.seg-et { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.seg-nombre { font-weight: 600; color: var(--tinta); overflow-wrap: anywhere; }
+.seg-total .seg-nombre { color: var(--gris-oscuro); }
+.seg-acabado > summary { list-style: none; cursor: pointer; min-height: var(--toque); }
+.seg-acabado > summary::-webkit-details-marker { display: none; }
+.seg-acabado > summary:hover { background: #F8F9FB; }
+.seg-flecha {
+  display: inline-block; width: 0; height: 0; margin-right: 8px; vertical-align: 1px;
+  border-left: 6px solid var(--gris); border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+  transition: transform 0.15s;
+}
+.seg-acabado[open] .seg-flecha { transform: rotate(90deg); }
+.seg-motores { margin-left: 8px; font-weight: 400; }
+.seg-motor { background: #FAFAF8; }
+.seg-motor .seg-nombre { padding-left: 22px; font-weight: 500; color: var(--gris-oscuro); }
+.sin-clasificar .seg-nombre { font-style: italic; color: var(--gris-oscuro); }
+.pocos { color: var(--eje); }
+.pocos .n { display: block; color: var(--eje); }
+.atenuado .n { color: var(--eje); }
+
+/* Precio por antigüedad y km */
+.filtro-acabado { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-filtro {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--borde); background: var(--blanco); color: var(--gris-oscuro); font-size: 13px;
+  font-weight: 600; text-decoration: none;
+}
+.chip-filtro:hover { color: var(--tinta); border-color: var(--eje); }
+.chip-filtro[aria-current="true"] { background: var(--tinta); border-color: var(--tinta); color: var(--blanco); }
+.matriz { min-width: 0; table-layout: fixed; }
+.matriz td { white-space: normal; vertical-align: top; }
+.matriz td .n { display: block; }
+.matriz tbody th { white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .seg-fila { grid-template-columns: minmax(0, 0.75fr) minmax(0, 0.75fr) minmax(0, 1.35fr) minmax(0, 1fr); row-gap: 4px; }
+  .segs .n, .segs .rango { white-space: normal; }
+  .seg-et { white-space: normal; overflow: visible; }
+  .seg-fila .seg-nombre { grid-column: 1 / -1; }
+  .seg-cabecera { display: none; }
+  .seg-c { text-align: left; font-size: 13px; }
+  .seg-et { position: static; width: auto; height: auto; clip: auto; display: block;
+            font-size: 11px; font-weight: 500; color: var(--gris); }
+  .seg-motor .seg-nombre { padding-left: 14px; }
+  .seg-motor .seg-c { padding-left: 0; }
+  /* La matriz pasa a una lista por antigüedad: cada tramo con sus cuatro casillas de km en dos columnas */
+  .matriz { display: block; }
+  .matriz thead { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .matriz thead tr, .matriz thead th { display: block; }
+  .matriz tbody { display: block; }
+  .matriz tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; padding: 12px 0; }
+  .matriz tbody th { grid-column: 1 / -1; padding: 0; font-size: 15px; }
+  .matriz tbody td { padding: 8px 10px; text-align: left; background: var(--fondo); border-radius: 8px; }
+  .matriz td[data-etiqueta]::before { content: attr(data-etiqueta); display: block; font-size: 11px; font-weight: 500; color: var(--gris); }
+  .tabla-cobertura { min-width: 0; }
+}
