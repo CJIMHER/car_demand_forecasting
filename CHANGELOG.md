@@ -1,5 +1,18 @@
 # Cambios
 
+## 2026-11-21 · make test en el contenedor sin .env.example (rama hito-1b-pruebas-2)
+
+- `tests/test_entorno.py::test_cubre_todo_el_env_de_ejemplo` fallaba en el servidor
+  (`FileNotFoundError: '/app/.env.example'`): `.dockerignore` excluye `.env*` de la imagen. Se salta
+  con `skipif` y el mismo motivo que las de `tests/test_infra_panel.py` («sin .env.example (lo
+  excluye .dockerignore): se prueba en el host»); en el Mac se sigue ejecutando.
+- Revisadas todas las lecturas de ficheros del repositorio en `tests/`: ninguna otra cae en un patrón
+  de `.dockerignore` (lo que leen está en `infra/`, `config/`, `panel/`, `scrapers/vn/tests/fixtures`
+  y `alembic.ini`, que van en la imagen).
+- Comprobado en una réplica de la imagen (copia filtrada con `.dockerignore`, sin `make`,
+  `PYTHONDONTWRITEBYTECODE=1`, `TZ=Europe/Madrid` y variables del `.env` de producción): 205 pasadas,
+  7 saltadas, 0 fallos.
+
 ## 2026-11-21 · Pruebas independientes del entorno del host (rama hito-1b-pruebas)
 
 - **Fallo**: `make test` en el servidor daba 2 fallos en `tests/test_contrato_panel.py` (el caso

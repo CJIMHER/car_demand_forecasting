@@ -11,6 +11,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 from conftest import RAIZ, del_host
 
 # Lo que hay en el .env de producción (valores inventados) y lo que añade el compose a cdf_jobs.
@@ -38,6 +40,12 @@ def test_ninguna_prueba_ve_la_configuracion_del_host():
     assert [n for n in os.environ if del_host(n)] == []
 
 
+# .dockerignore excluye .env*: en la imagen de cdf_jobs (donde corre «make test») no está.
+sin_env_example = pytest.mark.skipif(not (RAIZ / ".env.example").exists(),
+                                     reason="sin .env.example (lo excluye .dockerignore): se prueba en el host")
+
+
+@sin_env_example
 def test_cubre_todo_el_env_de_ejemplo():
     """Cada variable de .env.example se limpia, salvo las de Postgres de pruebas (PG*)."""
     nombres = [l.split("=")[0] for l in (RAIZ / ".env.example").read_text().splitlines()
