@@ -10,9 +10,10 @@
 // en cada zona y tipo de Mercado y en cada vista y filtro de Dirección, Ventas y Marketing, que el
 // documento no desborda el ancho y que todas las celdas de cada fila de las tablas están en pantalla.
 // En Ventas, tras pulsar un vehículo de mitad de lista, comprueba que su detalle queda en pantalla
-// (1440 y 390 px). En el detalle de un modelo (VN y VO, varias zonas y un filtro de acabado), con los
+// (1440 y 390 px). En el detalle de un modelo (VN y VO, varias zonas y filtros de la matriz), con los
 // acabados desplegados, que nada desborda ni se sale de su tarjeta a 1440 y 390 px, y que el enlace de
-// la tabla por modelo lleva al detalle con la misma zona y tipo. Guarda Mercado, el detalle de un
+// la tabla por modelo lleva al detalle con la misma zona y tipo. Pulsa los filtros de la matriz
+// (acabado, combustible, motor) y cambia de tipo y de zona: los tres viajan en la URL. Guarda Mercado, el detalle de un
 // modelo (VN, VO y VO en la provincia), Dirección, Ventas y Marketing (Todo, VN y VO) a 1440 px y a
 // 390 px. Sale con código 1 si algo falla o si hay errores de CSP.
 import fs from "node:fs";
@@ -147,31 +148,68 @@ for (const d of detalles) console.log("detalle tras pulsar:", JSON.stringify(d))
 // Detalle de un modelo (Mercado → pulsar un modelo), a 1440 y a 390 px, con todos los acabados
 // desplegados: nada desborda y cada cifra de las filas por acabado y motor y de la matriz de
 // antigüedad y km queda dentro de su tarjeta y de la pantalla.
+const abrir0 = "document.querySelectorAll('details.seg-acabado').forEach((d, i) => { d.open = i < 2; }); true";
 const DETALLES_MODELO = ["/mercado/modelo/T-Roc?tipo=VN&zona=espana", "/mercado/modelo/T-Roc?tipo=VO&zona=espana",
   "/mercado/modelo/T-Roc?tipo=VO&zona=provincia", "/mercado/modelo/Golf?tipo=VO&zona=espana&acabado=Life",
+  "/mercado/modelo/Golf?tipo=VO&zona=espana&combustible=Di%C3%A9sel",
   "/mercado/modelo/ID.4?tipo=VN&zona=comunidad"];
 const modeloRes = [];
-for (const [ancho, movil] of [[1440, false], [390, true]]) {
-  await tamano(ancho, movil);
-  for (const ruta of DETALLES_MODELO) {
-    await ir(`${BASE}${ruta}`);
-    modeloRes.push(JSON.parse(await evalua(`(() => {
+const medirModelo = ancho => `(() => {
       document.querySelectorAll('details.seg-acabado').forEach(d => { d.open = true; });
       const ancho = ${ancho}, doc = document.documentElement, malas = [];
-      for (const el of document.querySelectorAll('.seg-fila > *, .seg-fila .rango, .matriz th, .matriz td, .chip-filtro')) {
+      for (const el of document.querySelectorAll('.seg-fila > *, .seg-fila .rango, .matriz th, .matriz td, .chip-filtro, .filtro-nombre')) {
         const caja = el.closest('.tarjeta').getBoundingClientRect(), r = el.getBoundingClientRect();
         if (r.width > 0 && (r.left < Math.max(0, caja.left) - 0.5 || r.right > Math.min(ancho, caja.right) + 0.5))
           malas.push(el.textContent.trim().slice(0, 40));
       }
       // ningún texto más ancho que su casilla (p. ej. «pocos anuncios» montado sobre la columna de al lado)
-      for (const el of document.querySelectorAll('.seg-c, .matriz td'))
+      for (const el of document.querySelectorAll('.seg-c, .matriz td, .chip-filtro'))
         if (el.getBoundingClientRect().width > 0 && el.scrollWidth > el.clientWidth + 1) malas.push('ancho: ' + el.textContent.trim().slice(0, 40));
-      return JSON.stringify({ancho, ruta: ${JSON.stringify(ruta)}, scrollWidth: doc.scrollWidth, desborda: doc.scrollWidth > ancho,
+      return JSON.stringify({ancho, ruta: decodeURIComponent(location.pathname + location.search), scrollWidth: doc.scrollWidth,
+        desborda: doc.scrollWidth > ancho,
         acabados: document.querySelectorAll('details.seg-acabado').length, motores: document.querySelectorAll('.seg-motor').length,
-        matriz: document.querySelectorAll('.matriz td').length, notaEspana: !!document.querySelector('.aviso-zona'), fuera: malas});
-    })()`)));
+        matriz: document.querySelectorAll('.matriz td').length, notaEspana: !!document.querySelector('.aviso-zona'),
+        filtros: [...document.querySelectorAll('[data-filtro]')].map(g => g.dataset.filtro + ' ' + g.querySelectorAll('.chip-filtro').length),
+        titulo: document.querySelector('#t-matriz')?.textContent.trim(), fuera: malas});
+    })()`;
+for (const [ancho, movil] of [[1440, false], [390, true]]) {
+  await tamano(ancho, movil);
+  for (const ruta of DETALLES_MODELO) {
+    await ir(`${BASE}${ruta}`);
+    modeloRes.push(JSON.parse(await evalua(medirModelo(ancho))));
   }
 }
+// Filtros de la matriz con htmx: acabado → combustible → motor (cada chip ofrece solo lo que existe
+// con lo ya elegido), luego cambio de zona y de tipo y vuelta: los tres viajan en la URL.
+const pulsa = async (selector, i) => { await evalua(`document.querySelectorAll(${JSON.stringify(selector)})[${i}].click(); true`); await espera(1300); };
+const filtrosRes = [];
+for (const [ancho, movil] of [[1440, false], [390, true]]) {
+  await tamano(ancho, movil); await ir(`${BASE}/mercado/modelo/T-Roc?tipo=VO&zona=espana`);
+  await pulsa('[data-filtro="acabado"] .chip-filtro', 1);
+  await pulsa('[data-filtro="combustible"] .chip-filtro', 1);
+  await pulsa('[data-filtro="motor"] .chip-filtro', 1);
+  const elegida = await evalua("decodeURIComponent(location.search)"), direccion = await evalua("location.href");
+  const medida = JSON.parse(await evalua(medirModelo(ancho)));
+  modeloRes.push(medida);
+  await pulsa('[aria-label="Tipo de stock"] .segmento', 0);     // a VN
+  const enVN = await evalua("decodeURIComponent(location.search)");
+  await pulsa('[aria-label="Tipo de stock"] .segmento', 1);     // y de vuelta a VO
+  const vuelta = await evalua("decodeURIComponent(location.search)");
+  await pulsa('[aria-label="Zona"] .segmento', 1);              // a la comunidad
+  const enComunidad = await evalua("decodeURIComponent(location.search)");
+  modeloRes.push(JSON.parse(await evalua(medirModelo(ancho))));
+  const p = new URLSearchParams(elegida);
+  filtrosRes.push({ancho, elegida, enVN, vuelta, enComunidad, titulo: medida.titulo,
+    tres: ["acabado", "combustible", "motor"].every(k => p.get(k)),
+    enTitulo: medida.titulo.includes(p.get("acabado")) && medida.titulo.includes(p.get("motor")),
+    // en VN y en la comunidad cada filtro se conserva o se cae (si allí no existe), nunca cambia de valor
+    coherente: [enVN, vuelta, enComunidad].every(q => { const x = new URLSearchParams(q);
+      return ["acabado", "combustible", "motor"].every(k => !x.get(k) || x.get(k) === p.get(k)); })});
+  await ir(direccion);
+  await evalua(abrir0); await espera(300);
+  await captura(`modelo_vo_filtros_${movil ? "movil_390" : "escritorio_1440"}.png`);
+}
+for (const r of filtrosRes) console.log("filtros de la matriz:", JSON.stringify(r));
 for (const r of modeloRes) console.log("detalle de modelo:", JSON.stringify(r));
 // Desde la tabla por modelo: el enlace lleva al detalle con la misma zona y tipo
 await tamano(1440, false); await ir(`${BASE}/mercado?zona=comunidad&tipo=VO`);
@@ -192,6 +230,7 @@ const comprobacion = JSON.stringify({
   detalleFuera: detalles.filter(d => !d.dentro || !d.deEse || !d.curva || d.scrollY === 0).map(d => d.ancho),
   detalleModelo: modeloRes.filter(r => r.desborda || r.fuera.length || r.acabados === 0 ||
                                        (r.ruta.includes("tipo=VO") ? r.matriz !== 12 : r.matriz !== 0)).map(r => r.ancho + " " + r.ruta),
+  filtros: filtrosRes.filter(f => !f.tres || !f.enTitulo || !f.coherente).map(f => f.ancho),
   enlaceModelo: /^\/mercado\/modelo\/[^?]+\?tipo=VO&zona=comunidad$/.test(enlaceModelo),
 });
 await ir(`${BASE}/mercado`); await espera(800);
@@ -224,7 +263,7 @@ console.log("errores de consola/CSP:", errores.length ? errores : "ninguno");
 const c = JSON.parse(comprobacion);
 const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.sinConcesionariosEnProvincia ||
   c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.escritorioFuera.length > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0 || c.detalleFuera.length > 0 ||
-  c.detalleModelo.length > 0 || !c.enlaceModelo;
+  c.detalleModelo.length > 0 || !c.enlaceModelo || c.filtros.length > 0 || filtrosRes.length !== 2;
 console.log("comprobación:", comprobacion);
 console.log(mal ? "RESULTADO: FALLA" : "RESULTADO: correcto");
 ws.close(); process.exit(mal ? 1 : 0);

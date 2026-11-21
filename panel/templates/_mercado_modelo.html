@@ -90,12 +90,17 @@
 
   {% if d.matriz %}
   <section aria-labelledby="t-matriz" class="tarjeta">
-    <h2 id="t-matriz">Precio por antigüedad y km{% if d.matriz.acabado %} · {{ d.matriz.acabado }}{% endif %}</h2>
-    <div role="group" aria-label="Acabado" class="filtro-acabado">
-      {% for a in d.matriz.filtro %}
-      <a class="chip-filtro" href="{{ a.url }}" hx-get="{{ a.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true"{% if a.activa %} aria-current="true"{% endif %}>{{ a.etiqueta }}</a>
-      {% endfor %}
+    <h2 id="t-matriz">Precio por antigüedad y km{% if d.matriz.elegido %} · {{ d.matriz.elegido }}{% endif %}</h2>
+    {% for g in d.matriz.filtros %}
+    <div class="filtro-matriz">
+      <span class="filtro-nombre" id="filtro-{{ g.id }}">{{ g.nombre }}</span>
+      <div role="group" aria-labelledby="filtro-{{ g.id }}" class="filtro-acabado" data-filtro="{{ g.id }}">
+        {% for a in g.opciones %}
+        <a class="chip-filtro" href="{{ a.url }}" hx-get="{{ a.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true"{% if a.activa %} aria-current="true"{% endif %}>{{ a.etiqueta }}</a>
+        {% endfor %}
+      </div>
     </div>
+    {% endfor %}
     <table class="tabla matriz">
       <thead>
         <tr><th scope="col" class="izq">Antigüedad</th>{% for k in d.matriz.columnas %}<th scope="col">{{ k }}</th>{% endfor %}</tr>

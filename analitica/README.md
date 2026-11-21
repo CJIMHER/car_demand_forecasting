@@ -31,8 +31,10 @@ mediano solo con precio). Zonas: la provincia del concesionario, su comunidad y 
 ## segmentos.py y versiones.py · detalle de un modelo (en el mismo precálculo)
 
 Para cada día, tipo y zona, `panel_mercado_segmento` guarda solo los niveles que muestra el detalle
-de un modelo: modelo; modelo+acabado; modelo+acabado+motor; en VO, además, modelo+antigüedad×km y
-modelo+acabado+antigüedad×km; y modelo+color (vacío mientras la web publique el color vacío). Por
+de un modelo: modelo; modelo+acabado; modelo+acabado+motor; en VO, además, la matriz antigüedad×km
+de modelo, modelo+acabado, modelo+combustible, modelo+motor, modelo+acabado+combustible y
+modelo+acabado+motor (los filtros de la matriz; el motor implica su combustible, así que no hay cruce
+de los tres); y modelo+color (vacío mientras la web publique el color vacío). Por
 segmento: anuncios, propios, precio p25/p50/p75 de los que tienen precio (como `percentile_cont`) y
 días publicado con la regla «≥ N».
 
@@ -42,6 +44,9 @@ días publicado con la regla «≥ N».
   es tecnología (TSI, eTSI, TDI, eHybrid…) + CV del campo `power_cv` + combustible + cambio cuando el
   texto lo dice. Los textos sin clasificar van a `panel_mercado_sin_clasificar` y salen en «Estado de
   las fuentes» con la cobertura por modelo: se añaden al catálogo y `make precalcular`.
+- **Combustible**: el grupo del filtro (Gasolina, Diésel, Híbrido, Eléctrico) sale de
+  `combustibles` en `config/versiones.yaml`; uno que no esté allí se muestra tal cual. El motor se
+  identifica por su combustible y su texto (migración `0008`).
 - **Antigüedad y km**: años cumplidos desde la primera matriculación hasta el día de la captura, y
   km del anuncio; los tramos, en `config/concesionario.yaml` (`segmentos`). Sin tramos en la
   configuración no se calcula la matriz.
@@ -55,4 +60,6 @@ de los scrapers (huecos, una fuente que empieza más tarde, retiradas). `tests/t
 comprueba además que las cifras de la vista cuadran con una consulta SQL directa.
 `tests/test_segmentos.py`: lectura de versiones reales de VO y VN, «Sin clasificar», cortes de
 antigüedad y km en sus bordes, percentiles y n frente a SQL directo, migración, cobertura y la vista
-(con n < 3 nunca se muestra un precio).
+(con n < 3 nunca se muestra un precio), y cada combinación de los filtros de la matriz (acabado,
+combustible, motor) frente a SQL directo. El resumen del precálculo (`fuentes_estado`) lleva las
+filas de segmentos por nivel y los segundos, total y de segmentos.

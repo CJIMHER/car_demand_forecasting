@@ -486,11 +486,13 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .atenuado .n { color: var(--eje); }
 
 /* Precio por antigüedad y km */
-.filtro-acabado { display: flex; flex-wrap: wrap; gap: 8px; }
+.filtro-matriz { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px 12px; align-items: start; margin-bottom: 10px; }
+.filtro-nombre { font-size: 12px; font-weight: 600; color: var(--gris-oscuro); text-transform: uppercase; letter-spacing: 0.04em; padding-top: 10px; }
+.filtro-acabado { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .chip-filtro {
   display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 999px;
   border: 1px solid var(--borde); background: var(--blanco); color: var(--gris-oscuro); font-size: 13px;
-  font-weight: 600; text-decoration: none;
+  font-weight: 600; text-decoration: none; max-width: 100%; overflow-wrap: anywhere;
 }
 .chip-filtro:hover { color: var(--tinta); border-color: var(--eje); }
 .chip-filtro[aria-current="true"] { background: var(--tinta); border-color: var(--tinta); color: var(--blanco); }
@@ -500,6 +502,8 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .matriz tbody th { white-space: nowrap; }
 
 @media (max-width: 760px) {
+  .filtro-matriz { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .filtro-nombre { padding-top: 0; }
   .seg-fila { grid-template-columns: minmax(0, 0.75fr) minmax(0, 0.75fr) minmax(0, 1.35fr) minmax(0, 1fr); row-gap: 4px; }
   .segs .n, .segs .rango { white-space: normal; }
   .seg-et { white-space: normal; overflow: visible; }

@@ -1,5 +1,31 @@
 # Cambios
 
+## 2026-11-21 · Hito 1b: matriz de VO por combustible y motor (rama hito-1b-motor)
+
+- **Filtros de la matriz «Precio por antigüedad y km»** (detalle de un modelo, VO): además del
+  acabado, combustible (Todos, Gasolina, Diésel, Híbrido, Eléctrico: solo los que hay en ese modelo y
+  zona) y motor exacto (combustible + CV + tecnología + cambio: solo los que hay con el acabado y el
+  combustible elegidos). Se combinan, viajan en la URL (`acabado`, `combustible`, `motor`) y se
+  conservan al cambiar de zona o tipo cuando el valor sigue existiendo allí; si no, se cae solo ese.
+  Una URL con un valor que no existe redirige (303) a la que vale; con htmx, `HX-Push-Url`.
+  Mismas reglas de muestra y la nota que propone España, con los mismos filtros.
+- **Precálculo**: cuatro niveles nuevos, todos con la matriz años × km: modelo+combustible,
+  modelo+motor, modelo+acabado+combustible y modelo+acabado+motor (no el cruce completo). Inserción con
+  COPY. El resumen lleva filas por nivel y segundos (total y de segmentos). Medido en el Mac con los
+  mismos datos sintéticos de `make panel-dev` (60 días, escala 4): de 212.467 filas y 12,9–13,2 s a
+  455.544 filas y 12,8–13,3 s; con el escenario de las pruebas (12 días): de 16.542 a 34.673 filas,
+  0,86 → 0,8 s.
+- **Migración `0008`**: columna `combustible` (grupo) en `panel_mercado_segmento`, en la clave única;
+  restricciones con nombre; la de combustible, NOT VALID (las filas del nivel motor de antes se
+  rehacen con el siguiente `make precalcular`).
+- **Catálogo**: `combustibles` y `sin_combustible` en `config/versiones.yaml`. «Sin dato de motor»
+  lleva el combustible si lo hay.
+- **Pruebas**: 6 nuevas en `tests/test_segmentos.py` (cada combinación de filtros frente a SQL
+  directo, opciones que no existen, conservación al cambiar de zona y tipo, descartes, muestra y nota
+  de España, migración de ida y vuelta) y los niveles nuevos en el cuadre general. VO sintético con
+  un 12 % de híbridos. `tests/navegador/capturas.mjs` pulsa los tres filtros y cambia de tipo y zona;
+  capturas `docs/capturas/modelo_vo_filtros_*`.
+
 ## 2026-11-21 · Hito 1b: Mercado por segmentos (rama hito-1b-segmentos)
 
 - Encargo guardado en `docs/hitos/hito_1b_segmentos.md`.

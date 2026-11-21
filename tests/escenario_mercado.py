@@ -87,6 +87,8 @@ class Generador:
         v = self.v
         acabado, f_acabado = v.choice(ACABADOS[fuente])
         clase = "electrico" if modelo.startswith("ID.") else ("hibrido" if fuente == "vn_otros" else "termico")
+        if fuente == "vo" and clase == "termico" and v.random() < 0.12:   # VO con los cuatro combustibles
+            clase = "hibrido"
         motor = v.choice(MOTORES[clase])
         automatico = clase != "termico" or v.random() < 0.6
         factor = f_acabado * motor[5] * (1.03 if automatico else 1.0)

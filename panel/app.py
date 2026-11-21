@@ -302,14 +302,22 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
 
     @app.get("/mercado/modelo/{modelo}")
     def vista_modelo(request: Request, modelo: str, zona: str = "provincia", tipo: str = "VN", acabado: str = "",
-                     pg=Depends(bd)):
+                     combustible: str = "", motor: str = "", pg=Depends(bd)):
         u = exigir(request, pg, "mercado")
         zona = zona if zona in mercado.ZONAS else "provincia"
         tipo = tipo if tipo in mercado.TIPOS else "VN"
-        ctx = {"d": mercado.detalle_modelo(pg, app.state.conc, tipo, zona, modelo[:80], app.state.hoy(),
-                                           acabado[:80] or None), "vista": "mercado"}
-        return pintar(request, "_mercado_modelo.html" if es_htmx(request) else "mercado_modelo.html", ctx,
-                      pg=pg, usuario=u)
+        pedido = tuple(x[:120] or None for x in (acabado, combustible, motor))
+        d = mercado.detalle_modelo(pg, app.state.conc, tipo, zona, modelo[:80], app.state.hoy(), *pedido)
+        if d["filtro"] != pedido:
+            # Un filtro que no existe (en esa zona y tipo o con los otros dos) se descarta: la URL
+            # queda con los que valen, para que la dirección sea siempre la de lo que se ve.
+            if not es_htmx(request):
+                return redirigir(d["url"])
+        resp = pintar(request, "_mercado_modelo.html" if es_htmx(request) else "mercado_modelo.html",
+                      {"d": d, "vista": "mercado"}, pg=pg, usuario=u)
+        if es_htmx(request) and d["filtro"] != pedido:
+            resp.headers["HX-Push-Url"] = d["url"]
+        return resp
 
     def vista_contrato(request: Request, pg, clave: str, plantilla: str, parcial: str, ctx: Callable[[], dict]):
         """Dirección, Ventas y Marketing: abiertas según sus datos (permisos.visible); si no, «Se activa…»."""

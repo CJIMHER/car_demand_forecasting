@@ -55,10 +55,12 @@ class Version:
     cv: int | None
     combustible: str | None
     cambio: str | None
+    grupo_combustible: str = ""   # Gasolina, Diésel, Híbrido, Eléctrico… (filtro de la matriz de precios)
 
     @property
     def motor(self) -> str:
-        """«eTSI 150 CV · Gasolina · Automático»; sin tecnología ni CV, «Sin dato de motor»."""
+        """«eTSI 150 CV · Gasolina · Automático»; sin tecnología ni CV, «Sin dato de motor» con el
+        combustible si lo hay («Sin dato de motor · Gasolina»)."""
         partes = []
         cabeza = " ".join(p for p in (self.tecnologia, f"{self.cv} CV" if self.cv else None) if p)
         if cabeza:
@@ -67,7 +69,9 @@ class Version:
             partes.append(self.combustible)
         if self.cambio:
             partes.append(self.cambio)
-        return " · ".join(partes) if cabeza else "Sin dato de motor"
+        if not cabeza:
+            return " · ".join(["Sin dato de motor"] + ([self.combustible] if self.combustible else []))
+        return " · ".join(partes)
 
 
 class Catalogo:
@@ -91,6 +95,15 @@ class Catalogo:
         self.automatico = [re.compile(p) for p in cambio.get("automatico") or []]
         self.manual = [re.compile(p) for p in cambio.get("manual") or []]
         self.manual_vn = [re.compile(p) for p in cambio.get("manual_vn") or []]
+        self._grupo: dict[str, str] = {}
+        for g in cfg.get("combustibles") or []:
+            nombre = str(g["nombre"])
+            for forma in [nombre] + [str(f) for f in g.get("formas") or []]:
+                clave = plegar(forma)
+                if self._grupo.get(clave, nombre) != nombre:
+                    raise ErrorCatalogo(f"config/versiones.yaml: el combustible «{forma}» está en dos grupos")
+                self._grupo[clave] = nombre
+        self.sin_combustible = str(cfg.get("sin_combustible") or "Sin dato de combustible")
         self._cache: dict[tuple, Version] = {}
 
     @staticmethod
@@ -117,8 +130,16 @@ class Catalogo:
             texto = plegar(version or "")
             acabado, reconocido = self._acabado(modelo, texto)
             self._cache[clave] = Version(acabado, reconocido, self._tecnologia(texto, combustible), cv,
-                                         _limpio(combustible), self._cambio(tipo, texto))
+                                         _limpio(combustible), self._cambio(tipo, texto),
+                                         self.grupo_combustible(combustible))
         return self._cache[clave]
+
+    def grupo_combustible(self, combustible: str | None) -> str:
+        """Grupo del filtro de combustible. Un combustible fuera del catálogo se queda tal cual."""
+        limpio = _limpio(combustible)
+        if limpio is None:
+            return self.sin_combustible
+        return self._grupo.get(plegar(limpio), limpio)
 
     def _sin_prefijo(self, texto: str, prefijos: list[str]) -> tuple[str, bool]:
         for p in prefijos:

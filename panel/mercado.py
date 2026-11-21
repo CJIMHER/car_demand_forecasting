@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from urllib.parse import quote
 
 import psycopg
+from psycopg.rows import dict_row
 
 from ingesta.concesionario import Concesionario
 from panel import formato as fmt
@@ -244,88 +245,118 @@ def cifra_dias(dias, cota: bool, n: int, n_mostrar: int, n_min: int) -> dict:
             "atenuado": n < n_min, "cota": cota}
 
 
-def url_detalle(modelo: str, tipo: str, zona: str, acabado: str | None = None) -> str:
+def url_detalle(modelo: str, tipo: str, zona: str, acabado: str | None = None, combustible: str | None = None,
+                motor: str | None = None) -> str:
     url = f"/mercado/modelo/{quote(modelo, safe='')}?tipo={tipo}&zona={zona}"
-    return url + (f"&acabado={quote(acabado, safe='')}" if acabado else "")
+    for nombre, valor in (("acabado", acabado), ("combustible", combustible), ("motor", motor)):
+        if valor:
+            url += f"&{nombre}={quote(valor, safe='')}"
+    return url
+
+
+# Los filtros de la matriz: (acabado, combustible, motor). Existen los que tienen anuncios en la
+# matriz de esa zona y tipo (VO); en VN, sin matriz, los del nivel motor, para que se conserven al
+# volver a VO.
+Filtro = tuple[str | None, str | None, str | None]
+NIVEL_EXISTENCIA = {"VO": "acabado_motor_antiguedad_km", "VN": "motor"}
+
+
+def existentes(pg: psycopg.Connection, modelo: str) -> dict[tuple[str, str], set[tuple[str, str, str]]]:
+    """{(tipo, zona): {(acabado, combustible, motor)}} del último día de cada tipo."""
+    salida: dict[tuple[str, str], set] = {(t, z): set() for t in TIPOS for z in ZONAS}
+    for tipo, zona, acabado, comb, motor in pg.execute(
+            """SELECT s.tipo, s.zona, s.acabado, s.combustible, s.motor FROM panel_mercado_segmento s
+               JOIN (SELECT tipo, max(dia) AS dia FROM panel_mercado_dia GROUP BY tipo) u USING (tipo, dia)
+               WHERE s.modelo = %s AND s.combustible IS NOT NULL
+                 AND s.nivel = CASE s.tipo WHEN 'VO' THEN %s ELSE %s END""",
+            (modelo, NIVEL_EXISTENCIA["VO"], NIVEL_EXISTENCIA["VN"])):
+        salida[(tipo, zona)].add((acabado, comb, motor))
+    return salida
+
+
+def validar(trios: set[tuple[str, str, str]], acabado: str | None, combustible: str | None,
+            motor: str | None) -> Filtro:
+    """Se queda con los valores que existen juntos: el acabado; el combustible con ese acabado; el
+    motor con los dos. Un motor sin combustible lo toma del motor si solo hay uno."""
+    a = acabado if any(t[0] == acabado for t in trios) else None
+    con_a = [t for t in trios if a is None or t[0] == a]
+    m = None
+    if motor is not None:
+        combustibles = {t[1] for t in con_a if t[2] == motor and combustible in (None, t[1])}
+        if len(combustibles) == 1:
+            m, combustible = motor, combustibles.pop()
+    c = combustible if any(t[1] == combustible for t in con_a) else None
+    return a, c, m
 
 
 def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, modelo: str, hoy: date,
-                   acabado: str | None = None) -> dict:
-    """Detalle de un modelo: por acabado y motor y, en VO, precio por antigüedad y km. Lee solo
-    panel_mercado_segmento (precalculada); nunca las tablas de hechos."""
+                   acabado: str | None = None, combustible: str | None = None, motor: str | None = None) -> dict:
+    """Detalle de un modelo: por acabado y motor y, en VO, precio por antigüedad y km con filtros de
+    acabado, combustible y motor. Lee solo panel_mercado_segmento (precalculada); nunca los hechos.
+    `filtro` es el que vale de verdad (los valores que no existen se descartan) y `url`, la de la página."""
     nombres = etiquetas_zona(conc)
     n_mostrar, n_min = conc.n_minimo_mostrar, conc.n_minimo_medianas
     nombre_tipo = {"VN": "Nuevos", "VO": "Ocasión"}[tipo]
+    hay = existentes(pg, modelo)
+    filtro = validar(hay[(tipo, zona)], acabado, combustible, motor)
+
+    def url_en(t: str, z: str) -> str:   # otra zona u otro tipo, con los filtros que sigan existiendo
+        return url_detalle(modelo, t, z, *validar(hay[(t, z)], *filtro))
+
     base = {
         "tipo": tipo, "zona": zona, "zona_nombre": nombres[zona], "modelo": modelo, "nombre_tipo": nombre_tipo,
         "capturas": capturas(pg, hoy), "volver": f"/mercado?zona={zona}&tipo={tipo}",
-        "zonas": [{"id": z, "etiqueta": nombres[z], "activa": z == zona, "url": url_detalle(modelo, tipo, z)}
-                  for z in ZONAS],
-        "tipos": [{"id": t, "etiqueta": e, "activa": t == tipo, "url": url_detalle(modelo, t, zona)}
+        "zonas": [{"id": z, "etiqueta": nombres[z], "activa": z == zona, "url": url_en(tipo, z)} for z in ZONAS],
+        "tipos": [{"id": t, "etiqueta": e, "activa": t == tipo, "url": url_en(t, zona)}
                   for t, e in (("VN", "Nuevos (VN)"), ("VO", "Ocasión (VO)"))],
         "hay_datos": False, "hay_modelo": False, "nota_precio": NOTA_PRECIO, "n_minimo": n_min,
-        "n_mostrar": n_mostrar,
+        "n_mostrar": n_mostrar, "filtro": filtro, "url": url_detalle(modelo, tipo, zona, *filtro),
     }
     dia = pg.execute("SELECT max(dia) FROM panel_mercado_dia WHERE tipo = %s", (tipo,)).fetchone()[0]
     if dia is None:
         return base
     base.update({"hay_datos": True, "dia": dia, "es_hoy": dia == hoy, "dia_largo": fmt.fecha_larga(dia)})
-    filas = pg.execute(
-        """SELECT nivel, acabado, acabado_reconocido, motor, antiguedad, antiguedad_orden, km, km_orden, color,
-                  anuncios, propios, n_precio, precio_p25_cents, precio_p50_cents, precio_p75_cents,
-                  dias_mediana, dias_cota
-           FROM panel_mercado_segmento WHERE dia = %s AND tipo = %s AND zona = %s AND modelo = %s""",
-        (dia, tipo, zona, modelo)).fetchall()
+    with pg.cursor(row_factory=dict_row) as cur:
+        filas = cur.execute(
+            """SELECT nivel, acabado, acabado_reconocido, combustible, motor, antiguedad_orden, km_orden, color,
+                      anuncios, propios, n_precio, precio_p25_cents, precio_p50_cents, precio_p75_cents,
+                      dias_mediana, dias_cota
+               FROM panel_mercado_segmento WHERE dia = %s AND tipo = %s AND zona = %s AND modelo = %s""",
+            (dia, tipo, zona, modelo)).fetchall()
     if not filas:
         return base
     con_peso = zona == "provincia"
     pct = conc.n_minimo_porcentaje
 
     def segmento(f) -> dict:
-        (_, _, _, _, _, _, _, _, _, n, propios, n_precio, p25, p50, p75, dias, cota) = f
-        return {"anuncios": fmt.miles(n), "n": n, "nuestros": nuestros(propios, n, pct, con_peso),
-                "precio": cifra_precio(p50, p25, p75, n_precio, n_mostrar, n_min),
-                "dias": cifra_dias(dias, cota, n, n_mostrar, n_min)}
+        n = f["anuncios"]
+        return {"anuncios": fmt.miles(n), "n": n, "nuestros": nuestros(f["propios"], n, pct, con_peso),
+                "precio": cifra_precio(f["precio_p50_cents"], f["precio_p25_cents"], f["precio_p75_cents"],
+                                       f["n_precio"], n_mostrar, n_min),
+                "dias": cifra_dias(f["dias_mediana"], f["dias_cota"], n, n_mostrar, n_min)}
 
     por_nivel: dict[str, list] = {}
     for f in filas:
-        por_nivel.setdefault(f[0], []).append(f)
+        por_nivel.setdefault(f["nivel"], []).append(f)
     total = por_nivel["modelo"][0]
 
     acabados = []
-    for f in sorted(por_nivel.get("acabado", []), key=lambda f: (not f[2], -f[9], f[1])):
-        motores = [{"nombre": m[3], **segmento(m)}
-                   for m in sorted((m for m in por_nivel.get("motor", []) if m[1] == f[1]), key=lambda m: (-m[9], m[3]))]
-        acabados.append({"nombre": f[1], "reconocido": f[2], **segmento(f), "motores": motores})
+    for f in sorted(por_nivel.get("acabado", []), key=lambda f: (not f["acabado_reconocido"], -f["anuncios"],
+                                                                 f["acabado"])):
+        motores = [{"nombre": m["motor"], **segmento(m)} for m in sorted(
+            (m for m in por_nivel.get("motor", []) if m["acabado"] == f["acabado"]),
+            key=lambda m: (-m["anuncios"], m["motor"]))]
+        acabados.append({"nombre": f["acabado"], "reconocido": f["acabado_reconocido"], **segmento(f),
+                         "motores": motores})
 
     matriz = None
     if tipo == "VO" and conc.tramos_antiguedad and conc.tramos_km:
-        con_matriz = sorted({f[1] for f in por_nivel.get("acabado_antiguedad_km", [])})
-        elegido = acabado if acabado in con_matriz else None
-        celdas = {(f[5], f[7]): f for f in (
-            por_nivel.get("antiguedad_km", []) if elegido is None
-            else [f for f in por_nivel.get("acabado_antiguedad_km", []) if f[1] == elegido])}
-        filas_m = []
-        for i, (_, etiqueta) in enumerate(conc.tramos_antiguedad):
-            fila = []
-            for j, (_, km) in enumerate(conc.tramos_km):
-                c = celdas.get((i, j))
-                n = c[11] if c else 0
-                fila.append({"km": km, "n": n, "anuncios": c[9] if c else 0,
-                             "precio": cifra_precio(c[13] if c else None, c[12] if c else None,
-                                                    c[14] if c else None, n, n_mostrar, n_min)})
-            filas_m.append({"etiqueta": etiqueta, "celdas": fila})
-        en_matriz = sum(f[9] for f in por_nivel.get("antiguedad_km", []))
-        orden_acabados = [a["nombre"] for a in acabados if a["nombre"] in con_matriz]
-        matriz = {
-            "columnas": [km for _, km in conc.tramos_km], "filas": filas_m,
-            "filtro": [{"etiqueta": "Todos", "activa": elegido is None, "url": url_detalle(modelo, tipo, zona)}] + [
-                {"etiqueta": a, "activa": a == elegido, "url": url_detalle(modelo, tipo, zona, a)}
-                for a in orden_acabados],
-            "acabado": elegido, "fuera": total[9] - en_matriz,
-        }
+        matriz = _matriz(por_nivel, hay[(tipo, zona)], filtro, acabados, conc, n_mostrar, n_min,
+                         lambda *f: url_detalle(modelo, tipo, zona, *f))
+        matriz["fuera"] = total["anuncios"] - sum(f["anuncios"] for f in por_nivel.get("antiguedad_km", []))
 
-    colores = [{"nombre": f[8], **segmento(f)} for f in sorted(por_nivel.get("color", []), key=lambda f: -f[9])]
+    colores = [{"nombre": f["color"], **segmento(f)}
+               for f in sorted(por_nivel.get("color", []), key=lambda f: -f["anuncios"])]
 
     # Si en la zona elegida la mayoría de las casillas quedan en «—», se propone ver España
     casillas = [a["precio"] for a in acabados] + [m["precio"] for a in acabados for m in a["motores"]]
@@ -336,7 +367,7 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
     if zona != "espana" and casillas and pocos * 2 > len(casillas):
         nota_espana = {"texto": (f"En {nombres[zona]}, {pocos} de {len(casillas)} casillas tienen menos de "
                                  f"{n_mostrar} anuncios con precio."),
-                       "url": url_detalle(modelo, tipo, "espana", matriz and matriz["acabado"])}
+                       "url": url_en(tipo, "espana")}
 
     notas = [
         f"Precio: mediana de los anuncios con precio publicados {'hoy' if dia == hoy else 'ese día'}; debajo, "
@@ -348,10 +379,58 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
     ]
     if matriz:
         notas.append(("Antigüedad: años cumplidos desde la primera matriculación hasta el día de los datos. "
-                      + (f"{fmt.miles(matriz['fuera'])} anuncios sin fecha de matriculación o sin km no entran en "
-                         "la matriz." if matriz["fuera"] else "")).strip())
+                      + (f"{fmt.miles(matriz['fuera'])} anuncios del modelo sin fecha de matriculación o sin km "
+                         "no entran en la matriz." if matriz["fuera"] else "")).strip())
+        notas.append("Filtros de la matriz: el motor es combustible, potencia, tecnología y cambio; solo se "
+                     "ofrecen los que tienen anuncios en la matriz con el acabado y el combustible elegidos.")
     return {**base, "hay_modelo": True, "total": segmento(total), "acabados": acabados, "matriz": matriz,
             "colores": colores, "nota_espana": nota_espana, "notas": notas}
+
+
+def _matriz(por_nivel: dict, trios: set, filtro: Filtro, acabados: list[dict], conc: Concesionario,
+            n_mostrar: int, n_min: int, url) -> dict:
+    """La matriz antigüedad × km del filtro y las opciones de los tres filtros (solo las que existen)."""
+    a, c, m = filtro
+    nivel = ("acabado_" if a else "") + ("motor_" if m else "combustible_" if c else "") + "antiguedad_km"
+    celdas = {(f["antiguedad_orden"], f["km_orden"]): f for f in por_nivel.get(nivel, [])
+              if (a is None or f["acabado"] == a) and (c is None or f["combustible"] == c)
+              and (m is None or f["motor"] == m)}
+    filas = []
+    for i, (_, etiqueta) in enumerate(conc.tramos_antiguedad):
+        fila = []
+        for j, (_, km) in enumerate(conc.tramos_km):
+            f = celdas.get((i, j))
+            n = f["n_precio"] if f else 0
+            fila.append({"km": km, "n": n, "anuncios": f["anuncios"] if f else 0,
+                         "precio": cifra_precio(f and f["precio_p50_cents"], f and f["precio_p25_cents"],
+                                                f and f["precio_p75_cents"], n, n_mostrar, n_min)})
+        filas.append({"etiqueta": etiqueta, "celdas": fila})
+
+    def opcion(etiqueta: str, valor: Filtro, activa: bool) -> dict:
+        return {"etiqueta": etiqueta, "activa": activa, "url": url(*validar(trios, *valor))}
+
+    # Orden: acabados como en la tabla; combustibles y motores, por anuncios en la matriz
+    con_a = [t for t in trios if a is None or t[0] == a]
+    en_matriz: dict[tuple, int] = {}
+    for f in por_nivel.get("acabado_motor_antiguedad_km", []):
+        if a is None or f["acabado"] == a:
+            for k in ((f["combustible"],), (f["combustible"], f["motor"])):
+                en_matriz[k] = en_matriz.get(k, 0) + f["anuncios"]
+    combustibles = sorted({t[1] for t in con_a}, key=lambda x: (-en_matriz.get((x,), 0), x))
+    motores = sorted({(t[1], t[2]) for t in con_a if c is None or t[1] == c},
+                     key=lambda x: (-en_matriz.get(x, 0), x))
+    con_matriz = {t[0] for t in trios}
+    filtros = [
+        {"id": "acabado", "nombre": "Acabado", "opciones": [opcion("Todos", (None, c, m), a is None)] + [
+            opcion(x["nombre"], (x["nombre"], c, m), x["nombre"] == a) for x in acabados if x["nombre"] in con_matriz]},
+        {"id": "combustible", "nombre": "Combustible", "opciones": [opcion("Todos", (a, None, None), c is None)] + [
+            opcion(x, (a, x, m), x == c) for x in combustibles]},
+        {"id": "motor", "nombre": "Motor", "opciones": [opcion("Todos", (a, c, None), m is None)] + [
+            opcion(mo, (a, co, mo), (co, mo) == (c, m)) for co, mo in motores]},
+    ]
+    elegido = " · ".join(x for x in (a, m or c) if x)
+    return {"columnas": [km for _, km in conc.tramos_km], "filas": filas, "filtros": filtros, "elegido": elegido,
+            "nivel": nivel}
 
 
 def cobertura(pg: psycopg.Connection) -> dict:

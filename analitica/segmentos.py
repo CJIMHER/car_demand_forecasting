@@ -4,8 +4,14 @@ Se calculan en el precálculo nocturno (analitica/mercado.py), para cada día v�
 solo en los niveles que muestra el panel (nunca el cruce de todas las dimensiones a la vez):
 
   modelo · modelo+acabado · modelo+acabado+motor
-  VO:      modelo+antigüedad×km · modelo+acabado+antigüedad×km
+  VO, la matriz antigüedad×km de: modelo · modelo+acabado · modelo+combustible · modelo+motor ·
+      modelo+acabado+combustible · modelo+acabado+motor (los filtros de la matriz; motor implica
+      combustible, así que no hace falta el cruce de los tres)
   color:   modelo+color (vacío mientras la web no publique el color)
+
+Combustible: el grupo del filtro (Gasolina, Diésel, Híbrido, Eléctrico) según config/versiones.yaml;
+se guarda en el nivel motor y en los niveles de la matriz con combustible o motor. El motor se
+identifica por su combustible y su texto («eTSI 150 CV · Gasolina · Automático»).
 
 Por segmento: anuncios, propios, precio p25/p50/p75 de los que tienen precio (interpolación lineal,
 como percentile_cont de Postgres) y días publicado (mediana inferior con la cota «≥ N», la misma
@@ -28,7 +34,8 @@ from datetime import date
 
 from analitica.versiones import Catalogo
 
-NIVELES_VO = ("antiguedad_km", "acabado_antiguedad_km")
+NIVELES_MATRIZ = ("antiguedad_km", "acabado_antiguedad_km", "combustible_antiguedad_km", "motor_antiguedad_km",
+                  "acabado_combustible_antiguedad_km", "acabado_motor_antiguedad_km")
 
 
 def anios_cumplidos(desde: date | None, hasta: date) -> int | None:
@@ -78,17 +85,23 @@ def calcular(h, dia: date, tipo: str, catalogo: Catalogo) -> tuple[list[dict], l
         if not v.reconocido:
             sin_clasificar[(f.modelo, re.sub(r"\s+", " ", f.version or "").strip() or "(sin versión)")] += 1
         acabado = (v.acabado, v.reconocido)
-        claves = [("modelo", f.modelo, None, None, None, None, None),
-                  ("acabado", f.modelo, acabado, None, None, None, None),
-                  ("motor", f.modelo, acabado, v.motor, None, None, None)]
+        comb, motor = v.grupo_combustible, v.motor
+        # (nivel, modelo, acabado, combustible, motor, antigüedad, km, color)
+        claves = [("modelo", f.modelo, None, None, None, None, None, None),
+                  ("acabado", f.modelo, acabado, None, None, None, None, None),
+                  ("motor", f.modelo, acabado, comb, motor, None, None, None)]
         if con_matriz:
             ant = tramo(anios_cumplidos(f.matriculacion, dia), conc.tramos_antiguedad)
             km = tramo(f.km, conc.tramos_km)
             if ant is not None and km is not None:
-                claves += [("antiguedad_km", f.modelo, None, None, ant, km, None),
-                           ("acabado_antiguedad_km", f.modelo, acabado, None, ant, km, None)]
+                claves += [("antiguedad_km", f.modelo, None, None, None, ant, km, None),
+                           ("acabado_antiguedad_km", f.modelo, acabado, None, None, ant, km, None),
+                           ("combustible_antiguedad_km", f.modelo, None, comb, None, ant, km, None),
+                           ("motor_antiguedad_km", f.modelo, None, comb, motor, ant, km, None),
+                           ("acabado_combustible_antiguedad_km", f.modelo, acabado, comb, None, ant, km, None),
+                           ("acabado_motor_antiguedad_km", f.modelo, acabado, comb, motor, ant, km, None)]
         if f.color:
-            claves.append(("color", f.modelo, None, None, None, None, f.color))
+            claves.append(("color", f.modelo, None, None, None, None, None, f.color))
         edad = ((dia - h.primero[clave]).days, h.alta_observada(clave))
         for zona in h.zonas(f.provincia):
             for k in claves:
@@ -100,12 +113,13 @@ def calcular(h, dia: date, tipo: str, catalogo: Catalogo) -> tuple[list[dict], l
                 g["edades"].append(edad)
 
     filas = []
-    for (zona, nivel, modelo, acabado, motor, ant, km, color), g in grupos.items():
+    for (zona, nivel, modelo, acabado, comb, motor, ant, km, color), g in grupos.items():
         precios = sorted(g["precios"])
         med, cota = dias_publicado(g["edades"])
         filas.append({
             "dia": dia, "tipo": tipo, "zona": zona, "nivel": nivel, "modelo": modelo,
-            "acabado": acabado and acabado[0], "acabado_reconocido": acabado and acabado[1], "motor": motor,
+            "acabado": acabado and acabado[0], "acabado_reconocido": acabado and acabado[1], "combustible": comb,
+            "motor": motor,
             "antiguedad": None if ant is None else conc.tramos_antiguedad[ant][1],
             "antiguedad_orden": ant, "km": None if km is None else conc.tramos_km[km][1], "km_orden": km,
             "color": color, "anuncios": g["anuncios"], "propios": g["propios"], "n_precio": len(precios),
@@ -117,7 +131,7 @@ def calcular(h, dia: date, tipo: str, catalogo: Catalogo) -> tuple[list[dict], l
     return filas, otras
 
 
-COLS_SEGMENTO = ["dia", "tipo", "zona", "nivel", "modelo", "acabado", "acabado_reconocido", "motor", "antiguedad",
-                 "antiguedad_orden", "km", "km_orden", "color", "anuncios", "propios", "n_precio", "precio_p25_cents",
-                 "precio_p50_cents", "precio_p75_cents", "dias_mediana", "dias_cota"]
+COLS_SEGMENTO = ["dia", "tipo", "zona", "nivel", "modelo", "acabado", "acabado_reconocido", "combustible", "motor",
+                 "antiguedad", "antiguedad_orden", "km", "km_orden", "color", "anuncios", "propios", "n_precio",
+                 "precio_p25_cents", "precio_p50_cents", "precio_p75_cents", "dias_mediana", "dias_cota"]
 COLS_SIN_CLASIFICAR = ["dia", "tipo", "modelo", "version", "anuncios"]

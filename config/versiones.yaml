@@ -160,6 +160,19 @@ por_combustible:
   Eléctrico: Eléctrico
   Híbrido: Híbrido
 
+# Grupos del filtro de combustible de la matriz de precios (detalle de un modelo, VO). formas: cómo puede venir el campo de combustible del anuncio (sin tildes ni mayúsculas).
+# Un combustible que no esté aquí se muestra tal cual (no se adivina su grupo); sin dato, sin_combustible.
+combustibles:
+  - nombre: Gasolina
+    formas: [gasolina]
+  - nombre: Diésel
+    formas: [diesel, gasoleo]
+  - nombre: Híbrido
+    formas: [hibrido, hibrido enchufable, hibrido gasolina, hibrido diesel]
+  - nombre: Eléctrico
+    formas: [electrico]
+sin_combustible: Sin dato de combustible
+
 # Cambio, solo cuando viene en el texto. En VN, «6 vel.» sin «Automático» es manual (así escribe la
 # web los manuales en nuevos); en VO no se deduce nada de que falte «DSG».
 cambio:

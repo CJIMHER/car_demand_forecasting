@@ -311,10 +311,11 @@ COLS_CONCESIONARIO = ["dia", "tipo", "dealer_id", "concesionario", "es_propio", 
 
 
 def _insertar(pg, tabla: str, cols: list[str], filas: list[dict]) -> None:
+    """Con COPY: los segmentos son decenas de miles de filas por día."""
     if filas:
-        with pg.cursor() as cur:
-            cur.executemany(f"INSERT INTO {tabla} ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))})",
-                            [tuple(f[c] for c in cols) for f in filas])
+        with pg.cursor() as cur, cur.copy(f"COPY {tabla} ({', '.join(cols)}) FROM STDIN") as copia:
+            for f in filas:
+                copia.write_row(tuple(f[c] for c in cols))
 
 
 def _capturas(pg, h: Hechos, desde: date, hasta: date) -> int:
@@ -339,7 +340,9 @@ def _capturas(pg, h: Hechos, desde: date, hasta: date) -> int:
 
 def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date | None = None,
                 conc: Concesionario | None = None) -> dict:
-    """Recalcula los días de [desde, hasta] (por defecto, todo el histórico hasta hoy)."""
+    """Recalcula los días de [desde, hasta] (por defecto, todo el histórico hasta hoy). El resumen
+    lleva las filas escritas (las de segmentos, también por nivel) y los segundos, total y de segmentos."""
+    inicio = time.monotonic()
     conc = conc or cargar_concesionario()
     catalogo = versiones.cargar(conc.marca)
     h = Hechos(pg, conc)
@@ -351,6 +354,8 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
     desde = max(desde or min(todos), min(todos))
     resumen = {"desde": str(desde), "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0,
                "filas_concesionario": 0, "filas_segmento": 0}
+    por_nivel: Counter = Counter()
+    t_segmentos = 0.0
     d = desde
     while d <= hasta:
         with pg.transaction():
@@ -364,10 +369,13 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                     _insertar(pg, "panel_mercado_dia", COLS_DIA, filas_dia)
                     _insertar(pg, "panel_mercado_modelo", COLS_MODELO, filas_modelo)
                     _insertar(pg, "panel_mercado_concesionario", COLS_CONCESIONARIO, filas_conc)
+                    t = time.monotonic()
                     filas_seg, sin_clasificar = segmentos.calcular(h, d, tipo, catalogo)
                     _insertar(pg, "panel_mercado_segmento", segmentos.COLS_SEGMENTO, filas_seg)
                     _insertar(pg, "panel_mercado_sin_clasificar", segmentos.COLS_SIN_CLASIFICAR, sin_clasificar)
+                    t_segmentos += time.monotonic() - t
                     resumen["filas_segmento"] += len(filas_seg)
+                    por_nivel.update(f"{tipo} {f['nivel']}" for f in filas_seg)
                     resumen["filas_dia"] += len(filas_dia)
                     resumen["filas_modelo"] += len(filas_modelo)
                     resumen["filas_concesionario"] += len(filas_conc)
@@ -376,6 +384,9 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
         d += UN_DIA
     with pg.transaction():
         resumen["filas_capturas"] = _capturas(pg, h, desde, hasta)
+    resumen["filas_segmento_por_nivel"] = dict(sorted(por_nivel.items()))
+    resumen["segundos_segmento"] = round(t_segmentos, 1)
+    resumen["segundos"] = round(time.monotonic() - inicio, 1)
     return resumen
 
 
