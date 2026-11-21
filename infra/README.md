@@ -17,7 +17,7 @@ Las órdenes se lanzan con el `Makefile` de la raíz (`make help`).
 
 ## Cómo se prueba
 
-- `make test` en el servidor: pytest dentro de `cdf_jobs` contra un Postgres desechable.
+- `make test` en el servidor: pytest dentro de `cdf_jobs` contra un Postgres desechable. Las pruebas no ven el `.env` del servidor: `tests/conftest.py` (`entorno_limpio`) borra la configuración del host al empezar cada una.
 - Las migraciones se aplican en cada prueba sobre una base vacía (`tests/conftest.py`).
 - `tests/test_copias.py` ejecuta `pg_backup.sh` de verdad (pg_dump + gpg) con un `rclone` simulado,
   descifra la copia y la restaura en otra base. La parte Docker de `probar_restauracion.sh` solo se

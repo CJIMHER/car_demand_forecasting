@@ -1,5 +1,25 @@
 # Cambios
 
+## 2026-11-21 · Pruebas independientes del entorno del host (rama hito-1b-pruebas)
+
+- **Fallo**: `make test` en el servidor daba 2 fallos en `tests/test_contrato_panel.py` (el caso
+  «sin variable» de `PANEL_EJEMPLO_VISIBLE_PARA` y la banda de ejemplo de /direccion). `cdf_jobs` recibe
+  `/opt/cdf/.env` como `env_file`, con `PANEL_EJEMPLO_VISIBLE_PARA=tecnico,direccion` y
+  `PANEL_PERMITE_EJEMPLO=1`, y las pruebas lo heredaban.
+- **Arreglo** (`tests/conftest.py`): `entorno_limpio` borra al empezar cada prueba (y una vez al
+  empezar la sesión, antes de las fixtures de módulo) toda la configuración que puede traer el host:
+  `PANEL_*`, `TELEGRAM_*`, `RCLONE_*`, `POSTGRES_*`, `BUCKET`, `BACKUP_PASSPHRASE`,
+  `CDF_DATABASE_URL`, `CDF_SCRAPERS_DATA`, `CDF_CONCESIONARIO`, `CDF_VERSIONES`, `CDF_ENV_FILE` y
+  `CDF_PYTHON`. Se quedan `PG*` y `CDF_TEST_PG` (dónde está el Postgres de pruebas). La prueba que
+  necesita una variable la fija ella con `monkeypatch`, como ya hacían todas.
+- **Otras pruebas que dependían del host de la misma forma**: `test_caducidad_por_defecto_30_dias` y
+  `test_cookies_solo_del_host` (con `PANEL_SESION_DIAS` en el .env) y todas las de
+  `tests/test_segmentos.py` con catálogo (con `CDF_VERSIONES`); también las de Mercado, scrapers,
+  panel y Telegram si el host tuviera `CDF_CONCESIONARIO`.
+- **Pruebas**: `tests/test_entorno.py` (3): ninguna prueba ve esas variables; cada variable de
+  `.env.example` está cubierta; y las pruebas sensibles pasan en un pytest hijo con un entorno como el
+  de producción (falla con el conftest anterior).
+
 ## 2026-11-21 · Hito 1b: matriz de VO por combustible y motor (rama hito-1b-motor)
 
 - **Filtros de la matriz «Precio por antigüedad y km»** (detalle de un modelo, VO): además del

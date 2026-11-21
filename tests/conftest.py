@@ -24,11 +24,42 @@ sys.path.insert(0, str(RAIZ))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
+# Configuración que el host puede traer y que cambia el comportamiento de la aplicación. En el
+# servidor, «make test» corre en cdf_jobs, que recibe /opt/cdf/.env entero como env_file (y
+# CDF_SCRAPERS_DATA del compose): sin esto, las pruebas verían la configuración de producción.
+# Se quedan PG* y CDF_TEST_PG, que dicen a las pruebas dónde está el Postgres de pruebas.
+PREFIJOS_DEL_HOST = ("PANEL_", "TELEGRAM_", "RCLONE_", "POSTGRES_")
+VARIABLES_DEL_HOST = ("BUCKET", "BACKUP_PASSPHRASE", "CDF_DATABASE_URL", "CDF_SCRAPERS_DATA", "CDF_CONCESIONARIO",
+                      "CDF_VERSIONES", "CDF_ENV_FILE", "CDF_PYTHON")
+
+
+def del_host(nombre: str) -> bool:
+    return nombre.startswith(PREFIJOS_DEL_HOST) or nombre in VARIABLES_DEL_HOST
+
+
+def _limpiar(mp: pytest.MonkeyPatch) -> None:
+    for nombre in [n for n in os.environ if del_host(n)]:
+        mp.delenv(nombre)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def entorno_limpio_sesion():
+    """Antes que cualquier fixture de módulo o de sesión (p. ej. el catálogo de test_segmentos)."""
+    with pytest.MonkeyPatch.context() as mp:
+        _limpiar(mp)
+        yield
+
+
 @pytest.fixture(autouse=True)
-def sin_telegram(monkeypatch):
-    """Ninguna prueba llama a Telegram: sin credenciales y con la salida a la red bloqueada."""
-    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
-    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+def entorno_limpio(entorno_limpio_sesion, monkeypatch):
+    """Cada prueba empieza sin la configuración del host; la que necesite una variable la fija ella
+    con monkeypatch (y se deshace al terminar)."""
+    _limpiar(monkeypatch)
+
+
+@pytest.fixture(autouse=True)
+def sin_telegram(entorno_limpio, monkeypatch):
+    """Ninguna prueba llama a Telegram: sin credenciales (entorno_limpio) y con la salida a la red bloqueada."""
 
     def prohibido(*args, **kwargs):
         raise AssertionError("Una prueba ha intentado llamar a Telegram")
