@@ -29,18 +29,25 @@ def crit():
     return motor.cargar_criterios()
 
 
-def campana(pg, cid, *, dias=2, gasto=1000, impresiones=1_000_000, leads=0, citas=0, ventas=0, zona=None, fuera=None,
+def campana(pg, cid, *, dias=2, gasto=1000, impresiones=None, clics=None, leads=0, citas=0, ventas=0, zona=None, fuera=None,
             modelo="Golf", ambito="VN", hasta=HOY, titulo=None, leads_por_dia=None, gasto_por_dia=None):
     """Una campaña de `dias` días hasta `hasta` (día de vida = dias − 1). Gasto (céntimos), impresiones,
-    leads, citas y ventas totales; los de Walcu, el último día salvo `leads_por_dia`."""
+    leads, citas y ventas totales; los de Walcu, el último día salvo `leads_por_dia`. Por defecto, clics y
+    impresiones que no disparan la regla b: 10 clics por lead (10 % de clic a lead) y 10 % de tasa de clic."""
+    if clics is None:
+        clics = leads * 10 or 100
+        if impresiones is not None:
+            clics = min(clics, impresiones)
+    if impresiones is None:
+        impresiones = clics * 10
     inicio = hasta - timedelta(days=dias - 1)
     for i in range(dias):
         d = inicio + timedelta(days=i)
         g = gasto_por_dia[i] if gasto_por_dia else (gasto // dias + (gasto % dias if i == dias - 1 else 0))
         pg.execute("""INSERT INTO panel_campana_dia (dia, origen, campana_id, titulo, tipo_campana, modelo, ambito, inicio,
-                      gasto_cents, impresiones, clics) VALUES (%s, 'real', %s, %s, %s, %s, %s, %s, %s, %s, 0)""",
+                      gasto_cents, impresiones, clics) VALUES (%s, 'real', %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                    (d, cid, titulo or cid, "modelo" if modelo else "general", modelo, ambito, inicio, g,
-                    impresiones if i == dias - 1 else 0))
+                    impresiones if i == dias - 1 else 0, clics if i == dias - 1 else 0))
         n = leads_por_dia[i] if leads_por_dia else (leads if i == dias - 1 else 0)
         ultimo = i == dias - 1
         if n or ultimo:
@@ -117,24 +124,55 @@ def test_se_juzga_desde_el_segundo_dia(pg, conc, crit):
 
 # ================================================================== regla b
 
-@pytest.mark.parametrize("leads, salta", [(299, True), (300, False)])
-def test_b_leads_por_visualizacion_en_el_borde_del_3(pg, conc, crit, leads, salta):
-    campana(pg, "C", leads=leads, citas=leads, impresiones=10_000, gasto=100)
+@pytest.mark.parametrize("clics, salta", [(99, True), (100, False)])
+def test_b_tasa_de_clic_en_el_borde_del_1(pg, conc, crit, clics, salta):
+    # 99 de 10 000 impresiones = 0,99 %: el anuncio no atrae. 100 = 1 %: no salta.
+    campana(pg, "C", leads=clics, citas=clics, impresiones=10_000, clics=clics, gasto=100)
     r = juicio(pg, conc, crit, "C").reglas["b"]
     assert r.activa is salta
-    assert f"leads por visualización: {leads} de 10000 impresiones = {'2,99' if salta else '3'} % (umbral 3 %)" \
-        in r.cifras_texto
+    assert f"tasa de clic: {clics} de 10000 impresiones = {'0,99' if salta else '1'} % (umbral 1 %)" in r.cifras_texto
+    assert ("no_atrae" in r.cifras["senales"]) is salta
+    assert ("El anuncio no atrae: revisar la creatividad (reel, foto) y el mensaje." in r.revisar) is salta
+    if salta:
+        assert r.decision == "revisar" and "no convence" not in r.revisar
+
+
+@pytest.mark.parametrize("leads, salta", [(299, True), (300, False)])
+def test_b_tasa_de_clic_a_lead_en_el_borde_del_3(pg, conc, crit, leads, salta):
+    # 299 leads de 10 000 clics = 2,99 %: atrae pero no convence. 300 = 3 %: no salta. Tasa de clic, 10 %.
+    campana(pg, "C", leads=leads, citas=leads, impresiones=100_000, clics=10_000, gasto=100)
+    r = juicio(pg, conc, crit, "C").reglas["b"]
+    assert r.activa is salta
+    assert f"clic a lead: {leads} de 10000 clics = {'2,99' if salta else '3'} % (umbral 3 %)" in r.cifras_texto
+    assert r.cifras["senales"] == (["no_convence"] if salta else [])
+    assert ("Atrae pero no convence: revisar la llamada a la acción, la oferta y el formulario." == r.revisar) is salta
+
+
+def test_b_las_dos_senales_a_la_vez(pg, conc, crit):
+    campana(pg, "C", leads=1, citas=1, impresiones=10_000, clics=50, gasto=100)    # 0,5 % y 2 %
+    r = juicio(pg, conc, crit, "C").reglas["b"]
+    assert r.activa and r.cifras["senales"] == ["no_atrae", "no_convence"]
+    assert "El anuncio no atrae" in r.revisar and "Atrae pero no convence" in r.revisar
+
+
+def test_b_sin_clics_salta_por_tasa_de_clic_y_no_juzga_clic_a_lead(pg, conc, crit):
+    campana(pg, "C", leads=0, impresiones=10_000, clics=0, gasto=100)
+    r = juicio(pg, conc, crit, "C").reglas["b"]
+    assert r.activa and r.cifras["senales"] == ["no_atrae"] and "clic a lead" not in r.cifras_texto
 
 
 @pytest.mark.parametrize("leads, salta", [(40, True), (60, False)])
 def test_b_claramente_por_debajo_del_mismo_modelo_y_mes(pg, conc, crit, leads, salta):
-    # Noviembre de 2025, mismo modelo: 10 % de leads por visualización. Ahora, 4 % o 6 % (ambos sobre el 3 %);
-    # «claramente por debajo» es menos de la mitad (factor 0,5): 4 % salta, 6 % no.
+    # Noviembre de 2025, mismo modelo: 10 % de leads por impresión. Ahora, 4 % o 6 %, con tasa de clic y de
+    # clic a lead sobre sus umbrales; «claramente por debajo» es menos de la mitad (factor 0,5): 4 % salta, 6 % no.
     campana(pg, "ANT", leads=100, citas=50, impresiones=1_000, hasta=date(2025, 11, 15), gasto=100)
-    campana(pg, "C", leads=leads, citas=leads, impresiones=1_000, gasto=100)
+    campana(pg, "C", leads=leads, citas=leads, impresiones=1_000, clics=200, gasto=100)
     r = juicio(pg, conc, crit, "C").reglas["b"]
     assert r.activa is salta
-    assert "campañas de Golf en noviembre de años anteriores: 10 % (n = 1 campañas)" in r.cifras_texto
+    assert r.cifras["senales"] == (["historico"] if salta else [])
+    assert (f"leads por impresión: {leads // 10} % frente a 10 % de las campañas de Golf en noviembre de años "
+            "anteriores (n = 1 campañas; umbral 50 % de esa cifra)") in r.cifras_texto
+    assert ("Por debajo de campañas del mismo modelo y mes" in r.revisar) is salta
 
 
 # ================================================================== regla c
@@ -302,7 +340,7 @@ def test_subir_no_sale_en_el_borde(pg, conc, crit, cambio):
 
 def test_subir_no_sale_con_una_regla_de_revision_activa(pg, conc, crit):
     _golf_lanzable(pg)
-    _buena(pg, impresiones=10_000)        # 1 % de leads por visualización: regla b activa
+    _buena(pg, impresiones=1_000_000)     # 1 000 clics en 1 000 000 de impresiones: 0,1 %, regla b activa
     j = juicio(pg, conc, crit, "C", cr.regla_e(pg, HOY, conc, crit))
     assert j.reglas["b"].activa and not j.reglas["subir"].activa and j.decision == "revisar"
     assert "reglas activas: b" in j.reglas["subir"].cifras_texto

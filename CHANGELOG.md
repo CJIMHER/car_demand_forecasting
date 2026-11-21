@@ -1,5 +1,19 @@
 # Cambios
 
+## 2026-11-21 · Regla b de Meta: tasa de clic y tasa de clic a lead (rama hito-1b-regla-b)
+
+- La regla b deja de usar «leads por visualización < 3 %» y salta con cualquiera de tres señales:
+  - tasa de clic (clics / impresiones) < 1 %: «el anuncio no atrae», revisar creatividad (reel, foto) y mensaje;
+  - tasa de clic a lead (leads / clics) < 3 %: «atrae pero no convence», revisar llamada a la acción,
+    oferta y formulario;
+  - leads por impresión por debajo de la mitad que las campañas del mismo modelo y mes de años
+    anteriores (se mantiene).
+- Umbrales y textos en `alertas/reglas.yaml` (`criterios_meta.b`); versión de reglas `reglas-2026-11-21b`.
+  La alerta y la decisión dicen qué señal salta, con sus cifras, su umbral y qué revisar.
+- `docs/criterios_marketing_meta.md` y `alertas/README.md` actualizados.
+- Pruebas en el borde: 0,99 % / 1 % de tasa de clic y 2,99 % / 3 % de clic a lead; las dos señales a la
+  vez; sin clics; la señal del histórico.
+
 ## 2026-11-21 · Criterios de Cayetano para las campañas de Meta (rama hito-1b-criterios-meta)
 
 - **Criterios** guardados tal cual en `docs/criterios_marketing_meta.md` y llevados a

@@ -24,7 +24,9 @@ Si falta un dato, dilo y no lo supongas. Una regla sin su dato no se aplica.
 - **Coste por venta** = gasto / ventas.
 - **Tasa de lead a cita** = citas / leads.
 - **Tasa de venta** = ventas / citas.
-- **Leads por visualización** = leads / visualizaciones (impresiones) de Meta.
+- **Tasa de clic** = clics / impresiones de Meta.
+- **Tasa de clic a lead** = leads / clics.
+- **Leads por impresión** = leads / impresiones de Meta (solo para comparar con campañas del mismo modelo y mes).
 - **Zona cercana**: la provincia del concesionario y Andalucía occidental: **Sevilla, Huelva, Cádiz y Córdoba** (para el concesionario de Sevilla). Para otro concesionario, la zona sale de su configuración.
 - **Leads de fuera de zona** = leads cuyo código postal no está en la zona cercana / leads con código postal.
 
@@ -54,10 +56,16 @@ La campaña se juzga **desde el segundo día**. Motivo: si llegan muchos leads d
      - que el copy, el reel y la foto dejen clara la provincia del concesionario;
      - que el formulario tenga como preguntas obligatorias el código postal y si quiere ver el coche en la provincia del concesionario.
 
-### b) Pocos leads para lo que se muestra
+### b) El anuncio no atrae o no convence
 
-- **Señal**: leads por visualización por debajo del **3 %**, o claramente por debajo de otras campañas del mismo modelo y del mismo mes del año.
-- **Revisar**: la creatividad, el mensaje, la llamada a la acción y la oferta.
+Tres señales; cualquiera de ellas la dispara:
+
+1. **Tasa de clic** por debajo del **1 %**: el anuncio no atrae.
+   - **Revisar**: la creatividad (reel, foto) y el mensaje.
+2. **Tasa de clic a lead** por debajo del **3 %**: atrae pero no convence.
+   - **Revisar**: la llamada a la acción, la oferta y el formulario.
+3. **Leads por impresión** claramente por debajo de otras campañas del mismo modelo y del mismo mes del año.
+   - **Revisar**: la creatividad, el mensaje, la llamada a la acción y la oferta.
 
 ### c) Lead caro
 
@@ -99,7 +107,7 @@ Y además, el modelo cumple la regla e (stock de al menos 3 unidades y precio po
 ## Cautelas al aplicar los umbrales
 
 - Las tasas necesitan volumen. Con pocos leads o citas, una tasa baja o alta puede ser casualidad. Da siempre el número de leads, citas y ventas junto a la tasa, y si el volumen es pequeño, dilo antes de recomendar parar o subir.
-- Una cita tarda días en llegar después del lead, y una venta, semanas. El día 2 se puede juzgar sobre todo la zona de los leads, el coste por lead y los leads por visualización; la tasa de lead a cita, después de unos días, y la tasa de venta y el coste por venta, más adelante. Por eso subir presupuesto exige una campaña con ventas ya registradas.
+- Una cita tarda días en llegar después del lead, y una venta, semanas. El día 2 se puede juzgar sobre todo la zona de los leads, el coste por lead, la tasa de clic y la tasa de clic a lead; la tasa de lead a cita, después de unos días, y la tasa de venta y el coste por venta, más adelante. Por eso subir presupuesto exige una campaña con ventas ya registradas.
 - Compara cada campaña con campañas del mismo modelo y del mismo mes cuando haya historial. Si no lo hay, dilo y usa la media reciente del modelo.
 - La causa de una mala tasa no siempre está en la campaña: puede estar en el stock, en el precio o en la atención comercial. Señálalo cuando los datos lo apunten.
 

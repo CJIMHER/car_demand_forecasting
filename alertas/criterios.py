@@ -9,7 +9,7 @@ VO. De aquí salen, con las mismas cifras:
 
 Las comparaciones con los umbrales se hacen con fracciones exactas: 4,99 % salta y 5 % no.
 
-Datos: Meta (panel_campana_dia: gasto e impresiones) y Walcu (panel_leads_dia: leads, citas, ventas
+Datos: Meta (panel_campana_dia: gasto, impresiones y clics) y Walcu (panel_leads_dia: leads, citas, ventas
 y el recuento de leads con código postal dentro y fuera de la zona cercana). La regla e y el contexto
 de la d, del precálculo de Mercado en la zona cercana (panel_mercado_segmento, mismo modelo, acabado
 y motor; los anuncios propios son nuestro stock publicado en la web de la marca).
@@ -194,8 +194,8 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
     for cid, titulo, modelo, ambito, inicio in pg.execute(
             """SELECT DISTINCT ON (campana_id) campana_id, titulo, modelo, ambito, inicio FROM panel_campana_dia
                WHERE origen = %s AND dia = %s AND gasto_cents > 0 ORDER BY campana_id""", (origen, dia)).fetchall():
-        gasto, impresiones = (int(x) for x in pg.execute(
-            "SELECT sum(gasto_cents), sum(impresiones) FROM panel_campana_dia WHERE origen = %s AND campana_id = %s "
+        gasto, impresiones, clics = (int(x) for x in pg.execute(
+            "SELECT sum(gasto_cents), sum(impresiones), sum(clics) FROM panel_campana_dia WHERE origen = %s AND campana_id = %s "
             "AND dia BETWEEN %s AND %s", (origen, cid, inicio, dia)).fetchone())
         leads, citas, ventas, zona, fuera, con_cp_filas = (int(x) for x in pg.execute(
             """SELECT coalesce(sum(leads), 0), coalesce(sum(citas), 0), coalesce(sum(ventas), 0),
@@ -213,7 +213,7 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
         cpc_media = cpc is not None and media_cpc is not None and cpc <= media_cpc * tolerancia
         r = j.reglas
         r["a"] = _a(crit["a"], leads, citas, zona + fuera if con_cp_filas else None, fuera)
-        r["b"] = _b(pg, origen, crit["b"], j, dia, impresiones)
+        r["b"] = _b(pg, origen, crit["b"], j, dia, impresiones, clics)
         r["c"] = _c(crit["c"], gasto, leads, cpc, media_cpc, crit["media_tolerancia_pct"])
         r["d"] = _d(crit["d"], j, cpl_media, cpc_media, media_cpl, media_cpc, modelos_e)
         r["f"] = _fatiga(pg, origen, crit["f"], cid, dia, j.dias_vida)
@@ -262,15 +262,28 @@ def _a(c: dict, leads: int, citas: int, con_cp: int | None, fuera: int) -> Resul
     return Resultado("a", estado, "; ".join(partes), " ".join(revisar), "revisar" if activa else None, cifras)
 
 
-def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int) -> Resultado:
+def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: int) -> Resultado:
+    """Tres señales; cualquiera la dispara: tasa de clic baja (el anuncio no atrae), tasa de clic a lead baja
+    (atrae pero no convence) o leads por impresión claramente por debajo del mismo modelo y mes."""
     if not impresiones:
         return Resultado("b", "sin_dato", "sin impresiones")
-    umbral = _f(c["leads_por_visualizacion_minimo_pct"]) / CIEN
-    tasa = F(j.leads, impresiones)
-    texto = f"leads por visualización: {j.leads} de {impresiones} impresiones = {pct(tasa)} (umbral {num(umbral * CIEN)} %)"
-    cifras = {"leads": j.leads, "impresiones": impresiones, "leads_por_visualizacion_pct": float(tasa * CIEN),
-              "umbral_pct": float(umbral * CIEN)}
-    activa = tasa < umbral
+    partes, revisar, senales = [], [], []
+    u_clic = _f(c["tasa_clic_minima_pct"]) / CIEN
+    tasa_clic = F(clics, impresiones)
+    partes.append(f"tasa de clic: {clics} de {impresiones} impresiones = {pct(tasa_clic)} (umbral {num(u_clic * CIEN)} %)")
+    cifras = {"impresiones": impresiones, "clics": clics, "leads": j.leads, "tasa_clic_pct": float(tasa_clic * CIEN),
+              "umbral_tasa_clic_pct": float(u_clic * CIEN)}
+    if tasa_clic < u_clic:
+        senales.append("no_atrae")
+        revisar.append(c["revisar_no_atrae"])
+    if clics:
+        u_lead = _f(c["clic_lead_minima_pct"]) / CIEN
+        clic_lead = F(j.leads, clics)
+        partes.append(f"clic a lead: {j.leads} de {clics} clics = {pct(clic_lead)} (umbral {num(u_lead * CIEN)} %)")
+        cifras.update(clic_lead_pct=float(clic_lead * CIEN), umbral_clic_lead_pct=float(u_lead * CIEN))
+        if clic_lead < u_lead:
+            senales.append("no_convence")
+            revisar.append(c["revisar_no_convence"])
     if j.modelo:   # campañas del mismo modelo y mismo mes del año, en años anteriores
         otras = pg.execute(
             """SELECT campana_id, sum(impresiones) FROM panel_campana_dia WHERE origen = %s AND modelo = %s
@@ -283,12 +296,20 @@ def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int) -> Resu
                    AND extract(month FROM dia) = %s AND extract(year FROM dia) < %s""",
                 (origen, [o for o, _ in otras], dia.month, dia.year)).fetchone()[0]
             historico = F(int(leads_h), imp)
+            tasa = F(j.leads, impresiones)
             factor = _f(c["factor_historico"])
-            texto += (f"; campañas de {j.modelo} en {fmt.MESES[dia.month - 1]} de años anteriores: {pct(historico)} "
-                      f"(n = {len(otras)} campañas)")
-            cifras.update(historico_pct=float(historico * CIEN), historico_campanas=len(otras), factor=float(factor))
-            activa = activa or tasa < historico * factor
-    return Resultado("b", "activa" if activa else "no", texto, c["revisar"], "revisar" if activa else None, cifras)
+            partes.append(f"leads por impresión: {pct(tasa)} frente a {pct(historico)} de las campañas de {j.modelo} "
+                          f"en {fmt.MESES[dia.month - 1]} de años anteriores (n = {len(otras)} campañas; "
+                          f"umbral {num(factor * CIEN)} % de esa cifra)")
+            cifras.update(leads_impresion_pct=float(tasa * CIEN), historico_pct=float(historico * CIEN),
+                          historico_campanas=len(otras), factor=float(factor))
+            if tasa < historico * factor:
+                senales.append("historico")
+                revisar.append(c["revisar_historico"])
+    cifras["senales"] = senales
+    activa = bool(senales)
+    return Resultado("b", "activa" if activa else "no", "; ".join(partes), " ".join(revisar),
+                     "revisar" if activa else None, cifras)
 
 
 def _c(c: dict, gasto: int, leads: int, cpc: F | None, media_cpc: F | None, tolerancia) -> Resultado:

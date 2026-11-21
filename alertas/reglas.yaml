@@ -19,7 +19,7 @@
 #   texto       el motivo en una frase, con huecos {así} para las cifras (formato español)
 #
 # Los umbrales son una propuesta inicial (docs/diseno.md, Señales y alertas): se calibran en el piloto.
-version: reglas-2026-11-21
+version: reglas-2026-11-21b
 
 reglas:
   # ------------------------------------------------------------------ con datos reales desde ya
@@ -143,14 +143,14 @@ reglas:
     texto: "Campaña «{titulo}» · {decision} (regla a): {cifras}. Revisar: {revisar}"
 
   - id: meta_b
-    nombre: "Campaña: pocos leads para lo que se muestra (regla b)"
+    nombre: "Campaña: el anuncio no atrae o no convence (regla b)"
     calculo: criterio_meta
     criterio: b
     roles: [marketing]
     fuente: [panel_campana_dia, panel_leads_dia]
     tema: campanas
     nivel: aviso
-    texto: "Campaña «{titulo}» · {decision} (regla b): {cifras}. Revisar: {revisar}"
+    texto: "Campaña «{titulo}» · {decision} (regla b): {cifras}. {revisar}"
 
   - id: meta_c
     nombre: "Campaña: lead caro (regla c)"
@@ -221,10 +221,17 @@ criterios_meta:
     revisar: "la localización y las audiencias de la campaña; los motivos de descarte que anota el comercial."
     revisar_fuera_zona: "si dominan los de fuera de zona, que el copy, el reel y la foto nombren la provincia, y que el formulario pida como obligatorios el código postal y si quiere ver el coche en la provincia."
   b:
-    leads_por_visualizacion_minimo_pct: 3   # leads / impresiones de Meta
-    # «Claramente por debajo» de campañas del mismo modelo y mismo mes del año (años anteriores)
+    # Tres señales; cualquiera de ellas la dispara.
+    # 1) Tasa de clic = clics / impresiones de Meta. Por debajo: el anuncio no atrae.
+    tasa_clic_minima_pct: 1
+    revisar_no_atrae: "El anuncio no atrae: revisar la creatividad (reel, foto) y el mensaje."
+    # 2) Tasa de clic a lead = leads / clics. Por debajo: atrae pero no convence.
+    clic_lead_minima_pct: 3
+    revisar_no_convence: "Atrae pero no convence: revisar la llamada a la acción, la oferta y el formulario."
+    # 3) «Claramente por debajo» de campañas del mismo modelo y mismo mes del año (años anteriores):
+    #    leads / impresiones por debajo de factor_historico × la de esas campañas.
     factor_historico: 0.5
-    revisar: "la creatividad, el mensaje, la llamada a la acción y la oferta."
+    revisar_historico: "Por debajo de campañas del mismo modelo y mes: revisar la creatividad, el mensaje, la llamada a la acción y la oferta."
   c:
     coste_lead_maximo: 10         # si se pasa: continuar si el coste por cita está en su media; si no, parar
     continuar: "El coste por cita está en su media: se continúa."
