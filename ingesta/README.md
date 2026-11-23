@@ -141,7 +141,13 @@ espacios de más):
 
 Tras cada descarga de Meta o GA4 (y con `make campanas`) rehace `panel_campana_dia` (origen real) con
 las campañas de Meta clasificadas (con los leads que cuenta Meta en `leads_meta`), y `panel_campanas_sin_regla` con las de Meta y GA4 que no casan y
-el motivo, para «Estado de las fuentes». Una campaña de GA4 que se une a una de Meta por
+el motivo, para «Estado de las fuentes». De GA4 solo se intentan clasificar las campañas de Meta: las
+filas del canal Meta o con el nombre o el ID de una campaña descargada de Meta. Los valores reservados
+de GA4 ((direct), (not set), (cross-network)…) no son campañas. Con `config/canales.yaml`
+(`canales.py`) rehace también el tráfico por canal y tipo de página (`panel_trafico_canal_dia`), las
+fuentes y medios que caen en «otros» (`panel_trafico_otros`) y las campañas de Google Ads, con su nombre
+y sin reglas (`panel_campanas_google_ads`). GA4 da además el ID de campaña y su agrupación de canales
+por defecto (`campana_id`, `canal_ga4`), respaldo de las reglas. Una campaña de GA4 que se une a una de Meta por
 `utm_campaign` se clasifica como ella. Pruebas: `tests/test_campanas.py`.
 
     make meta      make ga4      (lo mismo que el cron; DESDE/HASTA a mano: python -m ingesta.meta --desde … --hasta …)

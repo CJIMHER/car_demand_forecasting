@@ -65,6 +65,46 @@ def bloque_rol(pg: psycopg.Connection, origen: str | None, rol: str, tipo: str) 
          "pie": f"{ng.TEMAS[a['tema']]} · abierta desde el {a['abierta_desde']:%d/%m}"} for a in filas])
 
 
+def estado_trafico(pg: psycopg.Connection, dias: int = 28) -> dict:
+    """Para «Estado de las fuentes»: sesiones de GA4 por canal (últimos `dias` días con datos), las fuentes
+    y medios que caen en «otros» (para completar config/canales.yaml) y las campañas de Google Ads."""
+    from datetime import timedelta
+
+    from ingesta import canales as cn
+    from panel import formato as fmt
+
+    try:
+        nombres = cn.cargar()
+    except (OSError, cn.ErrorCanales):
+        nombres = None
+    fin = pg.execute("SELECT max(dia) FROM panel_trafico_canal_dia WHERE origen = 'real'").fetchone()[0]
+    canales, total = [], 0
+    if fin:
+        ini = fin - timedelta(days=dias - 1)
+        filas = pg.execute(
+            """SELECT canal, sum(sesiones), sum(sesiones) FILTER (WHERE tipo = 'sin_tipo') FROM panel_trafico_canal_dia
+               WHERE origen = 'real' AND dia BETWEEN %s AND %s GROUP BY canal ORDER BY canal = %s, 2 DESC, canal""",
+            (ini, fin, cn.OTROS)).fetchall()
+        total = sum(int(s) for _, s, _ in filas)
+        canales = [{"canal": c, "nombre": nombres.nombre(c) if nombres else c, "sesiones": fmt.miles(s),
+                    "pct": fmt.porcentaje(int(s) / total * 100 if total else None, 1),
+                    "sin_tipo": fmt.miles(st or 0)} for c, s, st in filas]
+    otros = [{"fuente": f, "medio": m, "canal_ga4": g or fmt.GUION, "sesiones": fmt.miles(s),
+              "fechas": f"{fmt.fecha_corta(p)}–{fmt.fecha_corta(u)}"}
+             for f, m, g, p, u, s in pg.execute(
+                 """SELECT fuente, medio, canal_ga4, primer_dia, ultimo_dia, sesiones FROM panel_trafico_otros
+                    ORDER BY sesiones DESC, fuente, medio LIMIT 50""")]
+    n_otros = pg.execute("SELECT count(*) FROM panel_trafico_otros").fetchone()[0]
+    google = [{"campana": c, "sesiones": fmt.miles(s), "eventos": fmt.miles(e),
+               "fechas": f"{fmt.fecha_corta(p)}–{fmt.fecha_corta(u)}"}
+              for c, p, u, s, e in pg.execute(
+                  """SELECT campana, primer_dia, ultimo_dia, sesiones, eventos_clave FROM panel_campanas_google_ads
+                     ORDER BY ultimo_dia DESC, sesiones DESC, campana""")]
+    return {"canales": canales, "total": fmt.miles(total), "dias": dias,
+            "desde": fmt.fecha_corta(fin - timedelta(days=dias - 1)) if fin else None,
+            "hasta": fmt.fecha_corta(fin) if fin else None, "otros": otros, "n_otros": n_otros, "google": google}
+
+
 def estado_motor(pg: psycopg.Connection) -> dict:
     """Para «Estado de las fuentes» (técnico): reglas de la última pasada del motor, alertas del técnico
     (también las calculadas sobre ejemplo), últimos envíos y campañas sin regla en config/campanas.yaml."""

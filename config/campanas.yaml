@@ -13,7 +13,9 @@
 #    convertido en «_» («T-Roc Ocasión · Noviembre» → «t_roc_ocasion_noviembre»).
 #    Si una campaña usa otro utm_campaign, se añade aquí en «equivalencias» (utm_campaign → nombre de
 #    la campaña en Meta, los dos tal como aparecen).
-#    Una campaña de GA4 que se une a una de Meta se clasifica como la de Meta.
+#    Una campaña de GA4 que se une a una de Meta (por nombre o por ID) se clasifica como la de Meta.
+#    De GA4 solo se intentan clasificar las campañas que llegan desde Meta: los valores reservados,
+#    los canales y el resto del tráfico están en config/canales.yaml.
 #
 # 2. Reglas por nombre (tipo, ámbito y modelo de cada campaña)
 #    El nombre se lee sin distinguir mayúsculas ni tildes y sin importar los espacios

@@ -1,0 +1,85 @@
+# Tráfico de la web (GA4): qué es una campaña, a qué canal va cada sesión y de qué tipo de stock es
+# su página de destino. Lo usa ingesta/canales.py desde ingesta/campanas.py, tras cada descarga de GA4
+# (y con make campanas). Tras cambiarlo: make campanas.
+#
+# Todo se compara sin mayúsculas ni tildes. Los criterios de campañas son solo para Meta: de GA4 solo
+# se intentan clasificar como campaña de Meta las filas del canal Meta o cuyo nombre (utm_campaign) o
+# ID de campaña coincide con una campaña descargada de Meta. Solo esas pueden salir en «Campañas sin
+# regla». El resto del tráfico se cuenta por canal; las campañas de Google Ads se guardan con su
+# nombre, sin reglas.
+
+# 1. Valores de GA4 que no son una campaña (sessionCampaignName). También cualquier valor entre
+#    paréntesis, como «(something)», aunque no esté en la lista, y el vacío.
+valores_reservados:
+  - (direct)
+  - (organic)
+  - (referral)
+  - (not set)
+  - (none)
+  - (cross-network)
+  - (data not available)
+  - (not provided)
+  - (other)
+
+# 2. Canales, en orden: el primero que casa se queda la sesión. Cada canal lleva una o varias
+#    condiciones («si»); basta con una. Dentro de una condición, todo lo que lleva debe cumplirse:
+#      fuente / medio                  la fuente (sessionSource) o el medio (sessionMedium) es uno de estos
+#      fuente_palabra / medio_palabra  alguna palabra de la fuente o del medio es una de estas
+#                                      («l.facebook.com» → l, facebook, com)
+#      fuente_contiene                 la fuente contiene uno de estos textos («www.coches.net»)
+#    El canal «meta» es el de las campañas de Meta: es obligatorio. Si ninguno casa, se usa la
+#    agrupación de canales por defecto de GA4 (respaldo_ga4) y, si tampoco, «otros».
+canales:
+  - canal: meta
+    nombre: Meta
+    si:
+      - fuente_palabra: [facebook, fb, instagram, ig, meta, an, messenger]
+      - medio_palabra: [facebook, fb, instagram, ig, meta]
+  - canal: google_ads
+    nombre: Google Ads
+    si:
+      - fuente_palabra: [google, adwords]
+        medio: [cpc, ppc, paid, paidsearch, paid_search, paid search, sem]
+  - canal: portales
+    nombre: Portales
+    si:
+      - fuente_contiene: [coches.net, milanuncios, wallapop, autoscout24, coches.com, autocasion, motor.es,
+                          carwow, autobild, km77, flexicar, ocasionplus]
+  - canal: correo
+    nombre: Correo
+    si:
+      - medio: [email, e-mail, mail, newsletter, correo]
+      - fuente_palabra: [newsletter, mailchimp, brevo, sendinblue, mailrelay, acumbamail]
+  - canal: organica
+    nombre: Búsqueda orgánica
+    si:
+      - medio: [organic]
+      - fuente_palabra: [google, bing, yahoo, duckduckgo, ecosia, yandex, baidu, qwant, startpage, brave]
+        medio: [referral]
+  - canal: directo
+    nombre: Directo
+    si:
+      - fuente: [(direct)]
+  - canal: referencia
+    nombre: Referencia
+    si:
+      - medio: [referral]
+
+# Agrupación de canales por defecto de GA4 (sessionDefaultChannelGroup) → canal, solo cuando ninguna
+# regla de arriba casa. «Paid Search» no se traduce: puede ser Bing u otro buscador.
+respaldo_ga4:
+  Organic Search: organica
+  Organic Shopping: organica
+  Direct: directo
+  Referral: referencia
+  Email: correo
+  Organic Social: otros
+  Paid Social: otros
+
+# 3. Tipo de stock por la página de destino (la ruta, sin parámetros): VO si alguna palabra de la ruta
+#    está en «VO», VN si está en «VN» («/ocasion/t-roc» → ocasion, t, roc → VO). Con las dos, o con
+#    ninguna, no se sabe: esa sesión cuenta solo en «Todo». Las palabras dependen de la web del
+#    concesionario: completar con las rutas de sus páginas de nuevos y de ocasión.
+paginas:
+  VO: [ocasion, seminuevos, seminuevo, usados, usado, vo, segunda]
+  VN: [nuevos, vn, gama, configurador, nuevo]

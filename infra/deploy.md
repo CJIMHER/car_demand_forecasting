@@ -393,6 +393,14 @@ noviembre», «VW [VO][2026] Black Friday»…). Las que salgan en «Estado de l
 regla», con su motivo: renombrarlas en Meta o añadir su asignación a mano en `config/campanas.yaml`
 (`asignaciones`), desplegar y `make campanas`.
 
+Solo salen las campañas de Meta: de GA4, las que llegan desde Meta o con el nombre o el ID de una
+campaña de Meta. El resto del tráfico de GA4 se cuenta por canal con `config/canales.yaml` (Marketing →
+«Tráfico de la web por canal»). Las fuentes y medios que caen en «Otros» salen en «Estado de las
+fuentes»: añadirlas a su canal, desplegar y `make campanas`. Tras desplegar la migración `0015`, las
+filas de GA4 ya descargadas no tienen el ID de campaña ni la agrupación de canales de GA4 hasta que
+se recargan: `make ga4` recarga los últimos 7 días y rehace las tablas (lo mismo hace el cron cada
+noche). Para días más antiguos, `python -m ingesta.ga4 --desde … --hasta …` dentro de `cdf_jobs`.
+
 ### 7.10 Criterios de las campañas de Meta
 
 ```bash

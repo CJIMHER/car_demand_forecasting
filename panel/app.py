@@ -384,6 +384,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
     def estado(request: Request, pg=Depends(bd)):
         u = exigir(request, pg, "estado")
         return pintar(request, "estado_fuentes.html", {"e": mercado.estado_fuentes(pg), "vista": "estado",
-                                                       "motor": alertas.estado_motor(pg)}, pg=pg, usuario=u)
+                                                       "motor": alertas.estado_motor(pg),
+                                                       "trafico": alertas.estado_trafico(pg)}, pg=pg, usuario=u)
 
     return app

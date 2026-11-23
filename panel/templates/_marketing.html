@@ -204,5 +204,46 @@
     </section>
   </div>
 
+  <section aria-labelledby="t-trafico" class="tarjeta seccion"{{ attrs("trafico", d.trafico) }}>
+    <div class="tarjeta-cabeza">
+      <h2 id="t-trafico">Tráfico de la web por canal</h2>
+      {{ marca(d.trafico) }}
+    </div>
+    {% if d.trafico.hay %}
+    <p class="nota">Google Analytics · últimos 28 días ({{ d.trafico.desde }}–{{ d.trafico.hasta }}) frente a los 28 anteriores · {{ d.trafico.total }} sesiones{% if d.tipo != "todo" %} de {{ d.tipo }}{% endif %}</p>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-movil tabla-trafico">
+        <thead>
+          <tr>
+            <th scope="col" class="izq">Canal</th>
+            <th scope="col">Sesiones</th>
+            <th scope="col">Frente a los 28 días anteriores</th>
+            <th scope="col">Con interacción</th>
+            <th scope="col">%</th>
+            <th scope="col">Eventos clave</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in d.trafico.filas %}
+          <tr data-canal="{{ c.canal }}">
+            <th scope="row" class="izq">{{ c.nombre }}</th>
+            <td data-etiqueta="Sesiones" class="fuerte">{{ c.sesiones }}</td>
+            <td data-etiqueta="Frente a los 28 días anteriores">{{ c.variacion }}</td>
+            <td data-etiqueta="Con interacción">{{ c.interaccion }}</td>
+            <td data-etiqueta="% con interacción">{{ c.interaccion_pct }}</td>
+            <td data-etiqueta="Eventos clave">{{ c.eventos }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="izq">Ninguna sesión{% if d.tipo != "todo" %} con página de destino de {{ d.tipo }}{% endif %} en estos 28 días.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if d.trafico.nota %}<p class="nota trafico-nota">{{ d.trafico.nota }}</p>{% endif %}
+    {% if not d.trafico.hay_previo %}<p class="nota">Sin datos de los 28 días anteriores todavía: la comparación aparece cuando los haya.</p>{% endif %}
+    <p class="nota">El canal sale de la fuente y el medio de cada sesión, con las reglas de config/canales.yaml (y la agrupación de canales de Google Analytics cuando ninguna casa). Meta incluye las visitas desde Facebook e Instagram, de anuncios o no. Las campañas de Google Ads solo se cuentan aquí: los criterios de campañas son solo para Meta.</p>
+    {% else %}{{ sin_datos() }}{% endif %}
+  </section>
+
   {{ lista_alertas(d.alertas, "Alertas para marketing", "t-alertas-marketing") }}
 </div>

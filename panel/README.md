@@ -17,7 +17,7 @@ conectar sus datos») hasta que lleguen los datos reales.
 | `permisos.py` | **Único** sitio con roles y permisos (quién ve qué vista, también según sus datos) |
 | `contrato.py` | Qué tablas lee cada bloque y de qué origen (real o ejemplo; un bloque nunca los mezcla) |
 | `direccion.py`, `ventas.py`, `marketing.py`, `negocio.py` | Consultas de las tres vistas sobre las tablas del contrato |
-| `alertas.py` | Alertas de las vistas: las del motor (tabla `alertas`) o, sin él, las de ejemplo; y el motor en «Estado de las fuentes» |
+| `alertas.py` | Alertas de las vistas: las del motor (tabla `alertas`) o, sin él, las de ejemplo; y el motor, las campañas sin regla y el tráfico de GA4 por canal en «Estado de las fuentes» |
 | `ejemplo.py` | Datos de ejemplo deterministas y coherentes entre vistas (`make ejemplo-cargar` / `ejemplo-borrar`) |
 | `seguridad.py` | argon2id, sesiones en Postgres, CSRF de doble envío, bloqueo de intentos, IP detrás de Caddy |
 | `mercado.py` | Consultas de la vista Mercado y de «Estado de las fuentes»: solo tablas `panel_*` y `fuentes_estado` |

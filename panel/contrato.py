@@ -24,7 +24,7 @@ TABLAS = (
     "panel_stock_vehiculo", "panel_ventas_mes", "panel_alertas", "panel_riesgo_vehiculo",
     "panel_curva_grupo", "panel_leads_dia", "panel_campana_dia", "panel_campana_salud",
     "panel_recomendacion_modelo", "panel_atencion_relativa", "panel_semana_campana",
-    "panel_campana_resultado",
+    "panel_campana_resultado", "panel_trafico_canal_dia",
 )
 
 # Tablas del motor de alertas (migración 0009) con el mismo formato (dia, origen, calculado_at). No
@@ -60,6 +60,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "ocasion": ("panel_riesgo_vehiculo",),      # solo en VO: stock de ocasión que mover
         "semanas": ("panel_semana_campana",),
         "pasadas": ("panel_campana_resultado",),
+        "trafico": ("panel_trafico_canal_dia",),    # tráfico de la web por canal (GA4)
         "alertas": ALERTAS,
     },
 }

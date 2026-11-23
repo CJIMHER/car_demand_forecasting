@@ -8,7 +8,11 @@ Las reglas están documentadas en config/campanas.yaml. Este módulo:
   contrato del panel de la que Marketing y los criterios de Meta leen el tipo y el ámbito, con los
   leads que cuenta Meta (leads_meta) para las reglas que no necesitan Walcu;
 - rehace panel_campanas_sin_regla con las campañas de Meta y GA4 que no casan, con el motivo, para
-  «Estado de las fuentes».
+  «Estado de las fuentes». De GA4 solo cuentan las filas de Meta (canal Meta, o nombre o ID de una
+  campaña descargada de Meta): los criterios de campañas son solo para Meta;
+- con config/canales.yaml (ingesta/canales.py), rehace el tráfico de GA4 por canal y tipo de stock
+  (panel_trafico_canal_dia, real), las fuentes y medios que caen en «otros» (panel_trafico_otros) y
+  las campañas de Google Ads, con su nombre y sin reglas (panel_campanas_google_ads).
 
 Uso: python -m ingesta.campanas (make campanas) tras cambiar config/campanas.yaml. Lo hacen también
 cada descarga de Meta y de GA4.
@@ -18,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import defaultdict
 import re
 import sys
 import unicodedata
@@ -39,8 +44,6 @@ ANIO = re.compile(r"\[\s*(20\d\d)\s*\]|(?<![0-9])(20\d\d)(?![0-9])")
 PALABRA_VO = re.compile(r"(?<![a-z0-9])(ocasion|vo)(?![a-z0-9])")
 PALABRA_VN = re.compile(r"(?<![a-z0-9])(nuevos|vn)(?![a-z0-9])")
 MES = re.compile(r"(?<![a-z])(" + "|".join(MESES) + r")(?![a-z])")
-# Valores de GA4 que no son una campaña: tráfico directo, orgánico o de referencia
-NO_CAMPANA = {"(not set)", "(direct)", "(organic)", "(referral)", "(none)", "(not provided)", ""}
 
 
 class ErrorCampanas(Exception):
@@ -184,22 +187,36 @@ def cargar(fichero: Path | None = None, catalogo: dict[str, str] | None = None) 
 
 # --------------------------------------------------------------------------- tablas del panel
 
-def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None) -> dict:
-    """Rehace panel_campana_dia (real) y panel_campanas_sin_regla. Devuelve cuántas campañas de Meta se
-    han clasificado y cuántas campañas (Meta y GA4) han quedado sin regla."""
+def _ampliar(acum: dict, clave, dia, *valores) -> None:
+    """[primer día, último día, sumas…] por clave."""
+    a = acum.get(clave)
+    if a is None:
+        acum[clave] = [dia, dia, *valores]
+        return
+    a[0], a[1] = min(a[0], dia), max(a[1], dia)
+    for i, v in enumerate(valores, 2):
+        a[i] += v
+
+
+def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales=None) -> dict:
+    """Rehace panel_campana_dia (real), panel_campanas_sin_regla y las tablas de tráfico de GA4.
+    Devuelve cuántas campañas de Meta se han clasificado y cuántas (Meta y GA4) han quedado sin regla."""
+    from ingesta import canales as cn     # aquí: canales.py importa este módulo
     campanas = campanas or cargar()
+    canales = canales or cn.cargar()
     filas = pg.execute(
         """SELECT dia, campana_id, campana_nombre, gasto_cents, impresiones, clics, leads FROM campanas_meta_dia_vigente
            WHERE nivel = 'campana' ORDER BY campana_id, dia""").fetchall()
     por_campana: dict[str, list] = {}
     for f in filas:
         por_campana.setdefault(f[1], []).append(f)
-    panel, sin_regla, por_clave, clasificadas = [], [], {}, 0
+    panel, sin_regla, por_clave, por_id, clasificadas = [], [], {}, {}, 0
     for cid, dias in por_campana.items():
         # El nombre vigente (el del último día con nombre) clasifica todos los días de la campaña
         nombre = next((d[2] for d in reversed(dias) if d[2]), None) or "(sin nombre)"
         c = campanas.clasificar(nombre)
         por_clave.setdefault(normalizar(nombre), c)
+        por_id[str(cid)] = c
         if not c.ok:
             sin_regla.append(("meta", nombre, dias[0][0], dias[-1][0], sum(d[3] for d in dias), None, c.motivo))
             continue
@@ -207,16 +224,41 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None) -> dict
         inicio = dias[0][0]
         panel += [(d[0], cid, nombre, c.tipo, c.modelo if c.tipo == "modelo" else None, c.ambito, c.sin_mercado,
                    inicio, d[3], d[4], d[5], d[6]) for d in dias]
-    for camp, p, u, s in pg.execute(
-            "SELECT campana, min(dia), max(dia), sum(sesiones) FROM ga4_trafico_dia_vigente GROUP BY campana"):
-        if camp in NO_CAMPANA:
+    # GA4: canal y tipo de cada fila; de las de Meta, las campañas que se intentan clasificar
+    trafico: dict[tuple, list] = defaultdict(lambda: [0, 0, 0.0])
+    otros: dict[tuple, list] = {}
+    google: dict[tuple, list] = {}
+    de_meta: dict[str, list] = {}
+    for dia, fuente, medio, camp, camp_id, canal_ga4, pagina, s, si, ek in pg.execute(
+            """SELECT dia, fuente, medio, campana, campana_id, canal_ga4, pagina_destino, sesiones,
+                      sesiones_interaccion, eventos_clave FROM ga4_trafico_dia_vigente"""):
+        s, si, ek = int(s), int(si), float(ek)
+        reservado = canales.reservado(camp)
+        canal = canales.canal(fuente, medio, canal_ga4)
+        # Una campaña descargada de Meta (por nombre o por ID) es de Meta aunque llegue con otra fuente
+        if not reservado and (camp_id and str(camp_id) in por_id or campanas.clave_union(camp) in por_clave):
+            canal = cn.META
+        t = trafico[(dia, canal, canales.tipo(pagina) or "sin_tipo")]
+        t[0], t[1], t[2] = t[0] + s, t[1] + si, t[2] + ek
+        if canal == cn.OTROS:
+            _ampliar(otros, (fuente, medio, canal_ga4), dia, s)
+        elif reservado:
             continue
-        c = por_clave.get(campanas.clave_union(camp)) or campanas.clasificar(camp)
+        elif canal == cn.META:
+            _ampliar(de_meta, (camp, camp_id), dia, s)
+        elif canal == "google_ads":
+            _ampliar(google, (camp, camp_id), dia, s, si, ek)
+    for (camp, camp_id), (p, u, s) in de_meta.items():
+        c = (por_id.get(str(camp_id)) if camp_id else None) or por_clave.get(campanas.clave_union(camp)) \
+            or campanas.clasificar(camp)
         if not c.ok:
             sin_regla.append(("ga4", camp, p, u, None, s, c.motivo))
     with pg.transaction():
         pg.execute("DELETE FROM panel_campana_dia WHERE origen = 'real'")
         pg.execute("DELETE FROM panel_campanas_sin_regla")
+        pg.execute("DELETE FROM panel_trafico_canal_dia WHERE origen = 'real'")
+        pg.execute("DELETE FROM panel_trafico_otros")
+        pg.execute("DELETE FROM panel_campanas_google_ads")
         with pg.cursor() as cur:
             cur.executemany(
                 """INSERT INTO panel_campana_dia (origen, dia, campana_id, titulo, tipo_campana, modelo, ambito,
@@ -224,19 +266,28 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None) -> dict
                    VALUES ('real', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", panel)
             cur.executemany("INSERT INTO panel_campanas_sin_regla (fuente, campana, primer_dia, ultimo_dia, "
                             "gasto_cents, sesiones, motivo) VALUES (%s, %s, %s, %s, %s, %s, %s)", sin_regla)
+            cur.executemany("INSERT INTO panel_trafico_canal_dia (origen, dia, canal, tipo, sesiones, "
+                            "sesiones_interaccion, eventos_clave) VALUES ('real', %s, %s, %s, %s, %s, %s)",
+                            [(*k, *v) for k, v in trafico.items()])
+            cur.executemany("INSERT INTO panel_trafico_otros (fuente, medio, canal_ga4, primer_dia, ultimo_dia, "
+                            "sesiones) VALUES (%s, %s, %s, %s, %s, %s)", [(*k, *v) for k, v in otros.items()])
+            cur.executemany("INSERT INTO panel_campanas_google_ads (campana, campana_id, primer_dia, ultimo_dia, "
+                            "sesiones, sesiones_interaccion, eventos_clave) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                            [(*k, *v) for k, v in google.items()])
     return {"campanas_clasificadas": clasificadas, "campanas_sin_regla": len(sin_regla)}
 
 
 def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from ingesta import canales as cn
     from ingesta.db import conectar
     try:
-        config = cargar()
-    except ErrorCampanas as exc:
+        config, canales = cargar(), cn.cargar()
+    except (ErrorCampanas, cn.ErrorCanales) as exc:
         LOG.error("%s", exc)
         return 1
     with conectar(autocommit=True) as pg:
-        LOG.info("Campañas: %s", actualizar(pg, config))
+        LOG.info("Campañas: %s", actualizar(pg, config, canales))
     return 0
 
 

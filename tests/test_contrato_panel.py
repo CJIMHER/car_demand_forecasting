@@ -671,7 +671,7 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     assert "Sin datos todavía" not in b["kpis"][1]
     assert ">Sin decidir todavía</span>" in b["campanas"][1]            # sin pasar el motor: sin decisión
     a_real(pg, "panel_campana_salud", "panel_recomendacion_modelo", "panel_atencion_relativa",
-           "panel_semana_campana", "panel_campana_resultado")
+           "panel_semana_campana", "panel_campana_resultado", "panel_trafico_canal_dia")
     html = dentro(app, "marketing").get("/marketing").text
     assert PENDIENTE not in html and BANDA not in html and ETIQUETA not in html
 

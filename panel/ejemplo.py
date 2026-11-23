@@ -489,6 +489,28 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     for i, a in enumerate(alertas, 1):
         filas["panel_alertas"].append({"dia": hoy, "alerta_id": f"EJ-A{i}", "stock_id": None, "campana_id": None,
                                        "modelo": None, **a})
+
+    # ---- tráfico de la web por canal (GA4): 56 días, por canal y tipo de la página de destino.
+    # Generador aparte para no mover las cifras de los demás bloques.
+    rt = random.Random(SEMILLA + 1)
+    # canal: sesiones al día, fracción con interacción, eventos clave por sesión, reparto VN / VO / sin tipo
+    canales = {"organica": (120, 0.62, 0.030, (0.35, 0.30, 0.35)), "directo": (70, 0.55, 0.025, (0.15, 0.15, 0.70)),
+               "meta": (55, 0.40, 0.020, (0.50, 0.30, 0.20)), "google_ads": (45, 0.58, 0.040, (0.55, 0.30, 0.15)),
+               "portales": (25, 0.66, 0.050, (0.05, 0.85, 0.10)), "referencia": (12, 0.50, 0.015, (0.30, 0.30, 0.40)),
+               "correo": (6, 0.70, 0.060, (0.40, 0.40, 0.20)), "otros": (4, 0.35, 0.010, (0.20, 0.20, 0.60))}
+    for i in range(2 * 28):
+        d = fin_meta - timedelta(days=i)
+        crece = 1.0 if i < 28 else 0.9                     # los 28 días anteriores, algo menos
+        for canal, (base, inter, ev, reparto) in canales.items():
+            total = max(1, round(base * crece * (0.8 if d.weekday() >= 5 else 1.0) * rt.uniform(0.85, 1.15)))
+            for tipo, parte in zip(("VN", "VO", "sin_tipo"), reparto):
+                s = round(total * parte)
+                if not s:
+                    continue
+                si = min(s, round(s * inter * rt.uniform(0.9, 1.1)))
+                filas["panel_trafico_canal_dia"].append({"dia": d, "canal": canal, "tipo": tipo, "sesiones": s,
+                                                         "sesiones_interaccion": si,
+                                                         "eventos_clave": round(s * ev * rt.uniform(0.7, 1.3))})
     return filas
 
 

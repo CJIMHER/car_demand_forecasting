@@ -84,6 +84,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Marketing | Ocasión: dónde hay stock que mover (solo VO) | `panel_riesgo_vehiculo`, la misma tabla que Ventas |
 | Marketing | Cuándo lanzar una campaña general | `panel_semana_campana` |
 | Marketing | Qué dieron las campañas pasadas | `panel_campana_resultado` |
+| Marketing | Tráfico de la web por canal | `panel_trafico_canal_dia` |
 
 **Marketing por tipo.** La vista tiene el selector Todo / Nuevos (VN) / Ocasión (VO):
 
@@ -95,6 +96,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Atención / Ocasión | Atención | VN: atención. VO: en su lugar, el stock de ocasión por modelo |
 | Semanas | `tipo = 'todo'` | `tipo` elegido |
 | Campañas pasadas | Filas `tipo = 'todo'` | Las del ámbito (fila `todo`) y las de ambos (fila del tipo) |
+| Tráfico por canal | Todas las sesiones | Solo las de página de destino de ese tipo; dice cuántas no tienen tipo y cuentan solo en «Todo» |
 
 El gasto es siempre de la campaña: nunca se reparte entre VN y VO con ninguna regla. Una campaña de
 ámbito VN o VO se muestra con todos sus leads en cualquier vista; solo las de ambos se parten por tipo.
@@ -379,6 +381,33 @@ Es orientativo: describe cómo viene cada semana y no mide el efecto de lanzar e
 
 Es una comparación con un modelo, no un experimento.
 
+### panel_trafico_canal_dia · tráfico de la web por canal
+
+- **Grano**: día × canal × tipo de la página de destino.
+- **Fuente**: GA4 (`ga4_trafico_dia_vigente`). Las filas reales las rehace `ingesta/campanas.py` tras
+  cada descarga de GA4 y con `make campanas`, con las reglas de `config/canales.yaml`
+  (`ingesta/canales.py`):
+  - canal por la fuente y el medio de la sesión, en orden: Meta, Google Ads, portales, correo,
+    búsqueda orgánica, directo y referencia. Si ninguna regla casa, la agrupación de canales por
+    defecto de GA4 (`respaldo_ga4`) y, si tampoco, «otros»;
+  - una sesión con el nombre (utm_campaign) o el ID de una campaña descargada de Meta es de Meta,
+    llegue con la fuente que llegue;
+  - tipo VN o VO si las palabras de la ruta de la página de destino lo dicen (`paginas`); si no, o si
+    dicen los dos, `sin_tipo`.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `canal` | texto | `meta`, `google_ads`, `portales`, `correo`, `organica`, `directo`, `referencia`, `otros` (y los que añada `config/canales.yaml`); el nombre en el panel sale de ese fichero |
+| `tipo` | VN / VO / sin_tipo | Por la página de destino. Las `sin_tipo` cuentan solo en «Todo» |
+| `sesiones`, `sesiones_interaccion` | número | Sesiones y sesiones con interacción (engaged sessions) |
+| `eventos_clave` | número | Eventos clave (key events) de GA4 |
+
+**Cifras de Marketing:** 28 días que acaban en el último `dia` con datos, frente a los 28 anteriores.
+
+Fuera del contrato (solo «Estado de las fuentes», siempre reales): `panel_trafico_otros` (fuente,
+medio y agrupación de GA4 de las sesiones que caen en «otros», para completar `config/canales.yaml`)
+y `panel_campanas_google_ads` (campañas de Google Ads con su nombre, sin reglas ni criterios).
+
 ## Datos de ejemplo
 
 `make ejemplo-cargar` rellena todas las tablas del contrato con filas `origen = 'ejemplo'`
@@ -396,6 +425,7 @@ Es una comparación con un modelo, no un experimento.
   - las alertas citan vehículos de Ventas por número de stock y campañas de Marketing;
   - los leads de Ventas suman lo mismo que los de Marketing (por modelo y tipo);
   - hay campañas de VN, de VO y de ambos, y estas con leads de los dos tipos;
+  - el tráfico de la web tiene 56 días por canal (para comparar 28 con 28), con sesiones de VN, de VO y sin tipo;
   - el stock de Dirección es el de Ventas.
 - **Modelos**: los de la marca configurada (`config/concesionario.yaml`, `modelos`).
 - **Cifras de modelo**: se escriben tal cual, con p10–p90, versión `ejemplo` y su n. No se ajusta nada.

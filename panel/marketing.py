@@ -2,7 +2,7 @@
 
 Lee panel_campana_dia (Meta), panel_leads_dia (Walcu), panel_campana_salud,
 panel_recomendacion_modelo, panel_atencion_relativa, panel_semana_campana,
-panel_campana_resultado y, en VO, panel_riesgo_vehiculo (contrato). Solo sumas y cocientes de filas
+panel_campana_resultado, panel_trafico_canal_dia (GA4) y, en VO, panel_riesgo_vehiculo (contrato). Solo sumas y cocientes de filas
 ya preparadas.
 
 Cada campaña tiene un tipo (de un modelo o general) y un ámbito (VN, VO o ambos), los dos de
@@ -19,6 +19,7 @@ from datetime import date, timedelta
 
 import psycopg
 
+from ingesta import canales as cn
 from ingesta.concesionario import Concesionario
 from panel import alertas as pal
 from panel import contrato
@@ -346,6 +347,58 @@ def ocasion(pg, origen, conc: Concesionario) -> dict:
                      total=fmt.miles(total))
 
 
+def trafico(pg, origen, tipo: str = "todo") -> dict:
+    """Sesiones, sesiones con interacción y eventos clave por canal: últimos 28 días frente a los 28
+    anteriores. En VN o VO, solo las sesiones cuya página de destino dice el tipo; las demás cuentan
+    solo en «Todo» (y se dice cuántas son)."""
+    fin = ng.ultimo_dia(pg, "panel_trafico_canal_dia", origen)
+    if fin is None:
+        return ng.bloque(origen, hay=False)
+    ini = fin - timedelta(days=VENTANA - 1)
+    ini_ant, fin_ant = ini - timedelta(days=VENTANA), ini - timedelta(days=1)
+    actual: dict[str, list[float]] = defaultdict(lambda: [0, 0, 0.0])
+    previo: dict[str, int] = defaultdict(int)
+    total = sin_tipo = 0
+    hay_previo = False
+    for canal, tipo_fila, es_actual, s, si, ek in pg.execute(
+            """SELECT canal, tipo, dia >= %s, sum(sesiones), sum(sesiones_interaccion), sum(eventos_clave)
+               FROM panel_trafico_canal_dia WHERE origen = %s AND dia BETWEEN %s AND %s GROUP BY 1, 2, 3""",
+            (ini, origen, ini_ant, fin)):
+        if es_actual:
+            total += int(s)
+            sin_tipo += int(s) if tipo_fila == "sin_tipo" else 0
+        if tipo != "todo" and tipo_fila != tipo:
+            continue
+        if es_actual:
+            a = actual[canal]
+            a[0], a[1], a[2] = a[0] + int(s), a[1] + int(si), a[2] + float(ek)
+        else:
+            previo[canal] += int(s)
+            hay_previo = True
+    try:
+        nombres = cn.cargar()
+    except (OSError, cn.ErrorCanales):
+        nombres = None
+    filas = []
+    for canal, (s, si, ek) in sorted(actual.items(), key=lambda x: (x[0] == cn.OTROS, -x[1][0], x[0])):
+        antes = previo.get(canal, 0)
+        filas.append({
+            "canal": canal, "nombre": nombres.nombre(canal) if nombres else canal,
+            "sesiones": fmt.miles(s),
+            "variacion": (fmt.porcentaje((s / antes - 1) * 100, 0, signo=True) if antes
+                          else ("nuevo" if hay_previo and s else fmt.GUION)),
+            "interaccion": fmt.miles(si), "interaccion_pct": fmt.porcentaje(si / s * 100 if s else None, 0),
+            "eventos": fmt.miles(ek)})
+    suma = sum(a[0] for a in actual.values())
+    nota = ""
+    if tipo != "todo":
+        nota = (f"Solo las sesiones cuya página de destino es de {AMBITOS[tipo]}. {fmt.miles(sin_tipo)} de "
+                f"{fmt.miles(total)} sesiones ({fmt.porcentaje(sin_tipo / total * 100 if total else None, 0)}) "
+                "llegan a una página que no dice si es de nuevos o de ocasión: cuentan solo en «Todo».")
+    return ng.bloque(origen, filas=filas, desde=fmt.fecha_corta(ini), hasta=fmt.fecha_corta(fin), tipo=tipo,
+                     total=fmt.miles(suma), hay_previo=hay_previo, nota=nota)
+
+
 def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, hoy: date,
           tipo: str = "todo") -> dict:
     org = contrato.origenes(modos, "marketing")
@@ -356,5 +409,6 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, 
         "atencion": atencion(pg, org["atencion"]) if tipo != "VO" else None,
         "ocasion": ocasion(pg, org["ocasion"], conc) if tipo == "VO" else None,
         "semanas": semanas(pg, org["semanas"], tipo), "pasadas": pasadas(pg, org["pasadas"], tipo), "origenes": org,
+        "trafico": trafico(pg, org["trafico"], tipo),
         "alertas": pal.bloque_rol(pg, org["alertas"], "marketing", tipo),
     }

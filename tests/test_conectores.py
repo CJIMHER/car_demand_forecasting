@@ -220,8 +220,8 @@ def _credenciales(tmp_path, permisos=0o600):
     return {"GA4_PROPERTY_ID": "properties/4567", "GA4_CREDENCIALES": str(f)}
 
 
-def _fila_ga4(dia, fuente, medio, campana, pagina, s, e, k):
-    return {"dimensionValues": [{"value": v} for v in (dia, fuente, medio, campana, pagina)],
+def _fila_ga4(dia, fuente, medio, campana, pagina, s, e, k, campana_id="(not set)", canal="Unassigned"):
+    return {"dimensionValues": [{"value": v} for v in (dia, fuente, medio, campana, pagina, campana_id, canal)],
             "metricValues": [{"value": str(v)} for v in (s, e, k)], "userId": "u-123", "email": "a@b.example"}
 
 
@@ -230,11 +230,13 @@ def _respuestas_ga4():
     return [
         ("https://oauth2.googleapis.com/token", [{"access_token": "ya29.token-de-google", "expires_in": 3599}]),
         (informe, [
-            {"rows": [_fila_ga4("20261118", "facebook", "paid", "VN T-Roc Noviembre", "/t-roc?email=a@b.example", 10, 6, 2),
+            {"rows": [_fila_ga4("20261118", "facebook", "paid", "VN T-Roc Noviembre", "/t-roc?email=a@b.example", 10, 6, 2,
+                                "120200001", "Paid Social"),
                       _fila_ga4("20261118", "facebook", "paid", "VN T-Roc Noviembre", "/t-roc?utm_x=1#f", 5, 3, 1)],
              "rowCount": 3},
             http(429, {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED"}}),
-            {"rows": [_fila_ga4("20261119", "(direct)", "(none)", "(not set)", "/", 40, 20, 0)], "rowCount": 3}]),
+            {"rows": [_fila_ga4("20261119", "(direct)", "(none)", "(not set)", "/", 40, 20, 0, canal="Direct")],
+             "rowCount": 3}]),
     ]
 
 
@@ -258,6 +260,9 @@ def test_ga4_paginacion_limite_y_solo_la_ruta_de_la_pagina(pg, monkeypatch, tmp_
         ("2026-11-18", "facebook", "paid", "VN T-Roc Noviembre", "/t-roc", 15, 9),
         ("2026-11-19", "(direct)", "(none)", "(not set)", "/", 40, 20)]
     assert float(filas[0][7]) == 3
+    # El ID de campaña y la agrupación de GA4, de la fila con más sesiones; «(not set)» queda vacío
+    assert pg.execute("SELECT campana_id, canal_ga4 FROM ga4_trafico_dia ORDER BY dia").fetchall() == [
+        ("120200001", "Paid Social"), (None, "Direct")]
     texto = " ".join(str(f) for f in pg.execute("SELECT * FROM ga4_trafico_dia"))
     assert "a@b.example" not in texto and "u-123" not in texto
     assert bucket.filas_al_subir == 0 and len(bucket.subidas[0][1]) == 2

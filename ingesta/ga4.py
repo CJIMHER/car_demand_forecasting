@@ -10,7 +10,8 @@ Variables del .env:
 Sin las dos variables, la tarea no hace ninguna petición y anota «sin_credenciales» (no es un error).
 
 Por día, fuente, medio, campaña (utm_campaign) y página de destino: sesiones, sesiones con
-interacción y eventos clave. Ningún dato personal ni identificador de usuario: no se piden
+interacción y eventos clave, con el ID de la campaña y la agrupación de canales por defecto de GA4
+(respaldo de config/canales.yaml). Ningún dato personal ni identificador de usuario: no se piden
 dimensiones de usuario, y de la página de destino solo se guarda la ruta (sin parámetros, que
 podrían llevar datos de un formulario).
 
@@ -54,12 +55,14 @@ API = "https://analyticsdata.googleapis.com/v1beta"
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 ALCANCE = "https://www.googleapis.com/auth/analytics.readonly"
 ORIGEN = "ga4_data_api v1beta"
-DIMENSIONES = ["date", "sessionSource", "sessionMedium", "sessionCampaignName", "landingPage"]
+DIMENSIONES = ["date", "sessionSource", "sessionMedium", "sessionCampaignName", "landingPage", "sessionCampaignId",
+               "sessionDefaultChannelGroup"]
 METRICAS = ["sessions", "engagedSessions", "keyEvents"]
 POR_PAGINA = 10_000
 DIAS = 7
 CLAVE = ("propiedad_id", "dia", "fuente", "medio", "campana", "pagina_destino")
-VALORES = ("sesiones", "sesiones_interaccion", "eventos_clave")
+VALORES = ("sesiones", "sesiones_interaccion", "eventos_clave", "campana_id", "canal_ga4")
+METRICAS_SUMA = ("sesiones", "sesiones_interaccion", "eventos_clave")
 
 
 def credenciales(entorno: Mapping[str, str]) -> tuple[str, Path]:
@@ -119,6 +122,12 @@ def es_limite(codigo: int, datos: dict) -> bool:
     return error.get("status") == "RESOURCE_EXHAUSTED"
 
 
+def _opcional(valor: str) -> str | None:
+    """«(not set)», «(other)» o vacío → None."""
+    v = (valor or "").strip()
+    return None if not v or (v.startswith("(") and v.endswith(")")) else v
+
+
 def ruta_pagina(valor: str) -> str:
     """Solo la ruta: sin parámetros ni fragmento."""
     return valor.split("?", 1)[0].split("#", 1)[0] or "/"
@@ -132,19 +141,27 @@ def leer_fila(r: dict, propiedad: str) -> dict:
         raise cx.ErrorDescarga("fila de GA4 con dimensiones o métricas inesperadas")
     return {"propiedad_id": propiedad, "dia": datetime.strptime(d[0], "%Y%m%d").date(), "fuente": d[1],
             "medio": d[2], "campana": d[3], "pagina_destino": ruta_pagina(d[4]), "sesiones": int(float(m[0])),
-            "sesiones_interaccion": int(float(m[1])), "eventos_clave": float(m[2])}
+            "sesiones_interaccion": int(float(m[1])), "eventos_clave": float(m[2]), "campana_id": _opcional(d[5]),
+            "canal_ga4": _opcional(d[6])}
 
 
 def _agrupar(filas: list[dict]) -> list[dict]:
-    """Al quitar los parámetros, dos páginas de destino pueden quedar iguales: se suman."""
+    """Al quitar los parámetros, dos páginas de destino pueden quedar iguales: se suman. El ID de campaña
+    y la agrupación de canales, de la que tiene más sesiones (GA4 da uno por fuente, medio y campaña)."""
     juntas: dict[tuple, dict] = {}
     for f in filas:
         k = tuple(f[c] for c in CLAVE)
         if k in juntas:
-            for c in VALORES:
-                juntas[k][c] += f[c]
+            j = juntas[k]
+            if f["sesiones"] > j["_max"]:
+                j.update(campana_id=f["campana_id"] or j["campana_id"], canal_ga4=f["canal_ga4"] or j["canal_ga4"],
+                         _max=f["sesiones"])
+            for c in METRICAS_SUMA:
+                j[c] += f[c]
         else:
-            juntas[k] = dict(f)
+            juntas[k] = dict(f, _max=f["sesiones"])
+    for j in juntas.values():
+        del j["_max"]
     return list(juntas.values())
 
 

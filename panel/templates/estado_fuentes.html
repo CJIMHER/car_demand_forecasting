@@ -166,10 +166,56 @@
         </tbody>
       </table>
     </div>
-    <p class="nota">Sin regla no se sabe si la campaña es de un modelo o general, ni a qué stock va (VN, VO o los dos): no entra en Marketing ni en los criterios de Meta. Las reglas leen el nombre: [VN] o [VO], el año, el modelo y el mes («[VN][2026] Modelo noviembre»), o una palabra de campaña general (Black Friday, Days…). Renombrar la campaña o añadir su asignación a mano en config/campanas.yaml y ejecutar make campanas (o esperar a la descarga siguiente).</p>
+    <p class="nota">Solo campañas de Meta: las descargadas de Meta y, de Google Analytics, las que llegan desde Meta (canal Meta en config/canales.yaml) o con el nombre o el ID de una campaña de Meta. Sin regla no se sabe si la campaña es de un modelo o general, ni a qué stock va (VN, VO o los dos): no entra en Marketing ni en los criterios de Meta. Las reglas leen el nombre: [VN] o [VO], el año, el modelo y el mes («[VN][2026] Modelo noviembre»), o una palabra de campaña general (Black Friday, Days…). Renombrar la campaña o añadir su asignación a mano en config/campanas.yaml y ejecutar make campanas (o esperar a la descarga siguiente).</p>
     {% else %}
-    <p class="nota">Ninguna: todas las campañas descargadas de Meta y GA4 tienen regla (o los conectores aún no tienen credenciales).</p>
+    <p class="nota">Ninguna: todas las campañas de Meta (y las que llegan desde Meta a Google Analytics) tienen regla, o los conectores aún no tienen credenciales.</p>
     {% endif %}
+  </section>
+
+  <section class="tarjeta" aria-labelledby="t-trafico" data-bloque="trafico-canales">
+    <h2 id="t-trafico">Tráfico de la web por canal (Google Analytics)</h2>
+    {% if trafico.canales %}
+    <h3 class="h3-tabla">Últimos {{ trafico.dias }} días ({{ trafico.desde }}–{{ trafico.hasta }}) · {{ trafico.total }} sesiones</h3>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-canales">
+        <thead><tr><th scope="col" class="izq">Canal</th><th scope="col">Sesiones</th><th scope="col">%</th><th scope="col">Sin tipo de página</th></tr></thead>
+        <tbody>
+        {% for c in trafico.canales %}
+          <tr data-canal="{{ c.canal }}"><th scope="row" class="izq">{{ c.nombre }}</th><td>{{ c.sesiones }}</td><td>{{ c.pct }}</td><td>{{ c.sin_tipo }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="sin-datos">Sin datos todavía: aparecen tras la primera descarga de Google Analytics.</p>
+    {% endif %}
+    {% if trafico.otros %}
+    <h3 class="h3-tabla">Fuente y medio que caen en «Otros» ({{ trafico.n_otros }}{% if trafico.n_otros > trafico.otros|length %}; los {{ trafico.otros|length }} con más sesiones{% endif %})</h3>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-otros">
+        <thead><tr><th scope="col" class="izq">Fuente</th><th scope="col" class="izq">Medio</th><th scope="col" class="izq">Canal según Google Analytics</th><th scope="col">Días</th><th scope="col">Sesiones</th></tr></thead>
+        <tbody>
+        {% for o in trafico.otros %}
+          <tr><th scope="row" class="izq detalle">{{ o.fuente }}</th><td class="izq detalle">{{ o.medio }}</td><td class="izq">{{ o.canal_ga4 }}</td><td>{{ o.fechas }}</td><td>{{ o.sesiones }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if trafico.google %}
+    <h3 class="h3-tabla">Campañas de Google Ads ({{ trafico.google|length }}), guardadas sin reglas</h3>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-google-ads">
+        <thead><tr><th scope="col" class="izq">Campaña</th><th scope="col">Días</th><th scope="col">Sesiones</th><th scope="col">Eventos clave</th></tr></thead>
+        <tbody>
+        {% for g in trafico.google %}
+          <tr><th scope="row" class="izq detalle">{{ g.campana }}</th><td>{{ g.fechas }}</td><td>{{ g.sesiones }}</td><td>{{ g.eventos }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <p class="nota">Reglas en config/canales.yaml: valores de Google Analytics que no son campañas, canales por fuente y medio (en orden; si ninguno casa, la agrupación de canales de Google Analytics y, si tampoco, «Otros») y las palabras de la página de destino que dicen si es de nuevos o de ocasión («Sin tipo de página»: cuentan solo en «Todo» en Marketing). Para sacar una fuente de «Otros», añadirla a su canal y ejecutar make campanas. Las campañas de Google Ads se guardan con su nombre, sin reglas ni criterios.</p>
   </section>
 
   <section class="tarjeta" aria-labelledby="t-anotaciones">

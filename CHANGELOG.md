@@ -1,5 +1,35 @@
 # Cambios
 
+## 2026-11-23 · Tráfico de GA4 por canal; solo Meta en «Campañas sin regla» (rama hito-1b-ga4-canales)
+
+- **`config/canales.yaml`** (nuevo) y **`ingesta/canales.py`**:
+  - valores reservados de GA4 ((direct), (organic), (referral), (not set), (none), (cross-network),
+    (data not available)…; también cualquier valor entre paréntesis y el vacío): no son campañas;
+  - canales por fuente y medio, en orden: Meta (facebook, fb, instagram, ig, meta, an… en la fuente o el
+    medio), Google Ads (google o adwords con cpc, ppc, paid…), portales (coches.net, milanuncios, wallapop,
+    autoscout24…), correo, búsqueda orgánica, directo y referencia. Si ninguna casa, la agrupación de canales
+    por defecto de GA4 como respaldo y, si tampoco, «otros»;
+  - tipo VN o VO por las palabras de la página de destino (ocasion, seminuevos… / nuevos, gama…).
+- **Solo Meta en «Campañas sin regla»** (`ingesta/campanas.py`): de GA4 solo se intentan clasificar las filas
+  del canal Meta o con el nombre o el ID de una campaña descargada de Meta (que cuentan como Meta llegue con
+  la fuente que llegue). Google Ads, los valores reservados y el resto del tráfico ya no salen ahí.
+- **GA4** (`ingesta/ga4.py`): pide también el ID de campaña (`sessionCampaignId`) y la agrupación de canales
+  por defecto (`sessionDefaultChannelGroup`), en `ga4_trafico_dia.campana_id` y `canal_ga4` (no son clave).
+- **Migración `0015`**: esas dos columnas (y la vista vigente rehecha); `panel_trafico_canal_dia` (contrato:
+  día × canal × tipo, con sesiones, sesiones con interacción y eventos clave); `panel_trafico_otros` y
+  `panel_campanas_google_ads` (campañas de Google Ads con su nombre, sin reglas).
+- **Marketing → «Tráfico de la web por canal»**: sesiones (frente a los 28 días anteriores), con interacción
+  (y %) y eventos clave por canal, últimos 28 días. En VN o VO, solo las sesiones con página de destino de
+  ese tipo, y dice cuántas no lo tienen y cuentan solo en «Todo». Con datos de ejemplo mientras no hay GA4.
+- **Estado de las fuentes**: sesiones por canal de los últimos 28 días (y cuántas sin tipo de página), la
+  lista de fuente/medio que caen en «Otros» para completar el YAML y las campañas de Google Ads.
+- **Pruebas**: `tests/test_canales.py` (ejemplos de cada canal, respaldo de GA4, valores reservados, tipo
+  por página, configuración no válida, una campaña de Meta que llega por GA4 con su utm y otra por su ID,
+  Google Ads sin reglas, Marketing con el selector y Estado de las fuentes); conector de GA4 con las
+  dimensiones nuevas.
+- **Despliegue**: `make deploy` (migración `0015`) y `make ga4` (recarga los últimos 7 días con las
+  dimensiones nuevas y rehace las tablas).
+
 ## 2026-11-23 · Ámbito por palabras y reglas b, c y f con los leads de Meta (rama hito-1b-campanas-2)
 
 - **Ámbito sin etiqueta** (`ingesta/campanas.py`, `config/campanas.yaml`): si el nombre no lleva [VN] ni [VO],
