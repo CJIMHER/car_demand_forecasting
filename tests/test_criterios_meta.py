@@ -348,8 +348,8 @@ def test_subir_presupuesto_si_se_cumple_todo(pg, conc, crit):
     j = juicio(pg, conc, crit, "C", cr.regla_e(pg, HOY, conc, crit))
     assert j.decision == "subir" and j.reglas["subir"].activa
     texto = j.reglas["subir"].cifras_texto
-    for parte in ("coste por lead 4,9 € (< 10 €)", "por cita 49 € (< 100 €)", "lead a cita 10 % (> 5 %; n = 100 leads)",
-                  "tasa de venta 40 % (> 33 %; n = 10 citas)", "coste por venta 122,5 € (< 400 €)", "regla e: 5 unidades"):
+    for parte in ("coste por lead 4,90 € (< 10 €)", "por cita 49 € (< 100 €)", "lead a cita 10 % (> 5 %; n = 100 leads)",
+                  "tasa de venta 40 % (> 33 %; n = 10 citas)", "coste por venta 122,50 € (< 400 €)", "regla e: 5 unidades"):
         assert parte in texto, parte
 
 
@@ -392,7 +392,7 @@ def test_motor_alertas_decision_y_recomendacion(pg, conc):
     assert a[("meta_a", "MALA")]["texto"].startswith(
         "Campaña «T-Roc noviembre» · revisar (regla a): lead a cita: 1 de 40 = 2,5 % (umbral 5 %). Revisar: ")
     assert a[("meta_a", "MALA")]["cifras"]["n_minimo_leads"] == 20 and a[("meta_a", "MALA")]["cifras"]["leads"] == 40
-    assert a[("meta_subir", "BUENA")]["texto"].startswith("Campaña «BUENA» · subir presupuesto: coste por lead 4,9 €")
+    assert a[("meta_subir", "BUENA")]["texto"].startswith("Campaña «BUENA» · subir presupuesto: coste por lead 4,90 €")
     decisiones = dict(pg.execute("SELECT campana_id, decision FROM panel_campana_decision").fetchall())
     assert decisiones == {"BUENA": "subir", "MALA": "parar"}
     reco = {m: (a_, r, p) for m, a_, r, p in pg.execute(

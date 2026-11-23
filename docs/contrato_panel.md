@@ -233,7 +233,8 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
   campaña **clasificada** con las reglas de `config/campanas.yaml`. Las que no casan con ninguna regla no
   entran: salen en «Estado de las fuentes» → «Campañas sin regla», con el motivo.
 - **Tipo, ámbito y modelo salen del nombre de la campaña** (o de su asignación a mano en
-  `config/campanas.yaml`, que manda): [VN] → VN, [VO] → VO, sin etiqueta → ambos; general si contiene
+  `config/campanas.yaml`, que manda): [VN] → VN, [VO] → VO; sin etiqueta, «ocasión»/«VO» → VO y
+  «nuevos»/«VN» → VN (palabras enteras); sin ninguna, ambos; general si contiene
   una palabra de `reglas.generales` (days, friday, liquidación, boutique); si no, de modelo: lo que va
   entre el año y el mes, normalizado con el catálogo de `config/versiones.yaml`. El nombre vigente (el
   del último día) clasifica todos los días de la campaña.
@@ -247,6 +248,7 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 | `inicio` | fecha | Primer día de la campaña: de aquí salen sus días de vida |
 | `gasto_cents` | céntimos | |
 | `impresiones`, `clics` | número | |
+| `leads_meta` | número o vacío | Leads que cuenta Meta ese día (`campanas_meta_dia.leads`). Con ellos se aplican las reglas b, c y f de los criterios de Meta mientras no hay leads de Walcu en `panel_leads_dia`; las cifras dicen «leads según Meta». Marketing sigue contando los leads de `panel_leads_dia` |
 
 **Cifras de Marketing:**
 

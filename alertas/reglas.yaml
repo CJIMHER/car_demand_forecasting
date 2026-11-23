@@ -130,6 +130,9 @@ reglas:
 
   # ------------------------------------------------------------------ campañas de Meta: criterios de Cayetano
   # (docs/criterios_marketing_meta.md). Umbrales, volúmenes y textos en «criterios_meta», más abajo:
+  # b, c y f no necesitan Walcu: con solo panel_campana_dia real se aplican con los leads que cuenta
+  # Meta (leads_meta; cada cifra dice «leads según Meta»). Cuando entran los leads de Walcu
+  # (panel_leads_dia), mandan los de Walcu. a, d y subir necesitan citas y ventas: esperan a Walcu.
   # son los mismos para las alertas, la decisión de cada campaña y la recomendación por modelo. La
   # comparación con la referencia por días de vida (panel_campana_salud) es solo detalle explicativo.
   - id: meta_a
@@ -147,7 +150,7 @@ reglas:
     calculo: criterio_meta
     criterio: b
     roles: [marketing]
-    fuente: [panel_campana_dia, panel_leads_dia]
+    fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
     texto: "Campaña «{titulo}» · {decision} (regla b): {cifras}. {revisar}"
@@ -157,7 +160,7 @@ reglas:
     calculo: criterio_meta
     criterio: c
     roles: [marketing]
-    fuente: [panel_campana_dia, panel_leads_dia]
+    fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
     texto: "Campaña «{titulo}» · {decision} (regla c): {cifras}. {revisar}"
@@ -177,7 +180,7 @@ reglas:
     calculo: criterio_meta
     criterio: f
     roles: [marketing]
-    fuente: [panel_campana_dia, panel_leads_dia]
+    fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
     texto: "Campaña «{titulo}» · {decision} (regla f): {cifras}. Revisar: {revisar}"
@@ -241,6 +244,8 @@ criterios_meta:
     continuar: "El coste por cita está en su media: se continúa."
     parar: "Parar y revisar audiencias y creatividad."
     sin_media: "Sin media de coste por cita para decidir: revisar audiencias y creatividad."
+    # Con leads según Meta (sin Walcu) no hay citas: la decisión es revisar
+    sin_coste_cita: "Falta el coste por cita para decidir entre continuar y parar."
   d:
     tasa_venta_minima_pct: 33     # revisar si ventas/citas < 33 % con coste por lead y por cita en su media
     n_minimo_citas: 6

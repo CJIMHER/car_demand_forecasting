@@ -212,8 +212,9 @@ def evaluar(pg: psycopg.Connection, dia: date, conc: Concesionario | None = None
 def _criterios_meta(pg, dia: date, conc, reglas: list[Regla], modos, memo: dict, version: str) -> dict:
     """Decisión de cada campaña (con el origen de sus datos) y recomendación por modelo (real: la de sus
     campañas reales o, sin campaña, la regla e con el mercado, que siempre es real)."""
-    regla = next(r for r in reglas if r.calculo == "criterio_meta")
-    origen, _ = origen_regla(regla, modos)
+    # El origen más real de las reglas de Meta: b, c y f se activan con solo Meta (leads según Meta)
+    origenes = {origen_regla(r, modos)[0] for r in reglas if r.calculo == "criterio_meta"}
+    origen = next((o for o in (contrato.REAL, contrato.EJEMPLO) if o in origenes), None)
     crit = memo["criterios"]
     modelos_e = memo.get("modelos_e")
     if modelos_e is None:

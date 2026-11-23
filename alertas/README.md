@@ -28,7 +28,8 @@ probabilidades sustituirán a los umbrales (docs/diseno.md, Señales y alertas).
 | Riesgo de inmovilización | ventas, dirección | `panel_riesgo_vehiculo` | Preparada |
 | Ventas fuera de la banda | dirección | `panel_ventas_mes` | Preparada |
 | Caída de leads | marketing | `panel_leads_dia` | Preparada |
-| Campañas de Meta: reglas a, b, c, d, f y subir presupuesto | marketing | `panel_campana_dia` + `panel_leads_dia` (y Mercado en la zona cercana para la d) | Preparadas |
+| Campañas de Meta: reglas b, c y f | marketing | `panel_campana_dia`, con los leads según Meta mientras no hay Walcu | Reales con Meta |
+| Campañas de Meta: reglas a, d y subir presupuesto | marketing | `panel_campana_dia` + `panel_leads_dia` (y Mercado en la zona cercana para la d) | Preparadas |
 | Ventana favorable para una campaña general | marketing | `panel_semana_campana` | Preparada |
 
 Reglas de mercado: solo evalúan un tipo (VN, VO) si hoy tiene captura completa y la tiene también el
@@ -55,6 +56,14 @@ presupuesto) y la recomendación por modelo (`panel_recomendacion_modelo`).
 - e) lanzar solo con al menos 3 unidades propias en la zona cercana y nuestro precio por debajo de la mediana de la competencia (mismo modelo, acabado y motor); primero los de más stock y mejor precio. Es real desde ya: sale del precálculo de Mercado.
 - f) cansancio: leads por día de los 3 últimos días al menos un 30 % por debajo de los 7 anteriores, y coste por lead de esos 3 días > 10 €: revisar.
 - Subir presupuesto: todo a la vez (coste por lead < 10 €, por cita < 100 €, lead → cita > 5 %, tasa de venta > 33 %, por venta < 400 €, la regla e) y ninguna regla de revisión activa.
+
+**Leads según Meta.** Mientras `panel_leads_dia` no tiene filas con el origen de las campañas (los
+leads de Walcu aún no se cargan), b, c y f se aplican con los leads que cuenta Meta
+(`panel_campana_dia.leads_meta`) y cada cifra lo dice («14 leads según Meta»). Sin citas no hay coste
+por cita: la regla c propone «revisar» («falta el coste por cita para decidir entre continuar y
+parar»). a, d y subir presupuesto quedan inactivas («falta Walcu»). Cuando entran los leads de Walcu,
+mandan los de Walcu. Las alertas van al rol marketing; sin `TELEGRAM_CHAT_MARKETING`, al chat del técnico
+con «[Para marketing]» delante.
 
 Con poco volumen se muestra la cifra y la regla no salta. La comparación con la referencia por días
 de vida (`panel_campana_salud`) es solo detalle explicativo.

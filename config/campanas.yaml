@@ -18,8 +18,10 @@
 # 2. Reglas por nombre (tipo, ámbito y modelo de cada campaña)
 #    El nombre se lee sin distinguir mayúsculas ni tildes y sin importar los espacios
 #    («VW [VN][2026] Taigo noviembre» = «vw [vn] [2026]  TAIGO Noviembre»):
-#      a. Ámbito, por la etiqueta: [VN] → nuevos (VN); [VO] → ocasión (VO); sin etiqueta → los dos
-#         (ambos). Con [VN] y [VO] a la vez, no hay regla.
+#      a. Ámbito, por la etiqueta: [VN] → nuevos (VN); [VO] → ocasión (VO). Con [VN] y [VO] a la vez,
+#         no hay regla. Sin etiqueta, por las palabras (enteras): «ocasión», «ocasion» o «VO» → VO;
+#         «nuevos» o «VN» → VN («nuevo» no cuenta: «Nuevo T-Roc» es un modelo); con ninguna, o con
+#         palabras de los dos, ambos. «Boutique Ocasión» y «Liquidacion VO» son generales de VO.
 #      b. Tipo general si el nombre contiene alguna palabra de «generales» (también pegada a otra:
 #         «BlackFriday»). Una general mantiene su ámbito: «VW [VO][2026] Black Friday» es general de
 #         ocasión.

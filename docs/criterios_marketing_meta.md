@@ -17,6 +17,8 @@ Nunca uses ni guardes datos personales de los leads. El código postal sirve sol
 
 Si falta un dato, dilo y no lo supongas. Una regla sin su dato no se aplica.
 
+Mientras no hay leads del CRM, las reglas que no necesitan citas ni ventas (b, c y f) se aplican con los leads que cuenta Meta, diciéndolo en cada cifra («leads según Meta»). En la regla c, sin coste por cita, la decisión es **revisar**: falta el coste por cita para decidir entre continuar y parar. Las reglas a, d y subir presupuesto esperan a tener citas y ventas. Cuando hay leads del CRM, mandan los del CRM.
+
 ## Definiciones
 
 - **Coste por lead** = gasto / leads.

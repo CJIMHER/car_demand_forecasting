@@ -5,7 +5,8 @@ Las reglas están documentadas en config/campanas.yaml. Este módulo:
   general; ámbito VN, VO o ambos; el modelo, normalizado con el catálogo de config/versiones.yaml, y
   si ese modelo no está en el catálogo, «sin datos de mercado»;
 - rehace panel_campana_dia (origen real) con las campañas de Meta clasificadas: es la tabla del
-  contrato del panel de la que Marketing y los criterios de Meta leen el tipo y el ámbito;
+  contrato del panel de la que Marketing y los criterios de Meta leen el tipo y el ámbito, con los
+  leads que cuenta Meta (leads_meta) para las reglas que no necesitan Walcu;
 - rehace panel_campanas_sin_regla con las campañas de Meta y GA4 que no casan, con el motivo, para
   «Estado de las fuentes».
 
@@ -34,6 +35,9 @@ MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto
          "octubre", "noviembre", "diciembre")
 ETIQUETA = re.compile(r"\[\s*(vn|vo)\s*\]")
 ANIO = re.compile(r"\[\s*(20\d\d)\s*\]|(?<![0-9])(20\d\d)(?![0-9])")
+# Sin etiqueta, el ámbito sale de estas palabras enteras: «ocasión», «ocasion» o «VO» → VO; «nuevos» o «VN» → VN
+PALABRA_VO = re.compile(r"(?<![a-z0-9])(ocasion|vo)(?![a-z0-9])")
+PALABRA_VN = re.compile(r"(?<![a-z0-9])(nuevos|vn)(?![a-z0-9])")
 MES = re.compile(r"(?<![a-z])(" + "|".join(MESES) + r")(?![a-z])")
 # Valores de GA4 que no son una campaña: tráfico directo, orgánico o de referencia
 NO_CAMPANA = {"(not set)", "(direct)", "(organic)", "(referral)", "(none)", "(not provided)", ""}
@@ -111,7 +115,11 @@ class Campanas:
         etiquetas = set(ETIQUETA.findall(texto))
         if len(etiquetas) > 1:
             return Clasificacion(motivo="lleva las etiquetas [VN] y [VO] a la vez")
-        ambito = etiquetas.pop().upper() if etiquetas else "ambos"
+        if etiquetas:
+            ambito = etiquetas.pop().upper()
+        else:
+            vo, vn = bool(PALABRA_VO.search(texto)), bool(PALABRA_VN.search(texto))
+            ambito = "VO" if vo and not vn else "VN" if vn and not vo else "ambos"
         junto = compacto(texto)
         if any(g in junto for g in self.generales):
             return Clasificacion("general", ambito, origen="regla")
@@ -125,7 +133,8 @@ class Campanas:
                                         "(enero … diciembre) después del año y el modelo")
         # El modelo, tal como está escrito: plegar() no cambia la longitud salvo letras raras («ß»)
         tramo = (original if len(original) == len(texto) else texto)[anio.end():mes.start()]
-        tramo = re.sub(r"\[\s*v[no]\s*\]|[\[\]]", " ", tramo, flags=re.I).strip(" -_·|:/")
+        tramo = re.sub(r"\[\s*v[no]\s*\]|[\[\]]", " ", tramo, flags=re.I)
+        tramo = re.sub(r"(?<![^\W\d_])(ocasi[oó]n|nuevos|v[no])(?![^\W\d_])", " ", tramo, flags=re.I).strip(" -_·|:/")
         if not compacto(tramo):
             return Clasificacion(motivo="no hay modelo entre el año y el mes")
         modelo, sin_mercado = self.modelo(tramo)
@@ -180,7 +189,7 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None) -> dict
     han clasificado y cuántas campañas (Meta y GA4) han quedado sin regla."""
     campanas = campanas or cargar()
     filas = pg.execute(
-        """SELECT dia, campana_id, campana_nombre, gasto_cents, impresiones, clics FROM campanas_meta_dia_vigente
+        """SELECT dia, campana_id, campana_nombre, gasto_cents, impresiones, clics, leads FROM campanas_meta_dia_vigente
            WHERE nivel = 'campana' ORDER BY campana_id, dia""").fetchall()
     por_campana: dict[str, list] = {}
     for f in filas:
@@ -197,7 +206,7 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None) -> dict
         clasificadas += 1
         inicio = dias[0][0]
         panel += [(d[0], cid, nombre, c.tipo, c.modelo if c.tipo == "modelo" else None, c.ambito, c.sin_mercado,
-                   inicio, d[3], d[4], d[5]) for d in dias]
+                   inicio, d[3], d[4], d[5], d[6]) for d in dias]
     for camp, p, u, s in pg.execute(
             "SELECT campana, min(dia), max(dia), sum(sesiones) FROM ga4_trafico_dia_vigente GROUP BY campana"):
         if camp in NO_CAMPANA:
@@ -211,8 +220,8 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None) -> dict
         with pg.cursor() as cur:
             cur.executemany(
                 """INSERT INTO panel_campana_dia (origen, dia, campana_id, titulo, tipo_campana, modelo, ambito,
-                   sin_mercado, inicio, gasto_cents, impresiones, clics)
-                   VALUES ('real', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", panel)
+                   sin_mercado, inicio, gasto_cents, impresiones, clics, leads_meta)
+                   VALUES ('real', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", panel)
             cur.executemany("INSERT INTO panel_campanas_sin_regla (fuente, campana, primer_dia, ultimo_dia, "
                             "gasto_cents, sesiones, motivo) VALUES (%s, %s, %s, %s, %s, %s, %s)", sin_regla)
     return {"campanas_clasificadas": clasificadas, "campanas_sin_regla": len(sin_regla)}

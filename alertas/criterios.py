@@ -10,7 +10,10 @@ VO. De aquí salen, con las mismas cifras:
 Las comparaciones con los umbrales se hacen con fracciones exactas: 4,99 % salta y 5 % no.
 
 Datos: Meta (panel_campana_dia: gasto, impresiones y clics) y Walcu (panel_leads_dia: leads, citas, ventas
-y el recuento de leads con código postal dentro y fuera de la zona cercana). La regla e y el contexto
+y el recuento de leads con código postal dentro y fuera de la zona cercana). Mientras no hay leads de
+Walcu con ese origen, se usan los que cuenta Meta (panel_campana_dia.leads_meta) y cada cifra lo dice
+(«leads según Meta»): se aplican b, c (sin coste por cita: «revisar») y f; a, d y subir presupuesto,
+que necesitan citas y ventas, no. Cuando entran los de Walcu, mandan los de Walcu. La regla e y el contexto
 de la d, del precálculo de Mercado en la zona cercana (panel_mercado_segmento, mismo modelo, acabado
 y motor; los anuncios propios son nuestro stock publicado en la web de la marca).
 """
@@ -48,7 +51,17 @@ def pct(fr: F) -> str:
 
 
 def euros(cents: F | int) -> str:
-    return f"{num(F(cents) / CIEN)} €"
+    """Euros enteros sin decimales y, si no, con dos: 10 € · 11,60 € · 17,47 €."""
+    valor = F(cents) / CIEN
+    if valor.denominator == 1:
+        return f"{fmt.miles(int(valor))} €"
+    return f"{fmt.decimal(float(valor), 2)} €"
+
+
+# De dónde salen los leads: Walcu (panel_leads_dia) o, mientras no hay, Meta (panel_campana_dia.leads_meta)
+WALCU, META = "walcu", "meta"
+TABLA_LEADS = {WALCU: ("panel_leads_dia", "leads"), META: ("panel_campana_dia", "leads_meta")}
+FALTA_WALCU = "falta Walcu: se aplica cuando entren las citas y ventas de los leads"
 
 
 @dataclass
@@ -82,12 +95,21 @@ class Juicio:
     ventas: int
     gasto_cents: int
     sin_mercado: bool = False   # modelo fuera del catálogo de turismos que capturamos (config/campanas.yaml)
+    fuente_leads: str = WALCU   # walcu o meta (leads según Meta, sin citas ni ventas)
     decision: str = "sin_juzgar"
     reglas: dict[str, Resultado] = field(default_factory=dict)
 
     @property
     def tipo(self) -> str | None:
         return self.ambito if self.ambito in ("VN", "VO") else None
+
+    @property
+    def de_meta(self) -> bool:
+        return self.fuente_leads == META
+
+    def n_leads(self, n: int) -> str:
+        """«14» con leads de Walcu (el texto ya dice leads) y «14 leads según Meta» con los de Meta."""
+        return f"{n} leads según Meta" if self.de_meta else str(n)
 
 
 def sin_mercado(modelo: str) -> Resultado:
@@ -170,9 +192,28 @@ def regla_e(pg: psycopg.Connection, hoy: date, conc, crit: dict) -> dict[tuple[s
 
 # --------------------------------------------------------------------------- campañas
 
-def _medias(pg, origen: str, dia: date, dias: int) -> dict[str, tuple[int, int, int]]:
+def fuente_leads(pg, origen: str) -> str:
+    """Walcu si panel_leads_dia tiene filas con ese origen; si no, los leads que cuenta Meta."""
+    hay = pg.execute("SELECT EXISTS (SELECT 1 FROM panel_leads_dia WHERE origen = %s)", (origen,)).fetchone()[0]
+    return WALCU if hay else META
+
+
+def _leads_por_dia(pg, origen: str, fuente: str, campanas: list[str], desde: date, hasta: date,
+                   donde: str = "dia BETWEEN %s AND %s") -> dict[tuple[str, date], int]:
+    """Leads por (campaña, día) de la fuente que manda."""
+    tabla, col = TABLA_LEADS[fuente]
+    return {(c, d): int(n) for c, d, n in pg.execute(
+        f"SELECT campana_id, dia, coalesce(sum({col}), 0) FROM {tabla} WHERE origen = %s AND campana_id = ANY(%s) "
+        f"AND {donde} GROUP BY 1, 2", (origen, campanas, desde, hasta))}
+
+
+def _medias(pg, origen: str, fuente: str, dia: date, dias: int) -> dict[str, tuple[int, int, int]]:
     """Gasto, leads y citas de cada campaña en los últimos `dias` (para «en su media»)."""
     desde = dia - timedelta(days=dias - 1)
+    if fuente == META:
+        return {c: (int(g), int(l), 0) for c, g, l in pg.execute(
+            "SELECT campana_id, sum(gasto_cents), coalesce(sum(leads_meta), 0) FROM panel_campana_dia "
+            "WHERE origen = %s AND dia BETWEEN %s AND %s GROUP BY 1", (origen, desde, dia))}
     gasto = dict(pg.execute("SELECT campana_id, sum(gasto_cents) FROM panel_campana_dia WHERE origen = %s "
                             "AND dia BETWEEN %s AND %s GROUP BY 1", (origen, desde, dia)).fetchall())
     resto = {c: (int(l), int(ci)) for c, l, ci in pg.execute(
@@ -195,7 +236,8 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
                      (origen, hoy)).fetchone()[0]
     if dia is None:
         return None, []
-    medias = _medias(pg, origen, dia, int(crit["media_dias"]))
+    fuente = fuente_leads(pg, origen)
+    medias = _medias(pg, origen, fuente, dia, int(crit["media_dias"]))
     tolerancia = 1 + _f(crit["media_tolerancia_pct"]) / CIEN
     juicios = []
     for cid, titulo, modelo, ambito, inicio, sin_merc in pg.execute(
@@ -205,13 +247,17 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
         gasto, impresiones, clics = (int(x) for x in pg.execute(
             "SELECT sum(gasto_cents), sum(impresiones), sum(clics) FROM panel_campana_dia WHERE origen = %s AND campana_id = %s "
             "AND dia BETWEEN %s AND %s", (origen, cid, inicio, dia)).fetchone())
-        leads, citas, ventas, zona, fuera, con_cp_filas = (int(x) for x in pg.execute(
-            """SELECT coalesce(sum(leads), 0), coalesce(sum(citas), 0), coalesce(sum(ventas), 0),
-                      coalesce(sum(leads_cp_zona), 0), coalesce(sum(leads_cp_fuera), 0), count(leads_cp_zona)
-               FROM panel_leads_dia WHERE origen = %s AND campana_id = %s AND dia BETWEEN %s AND %s""",
-            (origen, cid, inicio, dia)).fetchone())
+        if fuente == META:
+            leads = sum(_leads_por_dia(pg, origen, fuente, [cid], inicio, dia).values())
+            citas = ventas = zona = fuera = con_cp_filas = 0
+        else:
+            leads, citas, ventas, zona, fuera, con_cp_filas = (int(x) for x in pg.execute(
+                """SELECT coalesce(sum(leads), 0), coalesce(sum(citas), 0), coalesce(sum(ventas), 0),
+                          coalesce(sum(leads_cp_zona), 0), coalesce(sum(leads_cp_fuera), 0), count(leads_cp_zona)
+                   FROM panel_leads_dia WHERE origen = %s AND campana_id = %s AND dia BETWEEN %s AND %s""",
+                (origen, cid, inicio, dia)).fetchone())
         j = Juicio(cid, titulo, modelo, ambito, (dia - inicio).days, leads, citas, ventas, gasto,
-                   sin_mercado=bool(sin_merc and modelo))
+                   sin_mercado=bool(sin_merc and modelo), fuente_leads=fuente)
         juicios.append(j)
         if j.dias_vida < int(crit["dias_vida_minimos"]):
             continue
@@ -221,16 +267,23 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
         cpl_media = cpl is not None and media_cpl is not None and cpl <= media_cpl * tolerancia
         cpc_media = cpc is not None and media_cpc is not None and cpc <= media_cpc * tolerancia
         r = j.reglas
-        r["a"] = _a(crit["a"], leads, citas, zona + fuera if con_cp_filas else None, fuera)
+        if j.de_meta:   # sin citas ni ventas: a y d no se aplican
+            r["a"] = Resultado("a", "sin_dato", f"sin citas ({FALTA_WALCU})")
+        else:
+            r["a"] = _a(crit["a"], leads, citas, zona + fuera if con_cp_filas else None, fuera)
         r["b"] = _b(pg, origen, crit["b"], j, dia, impresiones, clics)
-        r["c"] = _c(crit["c"], gasto, leads, cpc, media_cpc, crit["media_tolerancia_pct"])
-        r["d"] = _d(crit["d"], j, cpl_media, cpc_media, media_cpl, media_cpc, modelos_e)
-        r["f"] = _fatiga(pg, origen, crit["f"], cid, dia, j.dias_vida)
+        r["c"] = _c(crit["c"], j, gasto, cpc, media_cpc, crit["media_tolerancia_pct"])
+        if j.de_meta:
+            r["d"] = Resultado("d", "sin_dato", f"sin citas ni ventas ({FALTA_WALCU})")
+        else:
+            r["d"] = _d(crit["d"], j, cpl_media, cpc_media, media_cpl, media_cpc, modelos_e)
+        r["f"] = _fatiga(pg, origen, crit["f"], j, dia)
         if j.sin_mercado:
             r["e"] = sin_mercado(j.modelo)
         elif j.tipo and j.modelo and (j.tipo, j.modelo) in modelos_e:
             r["e"] = modelos_e[(j.tipo, j.modelo)].resultado
-        r["subir"] = _subir(crit, j, cpl, cpc, r)
+        r["subir"] = (Resultado("subir", "sin_dato", f"sin citas ni ventas ({FALTA_WALCU})") if j.de_meta
+                      else _subir(crit, j, cpl, cpc, r))
         if r["c"].activa and r["c"].decision == "parar":
             j.decision = "parar"
         elif any(r[k].activa for k in ("a", "b", "d", "f")) or (r["c"].activa and r["c"].decision == "revisar"):
@@ -283,8 +336,8 @@ def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: 
     u_clic = _f(c["tasa_clic_minima_pct"]) / CIEN
     tasa_clic = F(clics, impresiones)
     partes.append(f"tasa de clic: {clics} de {impresiones} impresiones = {pct(tasa_clic)} (umbral {num(u_clic * CIEN)} %)")
-    cifras = {"impresiones": impresiones, "clics": clics, "leads": j.leads, "tasa_clic_pct": float(tasa_clic * CIEN),
-              "umbral_tasa_clic_pct": float(u_clic * CIEN)}
+    cifras = {"impresiones": impresiones, "clics": clics, "leads": j.leads, "fuente_leads": j.fuente_leads,
+              "tasa_clic_pct": float(tasa_clic * CIEN), "umbral_tasa_clic_pct": float(u_clic * CIEN)}
     n_imp, n_clics = int(c["n_minimo"]["impresiones"]), int(c["n_minimo"]["clics"])
     cifras.update(n_minimo_impresiones=n_imp, n_minimo_clics=n_clics)
     sin_volumen = []   # señales que saltarían con volumen suficiente
@@ -298,7 +351,8 @@ def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: 
     if clics:
         u_lead = _f(c["clic_lead_minima_pct"]) / CIEN
         clic_lead = F(j.leads, clics)
-        partes.append(f"clic a lead: {j.leads} de {clics} clics = {pct(clic_lead)} (umbral {num(u_lead * CIEN)} %)")
+        partes.append(f"clic a lead: {j.n_leads(j.leads)} de {clics} clics = {pct(clic_lead)} "
+                      f"(umbral {num(u_lead * CIEN)} %)")
         cifras.update(clic_lead_pct=float(clic_lead * CIEN), umbral_clic_lead_pct=float(u_lead * CIEN))
         if clics < n_clics:
             partes[-1] += f"; sin volumen: {clics} clics, mínimo {n_clics}"
@@ -314,14 +368,12 @@ def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: 
             (origen, j.modelo, j.campana_id, dia.month, dia.year)).fetchall()
         imp = sum(int(i) for _, i in otras)
         if imp:
-            leads_h = pg.execute(
-                """SELECT coalesce(sum(leads), 0) FROM panel_leads_dia WHERE origen = %s AND campana_id = ANY(%s)
-                   AND extract(month FROM dia) = %s AND extract(year FROM dia) < %s""",
-                (origen, [o for o, _ in otras], dia.month, dia.year)).fetchone()[0]
+            leads_h = sum(_leads_por_dia(pg, origen, j.fuente_leads, [o for o, _ in otras], dia.month, dia.year,
+                                         "extract(month FROM dia) = %s AND extract(year FROM dia) < %s").values())
             historico = F(int(leads_h), imp)
             tasa = F(j.leads, impresiones)
             factor = _f(c["factor_historico"])
-            partes.append(f"leads por impresión: {pct(tasa)} frente a {pct(historico)} de las campañas de {j.modelo} "
+            partes.append(f"leads{' según Meta' if j.de_meta else ''} por impresión: {pct(tasa)} frente a {pct(historico)} de las campañas de {j.modelo} "
                           f"en {fmt.MESES[dia.month - 1]} de años anteriores (n = {len(otras)} campañas; "
                           f"umbral {num(factor * CIEN)} % de esa cifra)")
             cifras.update(leads_impresion_pct=float(tasa * CIEN), historico_pct=float(historico * CIEN),
@@ -337,15 +389,20 @@ def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: 
                      "revisar" if activa else None, cifras)
 
 
-def _c(c: dict, gasto: int, leads: int, cpc: F | None, media_cpc: F | None, tolerancia) -> Resultado:
+def _c(c: dict, j: Juicio, gasto: int, cpc: F | None, media_cpc: F | None, tolerancia) -> Resultado:
+    leads = j.leads
     if not leads:
         return Resultado("c", "sin_dato", "sin leads todavía")
     umbral = _f(c["coste_lead_maximo"]) * CIEN
     cpl = F(gasto, leads)
-    texto = f"coste por lead: {euros(gasto)} / {leads} leads = {euros(cpl)} (umbral {euros(umbral)})"
-    cifras = {"coste_lead_cents": float(cpl), "umbral_cents": float(umbral), "leads": leads}
+    texto = (f"coste por lead: {euros(gasto)} / {leads} leads{' según Meta' if j.de_meta else ''} = {euros(cpl)} "
+             f"(umbral {euros(umbral)})")
+    cifras = {"coste_lead_cents": float(cpl), "umbral_cents": float(umbral), "leads": leads,
+              "fuente_leads": j.fuente_leads}
     if cpl <= umbral:
         return Resultado("c", "no", texto, cifras=cifras)
+    if j.de_meta:   # sin citas no hay coste por cita: ni continuar ni parar
+        return Resultado("c", "activa", texto, c["sin_coste_cita"], "revisar", cifras)
     if media_cpc is None:
         return Resultado("c", "activa", texto + "; sin media de coste por cita", c["sin_media"], "revisar", cifras)
     limite = media_cpc * (1 + _f(tolerancia) / CIEN)
@@ -391,14 +448,16 @@ def _d(c: dict, j: Juicio, cpl_media: bool, cpc_media: bool, media_cpl, media_cp
                      c["revisar"].format(similares=similares), "revisar", cifras)
 
 
-def _fatiga(pg, origen: str, c: dict, cid: str, dia: date, dias_vida: int) -> Resultado:
+def _fatiga(pg, origen: str, c: dict, j: Juicio, dia: date) -> Resultado:
     rec, ant = int(c["dias_recientes"]), int(c["dias_anteriores"])
-    if dias_vida + 1 < rec + ant:
+    cid = j.campana_id
+    if j.dias_vida + 1 < rec + ant:
         return Resultado("f", "sin_dato", f"menos de {rec + ant} días de vida")
     corte, inicio = dia - timedelta(days=rec), dia - timedelta(days=rec + ant)
-    leads = dict(pg.execute(
-        "SELECT dia > %s, coalesce(sum(leads), 0) FROM panel_leads_dia WHERE origen = %s AND campana_id = %s "
-        "AND dia > %s AND dia <= %s GROUP BY 1", (corte, origen, cid, inicio, dia)).fetchall())
+    leads = {True: 0, False: 0}
+    for (_, d), n in _leads_por_dia(pg, origen, j.fuente_leads, [cid], inicio, dia,
+                                    "dia > %s AND dia <= %s").items():
+        leads[d > corte] += n
     gasto_rec = int(pg.execute("SELECT coalesce(sum(gasto_cents), 0) FROM panel_campana_dia WHERE origen = %s "
                                "AND campana_id = %s AND dia > %s AND dia <= %s", (origen, cid, corte, dia)).fetchone()[0])
     l_rec, l_ant = int(leads.get(True, 0)), int(leads.get(False, 0))
@@ -409,10 +468,11 @@ def _fatiga(pg, origen: str, c: dict, cid: str, dia: date, dias_vida: int) -> Re
     umbral_caida = _f(c["caida_minima_pct"]) / CIEN
     umbral_cpl = _f(c["coste_lead_maximo"]) * CIEN
     cpl = F(gasto_rec, l_rec) if l_rec else None
-    texto = (f"leads por día: {num(por_dia_rec)} en los últimos {rec} días frente a {num(por_dia_ant)} en los {ant} "
+    texto = (f"leads{' según Meta' if j.de_meta else ''} por día: {num(por_dia_rec)} en los últimos {rec} días frente a {num(por_dia_ant)} en los {ant} "
              f"anteriores (−{pct(caida)}; umbral {num(umbral_caida * CIEN)} %); coste por lead de esos {rec} días: "
              f"{euros(cpl) if cpl is not None else 'sin leads'} (umbral {euros(umbral_cpl)})")
-    cifras = {"leads_dia_recientes": float(por_dia_rec), "leads_dia_anteriores": float(por_dia_ant),
+    cifras = {"fuente_leads": j.fuente_leads, "leads_dia_recientes": float(por_dia_rec),
+              "leads_dia_anteriores": float(por_dia_ant),
               "caida_pct": float(caida * CIEN), "coste_lead_cents": None if cpl is None else float(cpl)}
     activa = caida >= umbral_caida and (cpl is None and gasto_rec > 0 or cpl is not None and cpl > umbral_cpl)
     return Resultado("f", "activa" if activa else "no", texto, c["revisar"], "revisar" if activa else None, cifras)

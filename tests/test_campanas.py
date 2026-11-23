@@ -24,10 +24,11 @@ ESPERADO = {
     "VW [VN][2026] T-Roc noviembre": ("modelo", "VN", "T-Roc", False),
     "VW [VO][2026] Caravelle octubre": ("modelo", "VO", "Caravelle", True),
     "VW [VO][2026] T-Cross octubre": ("modelo", "VO", "T-Cross", False),
-    "Boutique Ocasión": ("general", "ambos", None, False),
+    "Boutique Ocasión": ("general", "VO", None, False),
     "VW [VO][2026] Black Friday": ("general", "VO", None, False),
     "VW [VN][2026] Special Days diciembre": ("general", "VN", None, False),
-    "Liquidacion VO": ("general", "ambos", None, False),
+    "Liquidacion VO": ("general", "VO", None, False),
+    "Special Days": ("general", "ambos", None, False),
 }
 SIN_REGLA = "Prueba de anuncio"
 
@@ -89,6 +90,24 @@ def test_generales_con_tilde_pegadas_y_con_ambito(config):
     assert _de(config.clasificar("VW [VO][2026] BlackFriday noviembre")) == ("general", "VO", None, False)
     # Una general con año y mes sigue siendo general: no se busca modelo
     assert _de(config.clasificar("VW [VN][2026] Golf Days mayo")) == ("general", "VN", None, False)
+
+
+@pytest.mark.parametrize("nombre, ambito", [
+    ("Boutique Ocasión", "VO"), ("boutique OCASION", "VO"), ("Liquidacion VO", "VO"), ("liquidación vo", "VO"),
+    ("Black Friday nuevos", "VN"), ("Special Days VN", "VN"), ("Special Days", "ambos"),
+    ("Special Days Volvo", "ambos"),               # «VO» solo como palabra entera
+    ("Nuevo Golf Days", "ambos"),                  # «nuevo» no es «nuevos»
+    ("Black Friday VN y VO", "ambos"),             # las dos: ambos
+    ("[VN] Boutique Ocasión", "VN"),               # la etiqueta manda sobre las palabras
+])
+def test_sin_etiqueta_el_ambito_sale_de_las_palabras(config, nombre, ambito):
+    c = config.clasificar(nombre)
+    assert c.tipo == "general" and c.ambito == ambito
+
+
+def test_palabras_de_ambito_en_una_campana_de_modelo(config):
+    assert _de(config.clasificar("VW 2026 T-Roc Ocasión noviembre")) == ("modelo", "VO", "T-Roc", False)
+    assert _de(config.clasificar("VW 2026 Taigo nuevos noviembre")) == ("modelo", "VN", "Taigo", False)
 
 
 def test_las_asignaciones_a_mano_mandan(tmp_path):
@@ -248,8 +267,104 @@ def test_marketing_lee_tipo_y_ambito_de_las_reglas(pg, panel_url):
     vo = bloques(cl.get("/marketing?tipo=VO").text)
     _, camp_vo = vo["campanas"]
     assert "Black Friday" in camp_vo and "Caravelle" in camp_vo and "Taigo" not in camp_vo
-    assert "Boutique Ocasión" in camp_vo and "Liquidacion VO" in camp_vo
-    assert camp_vo.count("gasto común a VN y VO") == 2
+    assert "Boutique Ocasión" in camp_vo and "Liquidacion VO" in camp_vo and "Special Days" in camp_vo
+    assert camp_vo.count("gasto común a VN y VO") == 1
     _, kpis = vo["kpis"]
-    # Inversión de VO: Caravelle (4), T-Cross (5) y Black Friday (7), en miles de céntimos por día, 3 días
-    assert "Inversión VO" in kpis and "480 €" in kpis and "sin las campañas de VN y VO" in kpis
+    # Inversión de VO: Caravelle (4), T-Cross (5), Boutique Ocasión (6), Black Friday (7) y Liquidacion VO (9),
+    # en miles de céntimos por día, 3 días
+    assert "Inversión VO" in kpis and "930 €" in kpis and "sin la campaña de VN y VO" in kpis
+
+
+# ================================================================== reglas b, c y f con los leads que cuenta Meta
+
+SEMANA = date(2026, 11, 22)       # semana del 16 al 22 de noviembre
+# Cifras reales de la semana: clics, leads según Meta y gasto. Las impresiones no venían en las cifras:
+# unas que no disparan la tasa de clic (todas por encima del 1 %)
+REALES = {
+    "VW [VN][2026] T-Roc noviembre": dict(impresiones=30_000, clics=531, leads=14, gasto=24_455),
+    "VW [VN][2026] Taigo Noviembre 2": dict(impresiones=60_000, clics=1_222, leads=30, gasto=34_801),
+    "VW [VO][2026] T-Cross octubre": dict(impresiones=40_000, clics=677, leads=39, gasto=24_699),
+}
+
+
+def _repartir(total: int, dias: int) -> list[int]:
+    return [total // dias + (total % dias if i == dias - 1 else 0) for i in range(dias)]
+
+
+def meta_semana(pg, cid, nombre, *, impresiones, clics, leads, gasto, dias=7, hasta=SEMANA, leads_por_dia=None):
+    """Una campaña en campanas_meta_dia: los totales repartidos entre sus días (el resto, el último)."""
+    columnas = zip(_repartir(gasto, dias), _repartir(impresiones, dias), _repartir(clics, dias),
+                   leads_por_dia or _repartir(leads, dias))
+    for i, (g, im, cl, le) in enumerate(columnas):
+        d = hasta - timedelta(days=dias - 1 - i)
+        pg.execute("""INSERT INTO campanas_meta_dia (descargado_at, run_id, origen, cuenta_id, dia, nivel, campana_id,
+                      campana_nombre, gasto_cents, impresiones, clics, leads, huella)
+                      VALUES (now(), 'r', 'prueba', '1', %s, 'campana', %s, %s, %s, %s, %s, %s, %s)""",
+                   (d, cid, nombre, g, im, cl, le, f"{cid}{i}"))
+
+
+def _semana_real(pg):
+    for i, (nombre, cifras) in enumerate(REALES.items()):
+        meta_semana(pg, f"R{i}", nombre, **cifras)
+    cmp.actualizar(pg)
+
+
+def test_actualizar_guarda_los_leads_de_meta(pg):
+    _semana_real(pg)
+    leads = dict(pg.execute("SELECT titulo, sum(leads_meta) FROM panel_campana_dia WHERE origen = 'real' "
+                            "GROUP BY 1").fetchall())
+    assert leads == {n: c["leads"] for n, c in REALES.items()}
+
+
+def test_reglas_b_y_c_con_los_leads_de_meta_semana_real(pg):
+    from test_alertas import alertas, reglas
+    _semana_real(pg)
+    conc = cargar_concesionario()
+    resumen = motor.evaluar(pg, SEMANA, conc, reglas("meta_a", "meta_b", "meta_c", "meta_d", "meta_f", "meta_subir"))
+    # Sin Walcu: a, d y subir presupuesto siguen inactivas; b, c y f se evalúan con datos reales
+    for r in ("meta_a", "meta_d", "meta_subir"):
+        assert resumen["reglas"][r].startswith("inactiva"), r
+    for r in ("meta_b", "meta_c", "meta_f"):
+        assert resumen["reglas"][r].startswith("real"), r
+    a = {(x["regla"], x["clave"]): x for x in alertas(pg, dia=SEMANA)}
+    assert set(a) == {("meta_b", "R0"), ("meta_c", "R0"), ("meta_b", "R1"), ("meta_c", "R1")}
+    assert {x["rol"] for x in a.values()} == {"marketing"} and {x["origen"] for x in a.values()} == {"real"}
+    assert ("clic a lead: 14 leads según Meta de 531 clics = 2,64 % (umbral 3 %)"
+            in a[("meta_b", "R0")]["texto"])
+    assert a[("meta_c", "R0")]["texto"] == (
+        "Campaña «VW [VN][2026] T-Roc noviembre» · revisar (regla c): coste por lead: 244,55 € / 14 leads según Meta "
+        "= 17,47 € (umbral 10 €). Falta el coste por cita para decidir entre continuar y parar.")
+    assert "clic a lead: 30 leads según Meta de 1222 clics = 2,45 % (umbral 3 %)" in a[("meta_b", "R1")]["texto"]
+    assert "coste por lead: 348,01 € / 30 leads según Meta = 11,60 € (umbral 10 €)" in a[("meta_c", "R1")]["texto"]
+    assert a[("meta_c", "R1")]["cifras"]["fuente_leads"] == "meta"
+    # T-Cross: 39 de 677 clics = 5,76 % y 6,33 € por lead: nada
+    decisiones = dict(pg.execute("SELECT campana_id, decision FROM panel_campana_decision").fetchall())
+    assert decisiones == {"R0": "revisar", "R1": "revisar", "R2": "continuar"}
+    reglas_tcross = {r["regla"]: r for r in pg.execute(
+        "SELECT reglas FROM panel_campana_decision WHERE campana_id = 'R2'").fetchone()[0]}
+    assert reglas_tcross["b"]["estado"] == "no" and reglas_tcross["c"]["estado"] == "no"
+    assert "6,33 €" in reglas_tcross["c"]["texto"] and "39 leads según Meta" in reglas_tcross["c"]["texto"]
+    assert {reglas_tcross[k]["estado"] for k in ("a", "d", "subir")} == {"sin_dato"}
+    assert "falta Walcu" in reglas_tcross["a"]["texto"]
+
+
+def test_regla_f_con_los_leads_de_meta(pg):
+    crit = motor.cargar_criterios()
+    # 10 días: 7 con 3 leads al día y los 3 últimos con 1 (−67 %), a 30 € por día: 30 € por lead
+    meta_semana(pg, "F", "VW [VN][2026] Polo noviembre", impresiones=100_000, clics=2_000, leads=24, gasto=30_000,
+                dias=10, leads_por_dia=[3] * 7 + [1] * 3)
+    cmp.actualizar(pg)
+    _, js = cr.juzgar(pg, SEMANA, "real", cargar_concesionario(), crit, {})
+    f = js[0].reglas["f"]
+    assert f.activa and f.cifras_texto.startswith("leads según Meta por día: 1 en los últimos 3 días frente a 3 ")
+
+
+def test_cuando_entran_los_leads_de_walcu_mandan_los_de_walcu(pg):
+    _semana_real(pg)
+    pg.execute("""INSERT INTO panel_leads_dia (dia, origen, modelo, tipo, campana_id, leads, citas, ventas)
+                  VALUES (%s, 'real', 'T-Roc', 'VN', 'R0', 40, 2, 0)""", (SEMANA,))
+    _, js = cr.juzgar(pg, SEMANA, "real", cargar_concesionario(), motor.cargar_criterios(), {})
+    j = next(x for x in js if x.campana_id == "R0")
+    assert j.fuente_leads == "walcu" and j.leads == 40
+    assert "según Meta" not in j.reglas["c"].cifras_texto and "/ 40 leads = 6,11 €" in j.reglas["c"].cifras_texto
+    assert j.reglas["a"].estado != "sin_dato"

@@ -130,7 +130,8 @@ Comunes (`conectores.py`):
 `utm_campaign`, normalizado) y las reglas que leen el nombre de cada campaña (sin mayúsculas, tildes ni
 espacios de más):
 
-- ámbito por la etiqueta: [VN] → VN, [VO] → VO, sin etiqueta → ambos;
+- ámbito por la etiqueta: [VN] → VN, [VO] → VO; sin etiqueta, por las palabras enteras «ocasión»,
+  «ocasion» o «VO» (→ VO) y «nuevos» o «VN» (→ VN); sin ninguna (o con las de los dos), ambos;
 - general si el nombre contiene una palabra de `reglas.generales` (days, friday, liquidación, boutique),
   con su ámbito («VW [VO][2026] Black Friday»: general de VO);
 - si no, de modelo: lo que va entre el año y el mes («VW [VN][2026] Taigo Noviembre 2» → Taigo; lo que
@@ -139,7 +140,7 @@ espacios de más):
 - las asignaciones a mano de `asignaciones` mandan sobre las reglas.
 
 Tras cada descarga de Meta o GA4 (y con `make campanas`) rehace `panel_campana_dia` (origen real) con
-las campañas de Meta clasificadas, y `panel_campanas_sin_regla` con las de Meta y GA4 que no casan y
+las campañas de Meta clasificadas (con los leads que cuenta Meta en `leads_meta`), y `panel_campanas_sin_regla` con las de Meta y GA4 que no casan y
 el motivo, para «Estado de las fuentes». Una campaña de GA4 que se une a una de Meta por
 `utm_campaign` se clasifica como ella. Pruebas: `tests/test_campanas.py`.
 

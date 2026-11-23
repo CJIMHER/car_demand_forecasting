@@ -1,5 +1,25 @@
 # Cambios
 
+## 2026-11-23 · Ámbito por palabras y reglas b, c y f con los leads de Meta (rama hito-1b-campanas-2)
+
+- **Ámbito sin etiqueta** (`ingesta/campanas.py`, `config/campanas.yaml`): si el nombre no lleva [VN] ni [VO],
+  las palabras enteras «ocasión», «ocasion» o «VO» lo hacen de VO, y «nuevos» o «VN», de VN; con ninguna (o con
+  las de los dos), ambos. «Boutique Ocasión» y «Liquidacion VO» → general de VO; «Special Days» → general de
+  ambos. «Nuevo» (singular) no cuenta. Las palabras de ámbito no entran en el modelo.
+- **Leads según Meta**: migración `0014`, `panel_campana_dia.leads_meta` (de `campanas_meta_dia.leads`), que
+  escribe `ingesta/campanas.py`.
+- **Reglas b, c y f de Meta activas sin Walcu** (`alertas/criterios.py`, `alertas/reglas.yaml`): su fuente es
+  solo `panel_campana_dia`. Sin filas en `panel_leads_dia` usan los leads de Meta y cada cifra lo dice («14
+  leads según Meta»); la c propone «revisar» con «Falta el coste por cita para decidir entre continuar y parar».
+  Con leads de Walcu, mandan los de Walcu. a, d y subir presupuesto siguen inactivas («falta Walcu»). La
+  decisión de cada campaña se escribe con el origen más real de las reglas de Meta. Las alertas van a marketing
+  (al chat del técnico si no hay chat de marketing, como hasta ahora).
+- **Importes** de los criterios con dos decimales si no son enteros: «11,60 €», «4,90 €» (antes «11,6 €»).
+- **Pruebas** (`tests/test_campanas.py`): ámbito por palabras; las cifras reales del 16 al 22 de noviembre
+  (T-Roc: b 2,64 % y c 17,47 €; Taigo Noviembre 2: b 2,45 % y c 11,60 €; T-Cross: nada), con alertas a
+  marketing y a, d y subir inactivas; f con leads de Meta; Walcu manda cuando entra.
+- **Despliegue**: `make deploy` (migración `0014`) y `make campanas` para rellenar `leads_meta`.
+
 ## 2026-11-23 · Campañas clasificadas por reglas sobre el nombre (rama hito-1b-campanas)
 
 - **Reglas en `config/campanas.yaml`** en lugar de la regla campaña a campaña (`ingesta/campanas.py`). El nombre
