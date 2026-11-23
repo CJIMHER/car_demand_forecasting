@@ -492,7 +492,17 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
   border-left: 6px solid var(--gris); border-top: 5px solid transparent; border-bottom: 5px solid transparent;
   transition: transform 0.15s;
 }
-.seg-acabado[open] .seg-flecha { transform: rotate(90deg); }
+.seg-acabado[open] > summary .seg-flecha { transform: rotate(90deg); }
+/* Tercer nivel: cada motor es un <details> que despliega sus familias de color */
+.seg-motor-det > summary { list-style: none; cursor: pointer; min-height: var(--toque); }
+.seg-motor-det > summary::-webkit-details-marker { display: none; }
+.seg-motor-det > summary:hover { background: #F3F4F1; }
+.seg-motor-det[open] > summary .seg-flecha { transform: rotate(90deg); }
+.seg-color-motor { background: #F5F5F1; }
+.seg-color-motor .seg-nombre { padding-left: 44px; font-weight: 400; color: var(--gris-oscuro); }
+.enlace-color { color: inherit; text-decoration: none; }
+.enlace-color:hover, .seg-color.activa .enlace-color { text-decoration: underline; }
+.filtro-pagina { margin: 0; }
 .seg-motores { margin-left: 8px; font-weight: 400; }
 .seg-motor { background: #FAFAF8; }
 .seg-motor .seg-nombre { padding-left: 22px; font-weight: 500; color: var(--gris-oscuro); }
@@ -530,6 +540,7 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
             font-size: 11px; font-weight: 500; color: var(--gris); }
   .seg-motor .seg-nombre { padding-left: 14px; }
   .seg-motor .seg-c { padding-left: 0; }
+  .seg-color-motor .seg-nombre { padding-left: 28px; }
   /* La matriz pasa a una lista por antigüedad: cada tramo con sus cuatro casillas de km en dos columnas */
   .matriz { display: block; }
   .matriz thead { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

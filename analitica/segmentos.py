@@ -7,7 +7,9 @@ solo en los niveles que muestra el panel (nunca el cruce de todas las dimensione
   VO, la matriz antigüedad×km de: modelo · modelo+acabado · modelo+combustible · modelo+motor ·
       modelo+acabado+combustible · modelo+acabado+motor (los filtros de la matriz; motor implica
       combustible, así que no hace falta el cruce de los tres)
-  color:   modelo+familia de color (config/colores.yaml, analitica/colores.py), en VN y VO
+  color:   modelo+familia de color (config/colores.yaml, analitica/colores.py), en VN y VO; y, para el
+           color bajo cada motor y el filtro de color de la página, modelo+acabado+color
+           (acabado_color) y modelo+acabado+motor+color (motor_color)
   VO, la matriz con filtro de color: cada uno de los seis niveles de la matriz, también con la familia
       (color_antiguedad_km, acabado_color_…, combustible_color_…, motor_color_…,
       acabado_combustible_color_…, acabado_motor_color_…); solo anuncios con color
@@ -107,7 +109,9 @@ def calcular(h, dia: date, tipo: str, catalogo: Catalogo,
             familia = color.familia
             if not color.reconocida:
                 sin_familia[re.sub(r"\s+", " ", f.color).strip()] += 1
-            claves.append(("color", f.modelo, None, None, None, None, None, familia))
+            claves += [("color", f.modelo, None, None, None, None, None, familia),
+                       ("acabado_color", f.modelo, acabado, None, None, None, None, familia),
+                       ("motor_color", f.modelo, acabado, comb, motor, None, None, familia)]
         if con_matriz:
             ant = tramo(anios_cumplidos(f.matriculacion, dia), conc.tramos_antiguedad)
             km = tramo(f.km, conc.tramos_km)

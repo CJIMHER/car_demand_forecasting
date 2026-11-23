@@ -1,5 +1,28 @@
 # Cambios
 
+## 2026-11-23 · Color con acabado y motor en el detalle de un modelo (rama hito-1b-color-2)
+
+- **Filtro de color de la página** (VN y VO), en lugar del filtro de color de la matriz: con una familia
+  elegida, el total, «Por acabado y motor» y la matriz de VO cuentan solo los anuncios de esa familia. Se combina
+  con acabado, combustible y motor (con un color elegido, la matriz ofrece solo los que existen con él), viaja en
+  la URL (`&color=`) y se conserva al cambiar de zona o tipo si allí existe. Las filas de «Por color» enlazan al
+  filtro.
+- **Tercer nivel** en «Por acabado y motor»: acabado → motor → familia de color, con anuncios, nuestros, precio
+  mediano p25–p75 y días, con las mismas reglas de n (sin filtro de color; con él, la tabla ya es de una familia).
+- **Cobertura**: la nota «Color conocido en el X %…; mientras se completa…» en «Por acabado y motor» y en la
+  matriz con color mientras su segmento esté por debajo del 90 % (en «Por color», siempre la cifra). Con filtro,
+  arriba: «Filtrando por color: solo cuentan los anuncios con color conocido (X % del modelo)».
+- **Precálculo** (migración `0012`): niveles `acabado_color` y `motor_color` (modelo + acabado + motor + color),
+  en VN y VO; la matriz ya tenía sus niveles con color. Sin cruce completo. Medido con los datos sintéticos de
+  `make panel-dev` (8 últimos días): +8 % de filas de segmentos y +0,2–0,3 s con la cobertura actual de color;
+  con el 100 % de los anuncios con color, 219.558 filas y 5,7 s frente a 164.671 filas y 4,5 s de `main`
+  (+33 % filas, +27 % tiempo).
+- **Pruebas**: `tests/test_color.py` (niveles nuevos frente a SQL directo en VN y VO y tres zonas; la tabla con
+  y sin filtro de color, por acabado × motor × color, frente a SQL directo; con color, los filtros de la matriz
+  no ofrecen valores que no existen y sus casillas cuadran; conservación del color al cambiar de zona y tipo;
+  nota de cobertura y línea del filtro en el borde del 90 %). Chrome a 1440 y 390 px.
+- **Despliegue**: `make deploy` (migración `0012`) y `make precalcular`.
+
 ## 2026-11-23 · Color en Mercado y volumen mínimo de la regla b de Meta (rama hito-1b-color)
 
 - **Color de los anuncios** (`ingesta/colores.py`, migración `0011`). La tarea de las 08:30 (`make cargar`),

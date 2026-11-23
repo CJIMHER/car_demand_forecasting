@@ -269,42 +269,48 @@ def url_detalle(modelo: str, tipo: str, zona: str, acabado: str | None = None, c
     return url
 
 
-# Los filtros de la matriz: (acabado, combustible, motor, familia de color). Existen los que tienen
-# anuncios en la matriz de esa zona y tipo (VO); en VN, sin matriz, los del nivel motor y los del
-# nivel color, para que se conserven al volver a VO.
+# Filtros del detalle: (acabado, combustible, motor, familia de color). El color filtra toda la página
+# (totales, «Por acabado y motor» y la matriz); acabado, combustible y motor filtran la matriz de VO.
+# Existen: las familias del modelo en esa zona y tipo (nivel color); y los (acabado, combustible, motor)
+# con anuncios en la matriz (VO) o en el nivel motor (VN, sin matriz: para conservarlos al volver a VO),
+# también con cada familia, para que con un color elegido solo se ofrezcan los que existen con él.
 Filtro = tuple[str | None, str | None, str | None, str | None]
 NIVEL_EXISTENCIA = {"VO": "acabado_motor_antiguedad_km", "VN": "motor"}
-NIVEL_COLOR = {"VO": "acabado_motor_color_antiguedad_km", "VN": "color"}
+NIVEL_COLOR = {"VO": "acabado_motor_color_antiguedad_km", "VN": "motor_color"}
+Existentes = tuple[set, set, set]   # (trios, cuartetos con color, familias)
 
 
-def existentes(pg: psycopg.Connection, modelo: str) -> dict[tuple[str, str], tuple[set, set]]:
-    """{(tipo, zona): ({(acabado, combustible, motor)}, {(acabado, combustible, motor, color)})} del último
-    día de cada tipo. En VN, los cuartetos son (None, None, None, color): el color no se cruza."""
-    salida: dict[tuple[str, str], tuple[set, set]] = {(t, z): (set(), set()) for t in TIPOS for z in ZONAS}
+def existentes(pg: psycopg.Connection, modelo: str) -> dict[tuple[str, str], Existentes]:
+    """{(tipo, zona): ({(acabado, combustible, motor)}, {(acabado, combustible, motor, color)}, {color})} del
+    último día de cada tipo."""
+    salida: dict[tuple[str, str], Existentes] = {(t, z): (set(), set(), set()) for t in TIPOS for z in ZONAS}
     for tipo, zona, nivel, acabado, comb, motor, color in pg.execute(
             """SELECT s.tipo, s.zona, s.nivel, s.acabado, s.combustible, s.motor, s.color FROM panel_mercado_segmento s
                JOIN (SELECT tipo, max(dia) AS dia FROM panel_mercado_dia GROUP BY tipo) u USING (tipo, dia)
-               WHERE s.modelo = %s AND (s.combustible IS NOT NULL OR s.nivel = 'color')
-                 AND s.nivel IN (CASE s.tipo WHEN 'VO' THEN %s ELSE %s END, CASE s.tipo WHEN 'VO' THEN %s ELSE %s END)""",
+               WHERE s.modelo = %s
+                 AND s.nivel IN ('color', CASE s.tipo WHEN 'VO' THEN %s ELSE %s END,
+                                 CASE s.tipo WHEN 'VO' THEN %s ELSE %s END)""",
             (modelo, NIVEL_EXISTENCIA["VO"], NIVEL_EXISTENCIA["VN"], NIVEL_COLOR["VO"], NIVEL_COLOR["VN"])):
-        trios, cuartetos = salida[(tipo, zona)]
-        if color is None:
+        trios, cuartetos, familias = salida[(tipo, zona)]
+        if nivel == "color":
+            familias.add(color)
+        elif color is None:
             trios.add((acabado, comb, motor))
         else:
             cuartetos.add((acabado, comb, motor, color))
     return salida
 
 
-def validar(hay: tuple[set, set], acabado: str | None, combustible: str | None, motor: str | None,
+def validar(hay: Existentes, acabado: str | None, combustible: str | None, motor: str | None,
             color: str | None = None) -> Filtro:
-    """Se queda con los valores que existen juntos: el acabado; el combustible con ese acabado; el
-    motor con los dos; el color con los tres (en VN, el color del modelo). Un motor sin combustible lo
-    toma del motor si solo hay uno."""
-    trios, cuartetos = hay
-    a, c, m = _validar3(trios, acabado, combustible, motor)
-    col = color if any(q[3] == color and all(x is None or y is None or x == y for x, y in zip(q[:3], (a, c, m)))
-                       for q in cuartetos) else None
-    return a, c, m, col
+    """Se queda con los valores que existen juntos. Primero el color (una familia del modelo en esa zona y
+    tipo); después, entre los anuncios de ese color, el acabado; el combustible con ese acabado; el motor
+    con los dos. Un motor sin combustible lo toma del motor si solo hay uno."""
+    trios, cuartetos, familias = hay
+    col = color if color in familias else None
+    if col is not None:
+        trios = {q[:3] for q in cuartetos if q[3] == col}
+    return (*_validar3(trios, acabado, combustible, motor), col)
 
 
 def _validar3(trios: set[tuple[str, str, str]], acabado: str | None, combustible: str | None,
@@ -335,18 +341,23 @@ def cobertura_color(con_color: int | None, anuncios: int) -> dict:
     return {"texto": texto + (f"; {NOTA_COBERTURA}" if nota else "."), "pct": pct, "nota": nota}
 
 
+def _orden_color(sin_esp: str):
+    return lambda f: (f["color"] == sin_esp, -f["anuncios"], f["color"])
+
+
 def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, modelo: str, hoy: date,
                    acabado: str | None = None, combustible: str | None = None, motor: str | None = None,
                    color: str | None = None) -> dict:
-    """Detalle de un modelo: por acabado y motor, por familia de color y, en VO, precio por antigüedad y
-    km con filtros de acabado, combustible, motor y color. Lee solo panel_mercado_segmento (precalculada);
-    nunca los hechos. `filtro` es el que vale de verdad (los valores que no existen se descartan) y
-    `url`, la de la página."""
+    """Detalle de un modelo: por acabado, motor y color, por familia de color y, en VO, precio por
+    antigüedad y km con filtros de acabado, combustible y motor. El filtro de color vale para toda la
+    página. Lee solo panel_mercado_segmento (precalculada); nunca los hechos. `filtro` es el que vale de
+    verdad (los valores que no existen se descartan) y `url`, la de la página."""
     nombres = etiquetas_zona(conc)
     n_mostrar, n_min = conc.n_minimo_mostrar, conc.n_minimo_medianas
     nombre_tipo = {"VN": "Nuevos", "VO": "Ocasión"}[tipo]
     hay = existentes(pg, modelo)
     filtro = validar(hay[(tipo, zona)], acabado, combustible, motor, color)
+    col = filtro[3]
 
     def url_en(t: str, z: str) -> str:   # otra zona u otro tipo, con los filtros que sigan existiendo
         return url_detalle(modelo, t, z, *validar(hay[(t, z)], *filtro))
@@ -358,7 +369,7 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
         "tipos": [{"id": t, "etiqueta": e, "activa": t == tipo, "url": url_en(t, zona)}
                   for t, e in (("VN", "Nuevos (VN)"), ("VO", "Ocasión (VO)"))],
         "hay_datos": False, "hay_modelo": False, "nota_precio": NOTA_PRECIO, "n_minimo": n_min,
-        "n_mostrar": n_mostrar, "filtro": filtro, "url": url_detalle(modelo, tipo, zona, *filtro),
+        "n_mostrar": n_mostrar, "filtro": filtro, "color": col, "url": url_detalle(modelo, tipo, zona, *filtro),
     }
     dia = pg.execute("SELECT max(dia) FROM panel_mercado_dia WHERE tipo = %s", (tipo,)).fetchone()[0]
     if dia is None:
@@ -375,6 +386,7 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
         return base
     con_peso = zona == "provincia"
     pct = conc.n_minimo_porcentaje
+    sin_esp = sin_especificar()
 
     def segmento(f) -> dict:
         n = f["anuncios"]
@@ -385,15 +397,27 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
 
     por_nivel: dict[str, list] = {}
     for f in filas:
-        por_nivel.setdefault(f["nivel"], []).append(f)
-    total = por_nivel["modelo"][0]
+        if col is None or f["color"] in (None, col):   # con color elegido, solo sus filas (y las sin color)
+            por_nivel.setdefault(f["nivel"], []).append(f)
+    modelo_fila = por_nivel["modelo"][0]
+    cobertura_modelo = cobertura_color(modelo_fila["con_color"], modelo_fila["anuncios"])
+    # Con color elegido, los totales, acabados y motores son los de esa familia
+    total = next(f for f in por_nivel["color"] if f["color"] == col) if col else modelo_fila
+    n_acabado, n_motor = ("acabado_color", "motor_color") if col else ("acabado", "motor")
 
+    # Por acabado y motor; sin color elegido, cada motor despliega sus familias de color
+    colores_motor: dict[tuple, list] = {}
+    if col is None:
+        for f in por_nivel.get("motor_color", []):
+            colores_motor.setdefault((f["acabado"], f["combustible"], f["motor"]), []).append(f)
     acabados = []
-    for f in sorted(por_nivel.get("acabado", []), key=lambda f: (not f["acabado_reconocido"], -f["anuncios"],
+    for f in sorted(por_nivel.get(n_acabado, []), key=lambda f: (not f["acabado_reconocido"], -f["anuncios"],
                                                                  f["acabado"])):
-        motores = [{"nombre": m["motor"], **segmento(m)} for m in sorted(
-            (m for m in por_nivel.get("motor", []) if m["acabado"] == f["acabado"]),
-            key=lambda m: (-m["anuncios"], m["motor"]))]
+        motores = [{"nombre": m["motor"], **segmento(m),
+                    "colores": [{"nombre": c["color"], **segmento(c)} for c in sorted(
+                        colores_motor.get((m["acabado"], m["combustible"], m["motor"]), []), key=_orden_color(sin_esp))]}
+                   for m in sorted((m for m in por_nivel.get(n_motor, []) if m["acabado"] == f["acabado"]),
+                                   key=lambda m: (-m["anuncios"], m["motor"]))]
         acabados.append({"nombre": f["acabado"], "reconocido": f["acabado_reconocido"], **segmento(f),
                          "motores": motores})
 
@@ -401,15 +425,22 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
     if tipo == "VO" and conc.tramos_antiguedad and conc.tramos_km:
         matriz = _matriz(por_nivel, hay[(tipo, zona)], filtro, acabados, conc, n_mostrar, n_min,
                          lambda *f: url_detalle(modelo, tipo, zona, *f))
-        matriz["fuera"] = total["anuncios"] - sum(f["anuncios"] for f in por_nivel.get("antiguedad_km", []))
+        sin_tramos = "color_antiguedad_km" if col else "antiguedad_km"
+        matriz["fuera"] = total["anuncios"] - sum(f["anuncios"] for f in por_nivel.get(sin_tramos, []))
 
-    # Por color: familias por anuncios, con «sin especificar» al final
-    sin_esp = sin_especificar()
-    colores = {
-        "filas": [{"nombre": f["color"], **segmento(f)} for f in sorted(
-            por_nivel.get("color", []), key=lambda f: (f["color"] == sin_esp, -f["anuncios"], f["color"]))],
-        "cobertura": cobertura_color(total["con_color"], total["anuncios"]),
-    }
+    # Filtro de color de la página: las familias del modelo; cada una conserva los demás filtros que existan con ella
+    familias = sorted(por_nivel.get("color", []) if col is None else
+                      [f for f in filas if f["nivel"] == "color"], key=_orden_color(sin_esp))
+    filtro_color = [{"etiqueta": "Todos", "activa": col is None,
+                     "url": url_detalle(modelo, tipo, zona, *validar(hay[(tipo, zona)], *filtro[:3], None))}] + [
+        {"etiqueta": f["color"], "activa": f["color"] == col,
+         "url": url_detalle(modelo, tipo, zona, *validar(hay[(tipo, zona)], *filtro[:3], f["color"]))}
+        for f in familias]
+
+    # Por color: todas las familias (con el filtro, la elegida marcada); enlazan al filtro
+    colores = {"filas": [{"nombre": f["color"], **segmento(f), "activa": f["color"] == col,
+                          "url": filtro_color[i + 1]["url"]} for i, f in enumerate(familias)],
+               "cobertura": cobertura_modelo}
 
     # Si en la zona elegida la mayoría de las casillas quedan en «—», se propone ver España
     casillas = [a["precio"] for a in acabados] + [m["precio"] for a in acabados for m in a["motores"]]
@@ -422,6 +453,12 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
                                  f"{n_mostrar} anuncios con precio."),
                        "url": url_en(tipo, "espana")}
 
+    filtrando = None
+    if col:
+        filtrando = (f"Filtrando por color: solo cuentan los anuncios con color conocido "
+                     f"({cobertura_modelo['pct']} % del modelo)" if cobertura_modelo["pct"] is not None else
+                     "Filtrando por color: solo cuentan los anuncios con color conocido")
+
     notas = [
         f"Precio: mediana de los anuncios con precio publicados {'hoy' if dia == hoy else 'ese día'}; debajo, "
         "el rango p25–p75 (la mitad central de los precios). Días publicado: mediana; «≥ N», como en la tabla "
@@ -430,32 +467,37 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
         "Acabado: el que figura en el texto de la versión. «Sin clasificar»: anuncios cuyo acabado no se "
         "reconoce; no se adivina.",
         f"Color: la familia del color exterior que publica la ficha de cada anuncio. «{sin_esp}»: "
-        "con color, pero sin una familia reconocible en su nombre.",
+        "con color, pero sin una familia reconocible en su nombre. El filtro de color vale para toda la página.",
     ]
     if matriz:
         notas.append(("Antigüedad: años cumplidos desde la primera matriculación hasta el día de los datos. "
-                      + (f"{fmt.miles(matriz['fuera'])} anuncios del modelo sin fecha de matriculación o sin km "
-                         "no entran en la matriz." if matriz["fuera"] else "")).strip())
+                      + (f"{fmt.miles(matriz['fuera'])} anuncios {'de ese color ' if col else 'del modelo '}"
+                         "sin fecha de matriculación o sin km no entran en la matriz." if matriz["fuera"] else "")).strip())
         notas.append("Filtros de la matriz: el motor es combustible, potencia, tecnología y cambio; solo se "
-                     "ofrecen los que tienen anuncios en la matriz con los demás filtros elegidos. Con un "
-                     "color, solo cuentan los anuncios con color conocido.")
+                     "ofrecen los que tienen anuncios en la matriz con los demás filtros elegidos (y con el color, "
+                     "si hay uno elegido).")
     return {**base, "hay_modelo": True, "total": segmento(total), "acabados": acabados, "matriz": matriz,
-            "colores": colores, "nota_espana": nota_espana, "notas": notas}
+            "colores": colores, "filtro_color": filtro_color, "filtrando": filtrando,
+            "cobertura_tabla": cobertura_modelo if cobertura_modelo["nota"] else None,
+            "nota_espana": nota_espana, "notas": notas}
 
 
-def _matriz(por_nivel: dict, hay: tuple[set, set], filtro: Filtro, acabados: list[dict], conc: Concesionario,
+def _matriz(por_nivel: dict, hay: Existentes, filtro: Filtro, acabados: list[dict], conc: Concesionario,
             n_mostrar: int, n_min: int, url) -> dict:
-    """La matriz antigüedad × km del filtro y las opciones de los cuatro filtros (solo las que existen)."""
-    trios, cuartetos = hay
+    """La matriz antigüedad × km del filtro y las opciones de acabado, combustible y motor (solo las que
+    existen, con el color elegido si lo hay). `por_nivel` ya trae solo las filas del color elegido."""
+    trios, cuartetos, _ = hay
     a, c, m, col = filtro
+    if col:
+        trios = {q[:3] for q in cuartetos if q[3] == col}
     base = ("acabado_" if a else "") + ("motor_" if m else "combustible_" if c else "")
     nivel = base + ("color_" if col else "") + "antiguedad_km"
 
-    def del_filtro(f, con_color: bool) -> bool:
+    def del_filtro(f) -> bool:
         return ((a is None or f["acabado"] == a) and (c is None or f["combustible"] == c)
-                and (m is None or f["motor"] == m) and (not con_color or f["color"] == col))
+                and (m is None or f["motor"] == m))
 
-    celdas = {(f["antiguedad_orden"], f["km_orden"]): f for f in por_nivel.get(nivel, []) if del_filtro(f, bool(col))}
+    celdas = {(f["antiguedad_orden"], f["km_orden"]): f for f in por_nivel.get(nivel, []) if del_filtro(f)}
     filas = []
     for i, (_, etiqueta) in enumerate(conc.tramos_antiguedad):
         fila = []
@@ -467,44 +509,35 @@ def _matriz(por_nivel: dict, hay: tuple[set, set], filtro: Filtro, acabados: lis
                                                 f and f["precio_p75_cents"], n, n_mostrar, n_min)})
         filas.append({"etiqueta": etiqueta, "celdas": fila})
 
-    def opcion(etiqueta: str, valor: Filtro, activa: bool) -> dict:
-        return {"etiqueta": etiqueta, "activa": activa, "url": url(*validar(hay, *valor))}
+    def opcion(etiqueta: str, valor: tuple, activa: bool) -> dict:
+        return {"etiqueta": etiqueta, "activa": activa, "url": url(*validar(hay, *valor, col))}
 
-    # Orden: acabados como en la tabla; combustibles, motores y colores, por anuncios en la matriz
+    # Orden: acabados como en la tabla; combustibles y motores, por anuncios en la matriz (del color elegido)
     con_a = [t for t in trios if a is None or t[0] == a]
     en_matriz: dict[tuple, int] = {}
-    for f in por_nivel.get("acabado_motor_antiguedad_km", []):
+    for f in por_nivel.get("acabado_motor_color_antiguedad_km" if col else "acabado_motor_antiguedad_km", []):
         if a is None or f["acabado"] == a:
             for k in ((f["combustible"],), (f["combustible"], f["motor"])):
                 en_matriz[k] = en_matriz.get(k, 0) + f["anuncios"]
-    por_color: dict[str, int] = {}
-    for f in por_nivel.get("acabado_motor_color_antiguedad_km", []):
-        if del_filtro(f, False):
-            por_color[f["color"]] = por_color.get(f["color"], 0) + f["anuncios"]
     combustibles = sorted({t[1] for t in con_a}, key=lambda x: (-en_matriz.get((x,), 0), x))
     motores = sorted({(t[1], t[2]) for t in con_a if c is None or t[1] == c},
                      key=lambda x: (-en_matriz.get(x, 0), x))
-    colores = sorted(por_color, key=lambda x: (-por_color[x], x))
     con_matriz = {t[0] for t in trios}
     filtros = [
-        {"id": "acabado", "nombre": "Acabado", "opciones": [opcion("Todos", (None, c, m, col), a is None)] + [
-            opcion(x["nombre"], (x["nombre"], c, m, col), x["nombre"] == a)
-            for x in acabados if x["nombre"] in con_matriz]},
-        {"id": "combustible", "nombre": "Combustible",
-         "opciones": [opcion("Todos", (a, None, None, col), c is None)] + [
-             opcion(x, (a, x, m, col), x == c) for x in combustibles]},
-        {"id": "motor", "nombre": "Motor", "opciones": [opcion("Todos", (a, c, None, col), m is None)] + [
-            opcion(mo, (a, co, mo, col), (co, mo) == (c, m)) for co, mo in motores]},
+        {"id": "acabado", "nombre": "Acabado", "opciones": [opcion("Todos", (None, c, m), a is None)] + [
+            opcion(x["nombre"], (x["nombre"], c, m), x["nombre"] == a) for x in acabados if x["nombre"] in con_matriz]},
+        {"id": "combustible", "nombre": "Combustible", "opciones": [opcion("Todos", (a, None, None), c is None)] + [
+            opcion(x, (a, x, m), x == c) for x in combustibles]},
+        {"id": "motor", "nombre": "Motor", "opciones": [opcion("Todos", (a, c, None), m is None)] + [
+            opcion(mo, (a, co, mo), (co, mo) == (c, m)) for co, mo in motores]},
     ]
-    if colores or col:
-        filtros.append({"id": "color", "nombre": "Color", "opciones": [opcion("Todos", (a, c, m, None), col is None)] + [
-            opcion(x, (a, c, m, x), x == col) for x in colores]})
-    # Cobertura del color en lo que filtran los otros tres (solo si hay color elegido)
+    # Cobertura del color en lo que filtran los otros tres (solo con un color elegido y por debajo del 90 %)
     cobertura = None
     if col:
-        sin = [f for f in por_nivel.get(base + "antiguedad_km", []) if del_filtro(f, False)]
+        sin = [f for f in por_nivel.get(base + "antiguedad_km", []) if del_filtro(f)]
         con = [f["con_color"] for f in sin]
         cobertura = cobertura_color(None if any(x is None for x in con) else sum(con), sum(f["anuncios"] for f in sin))
+        cobertura = cobertura if cobertura["nota"] else None
     elegido = " · ".join(x for x in (a, m or c, col) if x)
     return {"columnas": [km for _, km in conc.tramos_km], "filas": filas, "filtros": filtros, "elegido": elegido,
             "nivel": nivel, "cobertura": cobertura}

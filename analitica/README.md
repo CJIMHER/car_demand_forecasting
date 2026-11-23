@@ -48,9 +48,10 @@ Para cada día, tipo y zona, `panel_mercado_segmento` guarda solo los niveles qu
 de un modelo: modelo; modelo+acabado; modelo+acabado+motor; en VO, además, la matriz antigüedad×km
 de modelo, modelo+acabado, modelo+combustible, modelo+motor, modelo+acabado+combustible y
 modelo+acabado+motor (los filtros de la matriz; el motor implica su combustible, así que no hay cruce
-de los tres); modelo+familia de color (VN y VO) y, en VO, esos seis niveles de la matriz también con
-la familia de color (el filtro de color, combinable con los otros tres; no se cruza el color con el
-acabado ni el motor fuera de la matriz). Por segmento: anuncios, propios, con color (`con_color`, para
+de los tres); modelo+familia de color, modelo+acabado+color (`acabado_color`) y
+modelo+acabado+motor+color (`motor_color`), en VN y VO, para el filtro de color de la página y el color bajo
+cada motor; y, en VO, esos seis niveles de la matriz también con la familia de color. Nunca el cruce
+completo. Por segmento: anuncios, propios, con color (`con_color`, para
 la cobertura), precio p25/p50/p75 de los que tienen precio (como `percentile_cont`) y días publicado
 con la regla «≥ N».
 

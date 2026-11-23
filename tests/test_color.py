@@ -308,11 +308,11 @@ def test_familias_y_cobertura_cuadran_con_sql_directo(pg, datos, paleta):
            WHERE s.snapshot_day = %(dia)s AND s.fuente = 'vo' GROUP BY 1""", p)}
     assert {e: (n, c) for e, n, c in pg.execute("SELECT estado, anuncios, con_color FROM panel_mercado_color_fuente "
                                                 "WHERE dia = %s AND fuente = 'vo'", (dia,))} == directo
-    # Sin el cruce completo: el color no se cruza con el acabado ni el motor fuera de la matriz
+    # Sin el cruce completo: fuera de la matriz, el color solo con modelo, acabado y acabado+motor
     niveles_color = {n for (n,) in pg.execute("SELECT DISTINCT nivel FROM panel_mercado_segmento WHERE color IS NOT NULL")}
-    assert niveles_color == set(niveles)
+    assert niveles_color == set(niveles) | {"acabado_color", "motor_color"}
     assert {n for (n,) in pg.execute("SELECT DISTINCT nivel FROM panel_mercado_segmento WHERE tipo = 'VN'")} == \
-        {"modelo", "acabado", "motor", "color"}
+        {"modelo", "acabado", "motor", "color", "acabado_color", "motor_color"}
 
 
 # ================================================================== la vista: cobertura y nota
@@ -366,8 +366,8 @@ def test_bloque_de_color_en_vn_y_vo_con_las_reglas_de_n(app, pg, datos, personas
                 bloque = html.split('data-bloque="color"', 1)[1].split("</section>", 1)[0]
                 pct = con_color * 100 // anuncios
                 assert f'data-cobertura="{pct}"' in bloque and f"Color conocido en el {pct} %" in bloque
-                filas = re.findall(r'<div class="seg-fila seg-color"><span class="seg-nombre">([^<]+)</span>(.*?)</div>',
-                                   bloque, re.S)
+                filas = re.findall(r'<div class="seg-fila seg-color[^"]*"><span class="seg-nombre"><a [^>]*>([^<]+)</a></span>'
+                                   r'(.*?)</div>', bloque, re.S)
                 esperadas = pg.execute(
                     "SELECT color, anuncios, n_precio FROM panel_mercado_segmento WHERE dia = %s AND tipo = %s AND zona = %s "
                     "AND modelo = %s AND nivel = 'color' ORDER BY color = 'Sin especificar', anuncios DESC, color COLLATE \"C\"",
@@ -387,7 +387,7 @@ def test_bloque_de_color_en_vn_y_vo_con_las_reglas_de_n(app, pg, datos, personas
     assert vistas > 50
 
 
-# ================================================================== filtro de color en la matriz de VO
+# ================================================================== filtro de color de la página
 
 def _chips(html: str, grupo: str) -> list[tuple[str, str, bool]]:
     bloque = re.search(rf'data-filtro="{grupo}">(.*?)</div>', html, re.S)
@@ -397,16 +397,132 @@ def _chips(html: str, grupo: str) -> list[tuple[str, str, bool]]:
         r'<a class="chip-filtro" href="([^"]+)"[^>]*?( aria-current="true")?>([^<]+)</a>', bloque.group(1))]
 
 
-def test_filtro_de_color_combinable_cuadra_con_sql_directo(app, pg, datos, personas, paleta):
+def _num(texto: str) -> int:
+    return int(texto.replace(".", ""))
+
+
+def _tabla(html: str) -> tuple[int, dict]:
+    """(anuncios del total, {acabado: (anuncios, {motor: (anuncios, {familia: anuncios})})}) de «Por acabado y motor»."""
+    bloque = html.split('id="t-acabados"', 1)[1].split("</section>", 1)[0]
+    anuncios = r'<span class="seg-c"><span class="seg-et">Anuncios</span>([\d.]+)</span>'
+    total = _num(re.search(r'seg-total">.*?' + anuncios, bloque, re.S).group(1))
+    salida = {}
+    for trozo in bloque.split('<details class="seg-acabado')[1:]:
+        nombre, n = re.search(r'</span>([^<]+)<span class="n seg-motores">.*?' + anuncios, trozo, re.S).groups()
+        motores = {}
+        for m in re.split(r'(?=<details class="seg-motor-det">|<div class="seg-fila seg-motor">)', trozo)[1:]:
+            if m.startswith("<details"):
+                mn, mc = re.search(r'</span>([^<]+)<span class="n seg-motores">.*?' + anuncios, m, re.S).groups()
+                colores = {c: _num(x) for c, x in re.findall(
+                    r'seg-color-motor">\s*<span class="seg-nombre">([^<]+)</span>\s*' + anuncios, m)}
+            else:
+                mn, mc = re.search(r'<span class="seg-nombre">([^<]+)</span>\s*' + anuncios, m).groups()
+                colores = {}
+            motores[mn] = (_num(mc), colores)
+        salida[nombre] = (_num(n), motores)
+    return total, salida
+
+
+def _preparar_tipo(pg, paleta, dia):
+    """Tablas temporales clase (acabado, motor, combustible) y color_dia (familia) del día."""
     from analitica import versiones
+    pg.execute("DROP TABLE IF EXISTS clase; DROP TABLE IF EXISTS color_dia")
+    _clasificar(pg, versiones.cargar("Volkswagen"), dia)
+    _familias(pg, paleta, dia)
+
+
+def test_acabado_motor_y_color_cuadran_con_sql_directo_en_vn_y_vo(pg, datos, paleta):
+    """Niveles nuevos acabado_color y motor_color, en VN y VO y en tres zonas, frente a SQL directo."""
+    conc = _escenario_color(pg, datos)
+    comprobadas = 0
+    for tipo in ("VN", "VO"):
+        dia = pg.execute("SELECT max(dia) FROM panel_mercado_segmento WHERE tipo = %s", (tipo,)).fetchone()[0]
+        _preparar_tipo(pg, paleta, dia)
+        p = {"dia": dia, "tipo": tipo, "prov": conc.provincia_codigo, "ccaa": list(conc.provincias_comunidad)}
+        for zona in ("provincia", "comunidad", "espana"):
+            for nivel, (co, mo) in {"acabado_color": ("NULL", "NULL"), "motor_color": ("c.comb", "c.motor")}.items():
+                directo = {tuple(f[:5]): tuple(None if x is None else int(x) for x in f[5:]) for f in pg.execute(
+                    f"""SELECT s.modelo, c.acabado, {co}, {mo}, x.familia, count(*), count(s.precio_cents),
+                               round(percentile_cont(0.25) WITHIN GROUP (ORDER BY s.precio_cents)::numeric),
+                               round(percentile_cont(0.5) WITHIN GROUP (ORDER BY s.precio_cents)::numeric),
+                               round(percentile_cont(0.75) WITHIN GROUP (ORDER BY s.precio_cents)::numeric),
+                               count(*) FILTER (WHERE s.es_propio)
+                        FROM stock_externo_snapshot s JOIN clase c USING (id) JOIN color_dia x USING (id)
+                        WHERE s.snapshot_day = %(dia)s AND s.tipo_stock = %(tipo)s AND {ZONA_SQL[zona]}
+                          AND x.familia IS NOT NULL
+                        GROUP BY 1, 2, 3, 4, 5""", p)}
+                precalculado = {tuple(f[:5]): f[5:] for f in pg.execute(
+                    """SELECT modelo, acabado, combustible, motor, color, anuncios, n_precio, precio_p25_cents,
+                              precio_p50_cents, precio_p75_cents, propios
+                       FROM panel_mercado_segmento WHERE dia = %s AND tipo = %s AND zona = %s AND nivel = %s""",
+                    (dia, tipo, zona, nivel))}
+                assert precalculado == directo, (tipo, zona, nivel)
+                comprobadas += len(directo)
+    assert comprobadas > 1000
+
+
+def test_tabla_por_acabado_motor_y_color_en_la_pagina(app, pg, datos, personas, paleta):
+    """Sin filtro, cada motor despliega sus familias; con filtro de color, total, acabados y motores cuentan solo
+    esa familia. VN y VO, frente a SQL directo, para cada familia de dos modelos."""
+    from panel.mercado import url_detalle
+    conc = _escenario_color(pg, datos)
+    cl = dentro(app, "tecnico")
+    paginas = 0
+    for tipo, modelo in (("VO", "T-Roc"), ("VN", "T-Roc"), ("VN", "Golf")):
+        dia = pg.execute("SELECT max(dia) FROM panel_mercado_segmento WHERE tipo = %s", (tipo,)).fetchone()[0]
+        _preparar_tipo(pg, paleta, dia)
+        zona = "espana"
+        p = {"dia": dia, "tipo": tipo, "modelo": modelo, "prov": conc.provincia_codigo,
+             "ccaa": list(conc.provincias_comunidad)}
+        filas = pg.execute(
+            f"""SELECT c.acabado, c.motor, x.familia FROM stock_externo_snapshot s JOIN clase c USING (id)
+                JOIN color_dia x USING (id)
+                WHERE s.snapshot_day = %(dia)s AND s.tipo_stock = %(tipo)s AND {ZONA_SQL[zona]}
+                  AND s.modelo = %(modelo)s""", p).fetchall()
+        familias = sorted({f[2] for f in filas if f[2]})
+        assert len(familias) >= 3, (tipo, modelo)
+        con_color = sum(1 for f in filas if f[2])
+        for col in [None] + familias:
+            r = cl.get(url_detalle(modelo, tipo, zona, color=col))
+            assert r.status_code == 200, (tipo, modelo, col, r.headers.get("location"))
+            html = r.text
+            paginas += 1
+            mias = [f for f in filas if col is None or f[2] == col]
+            total, tabla = _tabla(html)
+            assert total == len(mias)
+            esperado: dict = {}
+            for a, m, fam in mias:
+                ea = esperado.setdefault(a, [0, {}])
+                ea[0] += 1
+                em = ea[1].setdefault(m, [0, {}])
+                em[0] += 1
+                if col is None and fam:
+                    em[1][fam] = em[1].get(fam, 0) + 1
+            assert tabla == {a: (n, {m: (k, cs) for m, (k, cs) in ms.items()}) for a, (n, ms) in esperado.items()}
+            # Filtro de color de la página: las familias del modelo y la elegida activa
+            chips = _chips(html, "color")
+            assert [e for e, *_ in chips[1:]] and {e for e, *_ in chips[1:]} == set(familias)
+            assert [e for e, _, act in chips if act] == [col or "Todos"]
+            if col:
+                pct = con_color * 100 // len(filas)
+                assert (f"Filtrando por color: solo cuentan los anuncios con color conocido ({pct} % del modelo)"
+                        in html)
+                assert f"Por acabado y motor · {col}</h2>" in html
+            else:
+                assert "Filtrando por color" not in html
+    assert paginas >= 12
+
+
+def test_filtros_con_color_no_ofrecen_valores_que_no_existen(app, pg, datos, personas, paleta):
+    """VO: con un color elegido, la matriz ofrece solo acabados, combustibles y motores que existen con él (y con
+    los demás filtros); sus casillas cuadran con SQL directo; ningún chip lleva a una redirección."""
     from panel.mercado import url_detalle
     conc = _escenario_color(pg, datos)
     dia = pg.execute("SELECT max(dia) FROM panel_mercado_segmento WHERE tipo = 'VO'").fetchone()[0]
-    _clasificar(pg, versiones.cargar("Volkswagen"), dia)
-    _familias(pg, paleta, dia)
+    _preparar_tipo(pg, paleta, dia)
     caso_ant, caso_km = _casos(conc)
     cl = dentro(app, "tecnico")
-    combinaciones = 0
+    combinaciones = chips_vistos = 0
     for zona, modelo in (("espana", "T-Roc"), ("espana", "Golf")):
         p = {"dia": dia, "modelo": modelo, "prov": conc.provincia_codigo, "ccaa": list(conc.provincias_comunidad)}
         cuartetos = set(pg.execute(
@@ -414,56 +530,95 @@ def test_filtro_de_color_combinable_cuadra_con_sql_directo(app, pg, datos, perso
                 JOIN color_dia x USING (id)
                 WHERE s.snapshot_day = %(dia)s AND s.tipo_stock = 'VO' AND {ZONA_SQL[zona]} AND x.familia IS NOT NULL
                   AND s.modelo = %(modelo)s AND s.fecha_matriculacion IS NOT NULL AND s.km IS NOT NULL""", p).fetchall())
-        familias = sorted({q[3] for q in cuartetos})
-        assert len(familias) >= 3
-        acabado = sorted({q[0] for q in cuartetos})[0]
-        for a in (None, acabado):
-            for col in familias:
-                con = [q for q in cuartetos if a is None or q[0] == a]
-                if not any(q[3] == col for q in con):
-                    continue
-                r = cl.get(url_detalle(modelo, "VO", zona, a, None, None, col))
-                assert r.status_code == 200, (modelo, a, col, r.headers.get("location"))
-                html = r.text
-                combinaciones += 1
-                assert f"Precio por antigüedad y km · {' · '.join(x for x in (a, col) if x)}</h2>" in html
-                assert [e for e, _, act in _chips(html, "color") if act] == [col]
-                assert {e for e, *_ in _chips(html, "color")[1:]} == {q[3] for q in con}
-                # Al cambiar de acabado se conserva el color
-                for et, url, _ in _chips(html, "acabado")[1:]:
-                    assert ("color=" in url) == any(q[0] == et and q[3] == col for q in cuartetos), (et, url)
-                directo = {(i, j): n for i, j, n in pg.execute(
-                    f"""SELECT {caso_ant}, {caso_km}, count(s.precio_cents)
-                        FROM stock_externo_snapshot s JOIN clase c USING (id) JOIN color_dia x USING (id)
-                        WHERE s.snapshot_day = %(dia)s AND s.tipo_stock = 'VO' AND {ZONA_SQL[zona]}
-                          AND s.modelo = %(modelo)s AND s.fecha_matriculacion IS NOT NULL AND s.km IS NOT NULL
-                          AND x.familia = %(col)s AND (%(a)s::text IS NULL OR c.acabado = %(a)s)
-                        GROUP BY 1, 2""", {**p, "col": col, "a": a})}
-                vistas = [int(n) for n in re.findall(r'<td data-etiqueta="[^"]*" data-n="(\d+)"', html)]
-                assert vistas == [directo.get((i, j), 0) for i in range(3) for j in range(4)], (modelo, a, col)
-                # Cobertura de la matriz: con color / anuncios de la matriz sin el filtro de color
-                n, con_c = pg.execute(
-                    f"""SELECT count(*), count(x.familia) FROM stock_externo_snapshot s JOIN clase c USING (id)
-                        JOIN color_dia x USING (id)
-                        WHERE s.snapshot_day = %(dia)s AND s.tipo_stock = 'VO' AND {ZONA_SQL[zona]}
-                          AND s.modelo = %(modelo)s AND s.fecha_matriculacion IS NOT NULL AND s.km IS NOT NULL
-                          AND (%(a)s::text IS NULL OR c.acabado = %(a)s)""", {**p, "a": a}).fetchone()
-                matriz = html.split('id="t-matriz"', 1)[1].split("</section>", 1)[0]
-                assert f"Color conocido en el {con_c * 100 // n} % de los anuncios" in _texto(matriz)
-    assert combinaciones >= 6
-    # Un color que no existe se descarta; en VN (sin matriz) se conserva si el modelo lo tiene
+        for col in sorted({q[3] for q in cuartetos}):
+            con_col = [q for q in cuartetos if q[3] == col]
+            for a in [None] + sorted({q[0] for q in con_col})[:2]:
+                con_a = [q for q in con_col if a is None or q[0] == a]
+                for c, m in [(None, None)] + sorted({(q[1], q[2]) for q in con_a})[:2]:
+                    r = cl.get(url_detalle(modelo, "VO", zona, a, c, m, col))
+                    assert r.status_code == 200, (modelo, a, c, m, col, r.headers.get("location"))
+                    html = r.text
+                    combinaciones += 1
+                    assert {e for e, *_ in _chips(html, "acabado")[1:]} == {q[0] for q in con_col}
+                    assert {e for e, *_ in _chips(html, "combustible")[1:]} == {q[1] for q in con_a}
+                    assert {e for e, *_ in _chips(html, "motor")[1:]} == \
+                        {q[2] for q in con_a if c is None or q[1] == c}
+                    for grupo in ("acabado", "combustible", "motor", "color"):
+                        for _, url, _ in _chips(html, grupo):
+                            if grupo != "color":
+                                assert f"color={quote(col, safe='')}" in url      # conservan el color
+                            chips_vistos += 1
+                    directo = {(i, j): n for i, j, n in pg.execute(
+                        f"""SELECT {caso_ant}, {caso_km}, count(s.precio_cents)
+                            FROM stock_externo_snapshot s JOIN clase c USING (id) JOIN color_dia x USING (id)
+                            WHERE s.snapshot_day = %(dia)s AND s.tipo_stock = 'VO' AND {ZONA_SQL[zona]}
+                              AND s.modelo = %(modelo)s AND s.fecha_matriculacion IS NOT NULL AND s.km IS NOT NULL
+                              AND x.familia = %(col)s AND (%(a)s::text IS NULL OR c.acabado = %(a)s)
+                              AND (%(c)s::text IS NULL OR c.comb = %(c)s) AND (%(m)s::text IS NULL OR c.motor = %(m)s)
+                            GROUP BY 1, 2""", {**p, "col": col, "a": a, "c": c, "m": m})}
+                    vistas = [int(n) for n in re.findall(r'<td data-etiqueta="[^"]*" data-n="(\d+)"', html)]
+                    assert vistas == [directo.get((i, j), 0) for i in range(3) for j in range(4)], (modelo, a, c, m, col)
+                    # Cobertura de la matriz (lo que filtran acabado, combustible y motor), por debajo del 90 %
+                    n, con_c = pg.execute(
+                        f"""SELECT count(*), count(x.familia) FROM stock_externo_snapshot s JOIN clase c USING (id)
+                            JOIN color_dia x USING (id)
+                            WHERE s.snapshot_day = %(dia)s AND s.tipo_stock = 'VO' AND {ZONA_SQL[zona]}
+                              AND s.modelo = %(modelo)s AND s.fecha_matriculacion IS NOT NULL AND s.km IS NOT NULL
+                              AND (%(a)s::text IS NULL OR c.acabado = %(a)s) AND (%(c)s::text IS NULL OR c.comb = %(c)s)
+                              AND (%(m)s::text IS NULL OR c.motor = %(m)s)""", {**p, "a": a, "c": c, "m": m}).fetchone()
+                    matriz = _texto(html.split('id="t-matriz"', 1)[1].split("</section>", 1)[0])
+                    assert (f"Color conocido en el {con_c * 100 // n} % de los anuncios; mientras se completa" in matriz) \
+                        is (con_c * 100 < 90 * n)
+    assert combinaciones > 40 and chips_vistos > 500
+    # Un acabado que no existe con el color se cae (queda el color); un color inexistente, fuera
+    col = sorted({q[3] for q in cuartetos})[0]
+    sin = sorted({q[0] for q in cuartetos} - {q[0] for q in cuartetos if q[3] == col})
+    if sin:
+        r = cl.get(url_detalle("Golf", "VO", "espana", sin[0], None, None, col))
+        assert r.status_code == 303 and r.headers["location"] == url_detalle("Golf", "VO", "espana", color=col)
     base = "/mercado/modelo/T-Roc?tipo=VO&zona=espana"
     r = cl.get(base + "&color=Fucsia")
     assert r.status_code == 303 and r.headers["location"] == base
-    col = pg.execute("SELECT color FROM panel_mercado_segmento WHERE tipo = 'VO' AND zona = 'espana' AND modelo = 'T-Roc' "
-                     "AND nivel = 'color_antiguedad_km' AND dia = %s ORDER BY anuncios DESC LIMIT 1", (dia,)).fetchone()[0]
-    html = cl.get(url_detalle("T-Roc", "VO", "espana", None, None, None, col)).text
-    tipos = {et: url.replace("&amp;", "&") for url, et in
-             re.findall(r'<a class="segmento" href="([^"]+)"[^>]*>([^<]+)</a>', html)}
-    tiene_vn = pg.execute("SELECT count(*) FROM panel_mercado_segmento WHERE tipo = 'VN' AND zona = 'espana' "
-                          "AND modelo = 'T-Roc' AND nivel = 'color' AND color = %s AND dia = (SELECT max(dia) FROM "
-                          "panel_mercado_dia WHERE tipo = 'VN')", (col,)).fetchone()[0]
-    assert ("color=" in tipos["Nuevos (VN)"]) == bool(tiene_vn)
+
+
+def test_color_se_conserva_al_cambiar_de_zona_y_tipo_si_existe(app, pg, datos, personas):
+    from panel.mercado import url_detalle
+    _escenario_color(pg, datos)
+    cl = dentro(app, "tecnico")
+    familias = {(t, z): {c for (c,) in pg.execute(
+        "SELECT color FROM panel_mercado_segmento WHERE tipo = %s AND zona = %s AND modelo = 'T-Roc' AND nivel = 'color' "
+        "AND dia = (SELECT max(dia) FROM panel_mercado_dia WHERE tipo = %s)", (t, z, t))}
+        for t in ("VN", "VO") for z in ("provincia", "cercana", "comunidad", "espana")}
+    vistas = 0
+    for col in sorted(familias[("VO", "espana")]):
+        html = cl.get(url_detalle("T-Roc", "VO", "espana", color=col)).text
+        enlaces = {et: url.replace("&amp;", "&")
+                   for url, et in re.findall(r'<a class="segmento" href="([^"]+)"[^>]*>([^<]+)</a>', html)}
+        for et, (t, z) in {"Nuevos (VN)": ("VN", "espana"), "Andalucía": ("VO", "comunidad")}.items():
+            assert ("color=" in enlaces[et]) == (col in familias[(t, z)]), (col, et)
+            vistas += 1
+    assert vistas >= 6
+
+
+def test_nota_de_cobertura_en_la_tabla_y_linea_de_filtro(app, pg, datos, personas):
+    cl = dentro(app, "tecnico")
+    _vo(pg, datos, 8, 9)                                  # 88 %: nota en la tabla
+    html = cl.get("/mercado/modelo/Golf?tipo=VO&zona=espana").text
+    tabla = _texto(html.split('id="t-acabados"', 1)[1].split("</section>", 1)[0])
+    assert "Color conocido en el 88 % de los anuncios; mientras se completa" in tabla
+    html = cl.get("/mercado/modelo/Golf?tipo=VO&zona=espana&color=Gris").text
+    assert "Filtrando por color: solo cuentan los anuncios con color conocido (88 % del modelo)" in html
+
+
+def test_sin_nota_en_la_tabla_desde_el_90(app, pg, datos, personas):
+    _vo(pg, datos, 9, 10)                                 # 90 %: sin nota en la tabla; la línea del filtro, sí
+    cl = dentro(app, "tecnico")
+    html = cl.get("/mercado/modelo/Golf?tipo=VO&zona=espana").text
+    tabla = _texto(html.split('id="t-acabados"', 1)[1].split("</section>", 1)[0])
+    assert "Color conocido" not in tabla
+    html = cl.get("/mercado/modelo/Golf?tipo=VO&zona=espana&color=Gris").text
+    assert "Filtrando por color: solo cuentan los anuncios con color conocido (90 % del modelo)" in html
+    assert "mientras se completa" not in html.split('id="t-acabados"', 1)[1].split("</section>", 1)[0]
 
 
 # ================================================================== «Estado de las fuentes»

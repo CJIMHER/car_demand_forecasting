@@ -54,20 +54,37 @@
   {% else %}
   <p class="dia-datos">Datos del {{ d.dia_largo }}{% if not d.es_hoy %}<span class="aviso-dia"> · Falta la captura completa de hoy: se muestran los datos del último día completo.</span>{% endif %}</p>
 
+  {% if d.filtrando %}
+  <p class="recuadro aviso-cobertura incompleta filtrando-color" role="status">{{ d.filtrando }}</p>
+  {% endif %}
+  {% if d.filtro_color|length > 1 %}
+  <div class="filtro-matriz filtro-pagina">
+    <span class="filtro-nombre" id="filtro-color">Color</span>
+    <div role="group" aria-labelledby="filtro-color" class="filtro-acabado" data-filtro="color">
+      {% for o in d.filtro_color %}
+      <a class="chip-filtro" href="{{ o.url }}" hx-get="{{ o.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true"{% if o.activa %} aria-current="true"{% endif %}>{{ o.etiqueta }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <p class="recuadro aviso-precio" role="note">{{ d.nota_precio }}</p>
   {% if d.nota_espana %}
   <p class="recuadro aviso-zona" role="note">{{ d.nota_espana.texto }} <a href="{{ d.nota_espana.url }}" hx-get="{{ d.nota_espana.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true">Ver {{ d.modelo }} en España</a>, con más anuncios por segmento.</p>
   {% endif %}
 
   <section aria-labelledby="t-acabados" class="tarjeta">
-    <h2 id="t-acabados">Por acabado y motor</h2>
+    <h2 id="t-acabados">Por acabado y motor{% if d.color %} · {{ d.color }}{% endif %}</h2>
+    {% if d.cobertura_tabla %}
+    <p class="recuadro aviso-cobertura incompleta" role="note" data-cobertura="{{ d.cobertura_tabla.pct }}">{{ d.cobertura_tabla.texto }}</p>
+    {% endif %}
     <div class="segs">
       <div class="seg-fila seg-cabecera" aria-hidden="true">
-        <span class="seg-nombre">Acabado · motor</span><span class="seg-c">Anuncios</span><span class="seg-c">Nuestros</span>
+        <span class="seg-nombre">Acabado · motor{% if not d.color %} · color{% endif %}</span><span class="seg-c">Anuncios</span><span class="seg-c">Nuestros</span>
         <span class="seg-c seg-precio">Precio mediano<span class="rango">p25–p75</span></span><span class="seg-c">Días publicado</span>
       </div>
       <div class="seg-fila seg-total">
-        <span class="seg-nombre">Todos los acabados</span>
+        <span class="seg-nombre">{% if d.color %}{{ d.color }}: todos los acabados{% else %}Todos los acabados{% endif %}</span>
         {{ cifras(d.total) }}
       </div>
       {% for a in d.acabados %}
@@ -77,15 +94,30 @@
           {{ cifras(a) }}
         </summary>
         {% for m in a.motores %}
+        {% if m.colores %}
+        <details class="seg-motor-det">
+          <summary class="seg-fila seg-motor">
+            <span class="seg-nombre"><span class="seg-flecha" aria-hidden="true"></span>{{ m.nombre }}<span class="n seg-motores">{{ m.colores|length }} {{ 'color' if m.colores|length == 1 else 'colores' }}</span></span>
+            {{ cifras(m) }}
+          </summary>
+          {% for c in m.colores %}
+          <div class="seg-fila seg-color-motor">
+            <span class="seg-nombre">{{ c.nombre }}</span>
+            {{ cifras(c) }}
+          </div>
+          {% endfor %}
+        </details>
+        {% else %}
         <div class="seg-fila seg-motor">
           <span class="seg-nombre">{{ m.nombre }}</span>
           {{ cifras(m) }}
         </div>
+        {% endif %}
         {% endfor %}
       </details>
       {% endfor %}
     </div>
-    <p class="nota">Pulsa un acabado para ver sus motores.</p>
+    <p class="nota">{% if d.color %}Solo los anuncios de color {{ d.color }}. {% endif %}Pulsa un acabado para ver sus motores{% if not d.color %} y un motor para ver sus colores (solo los anuncios con color conocido){% endif %}.</p>
   </section>
 
   {% if d.matriz %}
@@ -139,7 +171,7 @@
         <span class="seg-c seg-precio">Precio mediano<span class="rango">p25–p75</span></span><span class="seg-c">Días publicado</span>
       </div>
       {% for c in d.colores.filas %}
-      <div class="seg-fila seg-color"><span class="seg-nombre">{{ c.nombre }}</span>{{ cifras(c) }}</div>
+      <div class="seg-fila seg-color{% if c.activa %} activa{% endif %}"><span class="seg-nombre"><a class="enlace-color" href="{{ c.url }}" hx-get="{{ c.url }}" hx-target="#detalle-modelo" hx-swap="outerHTML" hx-push-url="true"{% if c.activa %} aria-current="true"{% endif %}>{{ c.nombre }}</a></span>{{ cifras(c) }}</div>
       {% endfor %}
     </div>
     {% else %}
