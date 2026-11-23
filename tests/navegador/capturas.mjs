@@ -13,7 +13,8 @@
 // (1440 y 390 px). En el detalle de un modelo (VN y VO, varias zonas y filtros de la matriz), con los
 // acabados desplegados, que nada desborda ni se sale de su tarjeta a 1440 y 390 px, y que el enlace de
 // la tabla por modelo lleva al detalle con la misma zona y tipo. Pulsa los filtros de la matriz
-// (acabado, combustible, motor) y cambia de tipo y de zona: los tres viajan en la URL. Guarda Mercado, el detalle de un
+// (acabado, combustible, motor y color) y cambia de tipo y de zona: los cuatro viajan en la URL. Comprueba el
+// bloque «Por color» con su cobertura en VN y VO y la cobertura de la matriz con un color elegido. Guarda Mercado, el detalle de un
 // modelo (VN, VO y VO en la provincia), Dirección, Ventas y Marketing (Todo, VN y VO) a 1440 px y a
 // 390 px. Sale con código 1 si algo falla o si hay errores de CSP.
 import fs from "node:fs";
@@ -152,12 +153,13 @@ const abrir0 = "document.querySelectorAll('details.seg-acabado').forEach((d, i) 
 const DETALLES_MODELO = ["/mercado/modelo/T-Roc?tipo=VN&zona=espana", "/mercado/modelo/T-Roc?tipo=VO&zona=espana",
   "/mercado/modelo/T-Roc?tipo=VO&zona=provincia", "/mercado/modelo/Golf?tipo=VO&zona=espana&acabado=Life",
   "/mercado/modelo/Golf?tipo=VO&zona=espana&combustible=Di%C3%A9sel",
-  "/mercado/modelo/ID.4?tipo=VN&zona=comunidad"];
+  "/mercado/modelo/ID.4?tipo=VN&zona=comunidad", "/mercado/modelo/T-Roc?tipo=VO&zona=espana&color=Gris",
+  "/mercado/modelo/Golf?tipo=VO&zona=espana&acabado=Life&color=Blanco"];
 const modeloRes = [];
 const medirModelo = ancho => `(() => {
       document.querySelectorAll('details.seg-acabado').forEach(d => { d.open = true; });
       const ancho = ${ancho}, doc = document.documentElement, malas = [];
-      for (const el of document.querySelectorAll('.seg-fila > *, .seg-fila .rango, .matriz th, .matriz td, .chip-filtro, .filtro-nombre')) {
+      for (const el of document.querySelectorAll('.seg-fila > *, .seg-fila .rango, .matriz th, .matriz td, .chip-filtro, .filtro-nombre, .aviso-cobertura')) {
         const caja = el.closest('.tarjeta').getBoundingClientRect(), r = el.getBoundingClientRect();
         if (r.width > 0 && (r.left < Math.max(0, caja.left) - 0.5 || r.right > Math.min(ancho, caja.right) + 0.5))
           malas.push(el.textContent.trim().slice(0, 40));
@@ -170,7 +172,12 @@ const medirModelo = ancho => `(() => {
         acabados: document.querySelectorAll('details.seg-acabado').length, motores: document.querySelectorAll('.seg-motor').length,
         matriz: document.querySelectorAll('.matriz td').length, notaEspana: !!document.querySelector('.aviso-zona'),
         filtros: [...document.querySelectorAll('[data-filtro]')].map(g => g.dataset.filtro + ' ' + g.querySelectorAll('.chip-filtro').length),
-        titulo: document.querySelector('#t-matriz')?.textContent.trim(), fuera: malas});
+        titulo: document.querySelector('#t-matriz')?.textContent.trim(), fuera: malas,
+        // bloque «Por color» con su cobertura (y la nota fija por debajo del 90 %), en VN y VO
+        color: !!document.querySelector('[data-bloque="color"] .aviso-cobertura'),
+        colores: document.querySelectorAll('.seg-color').length,
+        cobertura: document.querySelector('[data-bloque="color"] .aviso-cobertura')?.textContent.trim(),
+        coberturaMatriz: document.querySelector('#t-matriz ~ .aviso-cobertura')?.textContent.trim() || null});
     })()`;
 for (const [ancho, movil] of [[1440, false], [390, true]]) {
   await tamano(ancho, movil);
@@ -188,6 +195,8 @@ for (const [ancho, movil] of [[1440, false], [390, true]]) {
   await pulsa('[data-filtro="acabado"] .chip-filtro', 1);
   await pulsa('[data-filtro="combustible"] .chip-filtro', 1);
   await pulsa('[data-filtro="motor"] .chip-filtro', 1);
+  if (await evalua(`document.querySelectorAll('[data-filtro="color"] .chip-filtro').length > 1`))
+    await pulsa('[data-filtro="color"] .chip-filtro', 1);
   const elegida = await evalua("decodeURIComponent(location.search)"), direccion = await evalua("location.href");
   const medida = JSON.parse(await evalua(medirModelo(ancho)));
   modeloRes.push(medida);
@@ -204,7 +213,7 @@ for (const [ancho, movil] of [[1440, false], [390, true]]) {
     enTitulo: medida.titulo.includes(p.get("acabado")) && medida.titulo.includes(p.get("motor")),
     // en VN y en la comunidad cada filtro se conserva o se cae (si allí no existe), nunca cambia de valor
     coherente: [enVN, vuelta, enComunidad].every(q => { const x = new URLSearchParams(q);
-      return ["acabado", "combustible", "motor"].every(k => !x.get(k) || x.get(k) === p.get(k)); })});
+      return ["acabado", "combustible", "motor", "color"].every(k => !x.get(k) || x.get(k) === p.get(k)); })});
   await ir(direccion);
   await evalua(abrir0); await espera(300);
   await captura(`modelo_vo_filtros_${movil ? "movil_390" : "escritorio_1440"}.png`);
@@ -228,7 +237,8 @@ const comprobacion = JSON.stringify({
   sinGrafico: resultados.filter(r => r.ruta && /direccion|ventas/.test(r.ruta) && r.graficos === 0).map(r => r.ruta),
   escritorioFuera: escritorio.filter(r => r.celdasFuera.length || r.desborda).map(r => r.ruta),
   detalleFuera: detalles.filter(d => !d.dentro || !d.deEse || !d.curva || d.scrollY === 0).map(d => d.ancho),
-  detalleModelo: modeloRes.filter(r => r.desborda || r.fuera.length || r.acabados === 0 ||
+  detalleModelo: modeloRes.filter(r => r.desborda || r.fuera.length || r.acabados === 0 || !r.color ||
+                                       (r.ruta.includes("color=") && !r.coberturaMatriz) ||
                                        (r.ruta.includes("tipo=VO") ? r.matriz !== 12 : r.matriz !== 0)).map(r => r.ancho + " " + r.ruta),
   filtros: filtrosRes.filter(f => !f.tres || !f.enTitulo || !f.coherente).map(f => f.ancho),
   enlaceModelo: /^\/mercado\/modelo\/[^?]+\?tipo=VO&zona=comunidad$/.test(enlaceModelo),
@@ -250,12 +260,22 @@ for (const [v, ruta] of Object.entries(PAGINAS)) {
 const abrir = "document.querySelectorAll('details.seg-acabado').forEach((d, i) => { d.open = i < 2; }); true";
 for (const [nombre, ruta] of [["modelo_vn", "/mercado/modelo/T-Roc?tipo=VN&zona=espana"],
                               ["modelo_vo", "/mercado/modelo/T-Roc?tipo=VO&zona=espana"],
-                              ["modelo_vo_provincia", "/mercado/modelo/T-Roc?tipo=VO&zona=provincia"]]) {
+                              ["modelo_vo_provincia", "/mercado/modelo/T-Roc?tipo=VO&zona=provincia"],
+                              ["modelo_vo_color", "/mercado/modelo/T-Roc?tipo=VO&zona=espana&color=Gris"]]) {
   for (const [ancho, movil, sufijo] of [[1440, false, "escritorio_1440"], [390, true, "movil_390"]]) {
     await tamano(ancho, movil); await ir(`${BASE}${ruta}`); await evalua(abrir); await espera(300);
     await captura(`${nombre}_${sufijo}.png`);
   }
 }
+// Estado de las fuentes con el bloque de color (por fuente y estado; nombres sin familia): nada desborda
+const estadoRes = [];
+for (const [ancho, movil, sufijo] of [[1440, false, "escritorio_1440"], [390, true, "movil_390"]]) {
+  await tamano(ancho, movil); await ir(`${BASE}/estado-fuentes`);
+  estadoRes.push(JSON.parse(await evalua(`JSON.stringify({ancho: ${ancho}, desborda: document.documentElement.scrollWidth > ${ancho},
+    tablasColor: document.querySelectorAll('.tabla-color').length, sinFamilia: document.querySelectorAll('.tabla-sin-familia tbody tr').length})`)));
+  await captura(`estado_fuentes_${sufijo}.png`);
+}
+for (const r of estadoRes) console.log("estado de las fuentes:", JSON.stringify(r));
 await tamano(390, true); await ir(`${BASE}/mercado`); await espera(500);
 const zonas = await evalua(`JSON.stringify([...document.querySelectorAll('.segmento, .nav-movil-item, .boton-salir')].filter(e => getComputedStyle(e).display !== 'none').map(e => Math.round(e.getBoundingClientRect().height)))`);
 console.log("altos de zonas táctiles (px):", zonas);
@@ -263,7 +283,8 @@ console.log("errores de consola/CSP:", errores.length ? errores : "ninguno");
 const c = JSON.parse(comprobacion);
 const mal = errores.length > 0 || c.desborda || c.filas === 0 || c.sinConcesionariosEnProvincia ||
   c.filasConDatosFuera.length > 0 || c.tarjetasFuera > 0 || c.escritorioFuera.length > 0 || c.sinBanda.length > 0 || c.sinGrafico.length > 0 || c.detalleFuera.length > 0 ||
-  c.detalleModelo.length > 0 || !c.enlaceModelo || c.filtros.length > 0 || filtrosRes.length !== 2;
+  c.detalleModelo.length > 0 || !c.enlaceModelo || c.filtros.length > 0 || filtrosRes.length !== 2 ||
+  estadoRes.some(r => r.desborda || r.tablasColor === 0 || r.sinFamilia === 0);
 console.log("comprobación:", comprobacion);
 console.log(mal ? "RESULTADO: FALLA" : "RESULTADO: correcto");
 ws.close(); process.exit(mal ? 1 : 0);

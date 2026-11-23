@@ -4,7 +4,11 @@ Lee las tablas de hechos (stock_externo_snapshot, eventos_externos, scraper_runs
 tablas derivadas panel_mercado_dia, panel_mercado_modelo, panel_mercado_concesionario,
 panel_mercado_capturas, panel_mercado_competidor (analitica/competidores.py, para la alerta de
 presión de un competidor) y, para el detalle de cada modelo, panel_mercado_segmento y
-panel_mercado_sin_clasificar (analitica/segmentos.py). El panel solo lee estas tablas: nunca
+panel_mercado_sin_clasificar (analitica/segmentos.py); para la cobertura del color,
+panel_mercado_color_fuente y panel_mercado_color_sin_familia. El color de cada anuncio sale de
+color_anuncio (ingesta/colores.py), unido por fuente + id_anuncio: vale el último color con estado ok
+o listing_color sabido hasta ese día (fetched_at), y un VIN de la ficha distinto del del anuncio lo
+anula. El panel solo lee estas tablas: nunca
 calcula sobre las de hechos al servir una página. Recalcular un día sustituye ese día en las
 derivadas; las tablas de hechos no se tocan.
 
@@ -54,7 +58,7 @@ from datetime import date, timedelta
 import psycopg
 from psycopg.types.json import Jsonb
 
-from analitica import competidores, segmentos, versiones
+from analitica import colores, competidores, segmentos, versiones
 from ingesta import aviso_copia, telegram
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
 from ingesta.db import conectar
@@ -82,7 +86,9 @@ class Fila:
     potencia_cv: int | None = None
     matriculacion: date | None = None
     km: int | None = None
-    color: str | None = None
+    color: str | None = None          # color exterior tal cual (ficha o, si no hay, el del scraper)
+    color_estado: str | None = None   # estado de la ficha ese día (None: el anuncio no está en la exportación)
+    color_vin_distinto: bool = False  # la ficha trae color con un VIN distinto del anuncio: se anula
 
 
 Clave = tuple[str, str]  # (fuente, id_anuncio)
@@ -121,6 +127,27 @@ def precio_mediano(precios: list[int]) -> int | None:
 
 
 # --------------------------------------------------------------------------- lectura de hechos
+
+ESTADOS_CON_COLOR = ("ok", "listing_color")   # estados de la ficha cuyo color exterior vale
+
+
+def _vin(valor: str) -> str:
+    return re.sub(r"\s+", "", valor).upper()
+
+
+def colores_conocidos(pg: psycopg.Connection) -> dict[Clave, list[tuple]]:
+    """Historia del color de cada anuncio (color_anuncio): [(día en que se supo, id, VIN, estado, color)],
+    en orden. El día en que se supo es el de fetched_at (o, sin él, el de la lectura) en Madrid. El color
+    solo vale con estado ok o listing_color."""
+    historia: dict[Clave, list[tuple]] = defaultdict(list)
+    for fuente, id_anuncio, dia, ident, vin, estado, texto in pg.execute(
+            """SELECT fuente, id_anuncio, (coalesce(fetched_at, captured_at) AT TIME ZONE 'Europe/Madrid')::date,
+                      id, bastidor, estado, color_exterior
+               FROM color_anuncio ORDER BY 1, 2, 3, 4"""):
+        valido = texto if estado in ESTADOS_CON_COLOR else None
+        historia[(fuente, id_anuncio)].append((dia, ident, vin, estado, valido))
+    return historia
+
 
 class Hechos:
     """Lo que hace falta de las tablas de hechos, leído una vez por pasada (y los días, a demanda)."""
@@ -162,6 +189,25 @@ class Hechos:
             self._nombres[dealer] = (orden, [sorted(dias[d].items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
                                              for d in orden])
         self._dias: dict[date, dict[Clave, Fila]] = {}
+        self._colores = colores_conocidos(pg)
+
+    def color(self, clave: Clave, dia: date, bastidor: str | None) -> tuple[str | None, str | None, bool]:
+        """(color exterior, estado de la ficha, VIN distinto) de un anuncio el día `dia`, con lo que se
+        sabía ese día (sin mirar al futuro). Un VIN distinto del del anuncio anula el color."""
+        historia = self._colores.get(clave)
+        if not historia:
+            return None, None, False
+        i = bisect.bisect_right(historia, (dia, float("inf")))
+        if not i:
+            return None, None, False
+        estado = historia[i - 1][3]
+        for _, _, vin, _, texto in reversed(historia[:i]):
+            if texto is None:
+                continue
+            if vin and bastidor and _vin(vin) != _vin(bastidor):
+                return None, estado, True
+            return texto, estado, False
+        return None, estado, False
 
     def nombre_concesionario(self, dealer_id: str, dia: date) -> str:
         """El nombre más reciente con que la web ha publicado este código hasta `dia` (si no hay, el código)."""
@@ -184,12 +230,16 @@ class Hechos:
             if len(self._dias) > 16:  # se recorre en orden: basta con los últimos días
                 for viejo in sorted(self._dias)[:-9]:
                     del self._dias[viejo]
-            self._dias[dia] = {
-                (f, i): Fila(p, d, bool(pr), self.modelo(m), *resto)
-                for f, i, p, d, pr, m, *resto in self.pg.execute(
+            filas = {}
+            for f, i, p, d, pr, m, *resto, color_scraper, bastidor in self.pg.execute(
                     """SELECT fuente, id_anuncio, provincia_codigo, dealer_id, es_propio, modelo, precio_cents,
-                              version, combustible, potencia_cv, fecha_matriculacion, km, color_exterior
-                       FROM stock_externo_snapshot WHERE snapshot_day = %s""", (dia,))}
+                              version, combustible, potencia_cv, fecha_matriculacion, km, color_exterior, bastidor
+                       FROM stock_externo_snapshot WHERE snapshot_day = %s""", (dia,)):
+                color, estado, vin_distinto = self.color((f, i), dia, bastidor)
+                if color is None and not vin_distinto:
+                    color = color_scraper   # el del propio anuncio, si algún día lo publica la web
+                filas[(f, i)] = Fila(p, d, bool(pr), self.modelo(m), *resto, color, estado, vin_distinto)
+            self._dias[dia] = filas
         fuentes = TIPOS[tipo]
         return {k: v for k, v in self._dias[dia].items() if k[0] in fuentes}
 
@@ -350,6 +400,7 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
     inicio = time.monotonic()
     conc = conc or cargar_concesionario()
     catalogo = versiones.cargar(conc.marca)
+    paleta = colores.cargar()
     h = Hechos(pg, conc)
     hasta = hasta or hoy_madrid()
     todos = set().union(*h.completos.values())
@@ -365,9 +416,14 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
     while d <= hasta:
         with pg.transaction():
             for tabla in ("panel_mercado_concesionario", "panel_mercado_modelo", "panel_mercado_dia",
-                          "panel_mercado_segmento", "panel_mercado_sin_clasificar", "panel_mercado_competidor"):
+                          "panel_mercado_segmento", "panel_mercado_sin_clasificar", "panel_mercado_competidor",
+                          "panel_mercado_color_fuente", "panel_mercado_color_sin_familia"):
                 pg.execute(f"DELETE FROM {tabla} WHERE dia = %s", (d,))
             calculado = False
+            for fuente in FUENTES:   # cobertura del color: cada fuente con su captura completa del día
+                if d in h.completos[fuente]:
+                    _insertar(pg, "panel_mercado_color_fuente", segmentos.COLS_COLOR_FUENTE,
+                              segmentos.cobertura_fuente(h, d, fuente))
             for tipo in TIPOS:
                 if h.valido(d, tipo):
                     filas_dia, filas_modelo, filas_conc = calcular_dia(h, d, tipo)
@@ -378,9 +434,10 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                     _insertar(pg, "panel_mercado_competidor", competidores.COLS, filas_comp)
                     resumen["filas_competidor"] += len(filas_comp)
                     t = time.monotonic()
-                    filas_seg, sin_clasificar = segmentos.calcular(h, d, tipo, catalogo)
+                    filas_seg, sin_clasificar, sin_familia = segmentos.calcular(h, d, tipo, catalogo, paleta)
                     _insertar(pg, "panel_mercado_segmento", segmentos.COLS_SEGMENTO, filas_seg)
                     _insertar(pg, "panel_mercado_sin_clasificar", segmentos.COLS_SIN_CLASIFICAR, sin_clasificar)
+                    _insertar(pg, "panel_mercado_color_sin_familia", segmentos.COLS_SIN_FAMILIA, sin_familia)
                     t_segmentos += time.monotonic() - t
                     resumen["filas_segmento"] += len(filas_seg)
                     por_nivel.update(f"{tipo} {f['nivel']}" for f in filas_seg)

@@ -161,6 +161,34 @@ def test_b_sin_clics_salta_por_tasa_de_clic_y_no_juzga_clic_a_lead(pg, conc, cri
     assert r.activa and r.cifras["senales"] == ["no_atrae"] and "clic a lead" not in r.cifras_texto
 
 
+@pytest.mark.parametrize("impresiones, salta", [(999, False), (1_000, True)])
+def test_b_tasa_de_clic_necesita_1000_impresiones(pg, conc, crit, impresiones, salta):
+    # 0 clics: tasa de clic 0 %. Con 999 impresiones se muestra la cifra pero no salta; con 1.000, salta.
+    campana(pg, "C", leads=0, impresiones=impresiones, clics=0, gasto=100)
+    r = juicio(pg, conc, crit, "C").reglas["b"]
+    assert r.activa is salta
+    assert f"tasa de clic: 0 de {impresiones} impresiones = 0 % (umbral 1 %)" in r.cifras_texto
+    assert r.cifras["senales"] == (["no_atrae"] if salta else [])
+    if not salta:
+        assert r.estado == "sin_volumen" and r.decision is None and r.cifras["senales_sin_volumen"] == ["no_atrae"]
+        assert "sin volumen: 999 impresiones, mínimo 1000" in r.cifras_texto
+        assert juicio(pg, conc, crit, "C").decision == "continuar"
+    assert crit["b"]["n_minimo"] == {"impresiones": 1000, "clics": 50}
+
+
+@pytest.mark.parametrize("clics, salta", [(49, False), (50, True)])
+def test_b_clic_a_lead_necesita_50_clics(pg, conc, crit, clics, salta):
+    # 0 leads de 49 o 50 clics (0 %), con la tasa de clic sobre su umbral (clics de 1.000 impresiones).
+    campana(pg, "C", leads=0, impresiones=1_000, clics=clics, gasto=100)
+    r = juicio(pg, conc, crit, "C").reglas["b"]
+    assert r.activa is salta
+    assert f"clic a lead: 0 de {clics} clics = 0 % (umbral 3 %)" in r.cifras_texto
+    assert r.cifras["senales"] == (["no_convence"] if salta else [])
+    assert ("sin volumen: 49 clics, mínimo 50" in r.cifras_texto) is not salta
+    if not salta:
+        assert r.estado == "sin_volumen" and r.revisar == ""
+
+
 @pytest.mark.parametrize("leads, salta", [(40, True), (60, False)])
 def test_b_claramente_por_debajo_del_mismo_modelo_y_mes(pg, conc, crit, leads, salta):
     # Noviembre de 2025, mismo modelo: 10 % de leads por impresión. Ahora, 4 % o 6 %, con tasa de clic y de

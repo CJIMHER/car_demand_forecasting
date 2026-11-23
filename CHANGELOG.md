@@ -1,5 +1,40 @@
 # Cambios
 
+## 2026-11-23 · Color en Mercado y volumen mínimo de la regla b de Meta (rama hito-1b-color)
+
+- **Color de los anuncios** (`ingesta/colores.py`, migración `0011`). La tarea de las 08:30 (`make cargar`),
+  después del stock, lee en solo lectura `/opt/cdf/data/vw_details/exports/colors_latest.jsonl.gz` (el compose
+  monta solo `exports`, `:ro`) y añade a `color_anuncio` (solo añadir) fuente, vehicle_id, VIN, color exterior e
+  interior tal cual, estado y fetched_at; solo las líneas que cambian algo. No toca los hechos de los scrapers,
+  los eventos ni `anuncios_externos`. Sin fichero (`sin_captura`) o ilegible (`error`) se anota en
+  `fuentes_estado` (fuente `colores`) y la carga del stock sigue con su mismo resultado.
+- **Unión con el stock** en el precálculo: fuente + vehicle_id; vale el último color con estado `ok` o
+  `listing_color` sabido ese día (fetched_at en Madrid: sin mirar al futuro); un VIN de la ficha distinto del
+  bastidor del anuncio anula el color.
+- **Familias** en `config/colores.yaml` (`analitica/colores.py`): blanco, negro, gris, plata, azul, rojo,
+  verde, amarillo, naranja, marrón/beige, otros y «sin especificar»; palabras clave sin mayúsculas ni tildes;
+  aparte, el acabado de la pintura (metalizado, perla, mate).
+- **Mercado**: bloque «Por color» en el detalle de un modelo (VN y VO) con anuncios, nuestros, precio mediano
+  p25–p75 y días, con las mismas reglas de n; filtro de color en la matriz de VO, combinable con acabado,
+  combustible y motor (`&color=` en la URL, se conserva al cambiar de zona o tipo si existe). Precálculo: nivel
+  `color` (familia) y seis niveles de matriz con color; nada de cruce completo.
+- **Cobertura**: cada bloque de color dice qué % de los anuncios del segmento tiene color (`con_color`); por
+  debajo del 90 %, «Color conocido en el X % de los anuncios; mientras se completa, predominan los publicados
+  hace más tiempo». En «Estado de las fuentes», % con color por fuente y estado de la ficha (y los anulados por
+  VIN) y los 20 nombres de color sin familia más frecuentes (`panel_mercado_color_fuente`,
+  `panel_mercado_color_sin_familia`).
+- **Regla b de Meta, volumen mínimo**: la tasa de clic solo salta con al menos 1.000 impresiones y la de clic a
+  lead con al menos 50 clics (`criterios_meta.b.n_minimo` en `alertas/reglas.yaml`); por debajo se muestra la
+  cifra con «sin volumen» y no salta. Versión de reglas `reglas-2026-11-23`. `docs/criterios_marketing_meta.md`
+  y `alertas/README.md` actualizados.
+- **Pruebas**: `tests/test_color.py` (familias con los nombres reales, carga solo añadir sin tocar los hechos,
+  sin fichero y fichero ilegible, VIN distinto, sin mirar al futuro, niveles y cobertura frente a SQL directo,
+  nota de cobertura en el borde 89 % / 90 %, filtro de color combinable, «Estado de las fuentes», migración);
+  bordes 999 / 1.000 impresiones y 49 / 50 clics en `tests/test_criterios_meta.py`; Chrome a 1440 y 390 px
+  (`tests/navegador/capturas.mjs`, capturas en `docs/capturas/`).
+- **Despliegue**: `make deploy` (migración `0011`, nuevo montaje en cdf_jobs) y después `make precalcular` para
+  rellenar el color hacia atrás.
+
 ## 2026-11-21 · Regla b de Meta: tasa de clic y tasa de clic a lead (rama hito-1b-regla-b)
 
 - La regla b deja de usar «leads por visualización < 3 %» y salta con cualquiera de tres señales:

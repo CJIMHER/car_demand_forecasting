@@ -466,6 +466,9 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .miga a { display: inline-flex; align-items: center; min-height: var(--toque); text-decoration: none; font-weight: 600; }
 .aviso-zona { background: var(--aviso-fondo); color: var(--aviso-texto); }
 .aviso-zona a { color: var(--aviso-texto); font-weight: 700; }
+/* Cobertura del color: neutra si es completa; con la nota, en tono de aviso */
+.aviso-cobertura { margin-bottom: 4px; }
+.aviso-cobertura.incompleta { background: var(--aviso-fondo); color: var(--aviso-texto); }
 .h3-tabla { margin: 8px 0 0; font-size: 14px; font-weight: 600; color: var(--gris-oscuro); }
 
 /* Por acabado y motor: filas en rejilla; el acabado es un <details> que despliega sus motores */

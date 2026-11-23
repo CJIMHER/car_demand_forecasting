@@ -264,7 +264,8 @@ def _a(c: dict, leads: int, citas: int, con_cp: int | None, fuera: int) -> Resul
 
 def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: int) -> Resultado:
     """Tres señales; cualquiera la dispara: tasa de clic baja (el anuncio no atrae), tasa de clic a lead baja
-    (atrae pero no convence) o leads por impresión claramente por debajo del mismo modelo y mes."""
+    (atrae pero no convence) o leads por impresión claramente por debajo del mismo modelo y mes. Las dos
+    primeras necesitan volumen (n_minimo: impresiones y clics); por debajo se muestra la cifra sin saltar."""
     if not impresiones:
         return Resultado("b", "sin_dato", "sin impresiones")
     partes, revisar, senales = [], [], []
@@ -273,7 +274,14 @@ def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: 
     partes.append(f"tasa de clic: {clics} de {impresiones} impresiones = {pct(tasa_clic)} (umbral {num(u_clic * CIEN)} %)")
     cifras = {"impresiones": impresiones, "clics": clics, "leads": j.leads, "tasa_clic_pct": float(tasa_clic * CIEN),
               "umbral_tasa_clic_pct": float(u_clic * CIEN)}
-    if tasa_clic < u_clic:
+    n_imp, n_clics = int(c["n_minimo"]["impresiones"]), int(c["n_minimo"]["clics"])
+    cifras.update(n_minimo_impresiones=n_imp, n_minimo_clics=n_clics)
+    sin_volumen = []   # señales que saltarían con volumen suficiente
+    if impresiones < n_imp:
+        partes[-1] += f"; sin volumen: {impresiones} impresiones, mínimo {n_imp}"
+        if tasa_clic < u_clic:
+            sin_volumen.append("no_atrae")
+    elif tasa_clic < u_clic:
         senales.append("no_atrae")
         revisar.append(c["revisar_no_atrae"])
     if clics:
@@ -281,7 +289,11 @@ def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: 
         clic_lead = F(j.leads, clics)
         partes.append(f"clic a lead: {j.leads} de {clics} clics = {pct(clic_lead)} (umbral {num(u_lead * CIEN)} %)")
         cifras.update(clic_lead_pct=float(clic_lead * CIEN), umbral_clic_lead_pct=float(u_lead * CIEN))
-        if clic_lead < u_lead:
+        if clics < n_clics:
+            partes[-1] += f"; sin volumen: {clics} clics, mínimo {n_clics}"
+            if clic_lead < u_lead:
+                sin_volumen.append("no_convence")
+        elif clic_lead < u_lead:
             senales.append("no_convence")
             revisar.append(c["revisar_no_convence"])
     if j.modelo:   # campañas del mismo modelo y mismo mes del año, en años anteriores
@@ -307,8 +319,10 @@ def _b(pg, origen: str, c: dict, j: Juicio, dia: date, impresiones: int, clics: 
                 senales.append("historico")
                 revisar.append(c["revisar_historico"])
     cifras["senales"] = senales
+    cifras["senales_sin_volumen"] = sin_volumen
     activa = bool(senales)
-    return Resultado("b", "activa" if activa else "no", "; ".join(partes), " ".join(revisar),
+    estado = "activa" if activa else ("sin_volumen" if sin_volumen else "no")
+    return Resultado("b", estado, "; ".join(partes), " ".join(revisar),
                      "revisar" if activa else None, cifras)
 
 

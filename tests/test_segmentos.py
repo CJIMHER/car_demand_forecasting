@@ -314,12 +314,13 @@ def test_sin_matriz_si_la_configuracion_no_trae_cortes(pg, datos, tmp_path):
         {"modelo", "acabado", "motor"}
 
 
-def test_color_preparado_para_cuando_haya_dato(pg, datos):
+def test_color_del_propio_anuncio_va_por_familia(pg, datos):
+    """Sin ficha en la exportación de colores, vale el color que publique el propio anuncio (hoy, ninguno)."""
     capturar(datos, "vo", "2026-11-10", flota("1", 3) + [coche("ESP9", color="Azul Atlantic")])
     sv.cargar(pg, dia=date(2026, 11, 10))
     am.precalcular(pg, hasta=date(2026, 11, 10))
     assert pg.execute("SELECT color, anuncios FROM panel_mercado_segmento WHERE nivel = 'color' AND zona = 'espana'"
-                      ).fetchall() == [("Azul Atlantic", 1)]
+                      ).fetchall() == [("Azul", 1)]
 
 
 # ================================================================== cobertura en «Estado de las fuentes»
@@ -469,17 +470,18 @@ def test_modelo_sin_anuncios_y_sin_datos(app, pg, datos, personas):
     assert "Sin anuncios de Inventado en España" in html
 
 
-def test_bloque_de_color_solo_con_dato(app, pg, datos, personas):
+def test_bloque_de_color_con_y_sin_dato(app, pg, datos, personas):
     capturar(datos, "vo", HOY.isoformat(), flota("1", 4))
     sv.cargar(pg, dia=HOY)
     am.precalcular(pg, hasta=HOY)
     cl = dentro(app, "tecnico")
-    assert "Por color exterior" not in cl.get("/mercado/modelo/Golf?tipo=VO&zona=espana").text
+    html = cl.get("/mercado/modelo/Golf?tipo=VO&zona=espana").text
+    assert "Por color" in html and "Ningún anuncio de Golf en España tiene todavía su color." in html
     capturar(datos, "vo", (HOY + timedelta(days=1)).isoformat(), flota("1", 4) + [coche("ESP9", color="Gris Urano")])
     sv.cargar(pg, dia=HOY + timedelta(days=1))
     am.precalcular(pg, hasta=HOY + timedelta(days=1))
     html = cl.get("/mercado/modelo/Golf?tipo=VO&zona=espana").text
-    assert "Por color exterior" in html and "Gris Urano" in html
+    assert "Por color" in html and '<span class="seg-nombre">Gris</span>' in html and "Color conocido en el 20 %" in html
 
 
 def test_estado_de_las_fuentes_muestra_la_cobertura(app, pg, datos, personas):

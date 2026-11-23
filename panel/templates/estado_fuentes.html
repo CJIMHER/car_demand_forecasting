@@ -72,6 +72,43 @@
     <p class="nota">El acabado se lee del texto de versión con el catálogo config/versiones.yaml. Un texto cuyo acabado no está en el catálogo cuenta como «Sin clasificar» (nunca se adivina): añadir sus acabados al catálogo y ejecutar make precalcular.</p>
   </section>
 
+  <section class="tarjeta" aria-labelledby="t-color" data-bloque="color">
+    <h2 id="t-color">Color de los anuncios</h2>
+    {% if not e.color.fuentes %}
+    <p class="sin-datos">Sin datos todavía: aparecen tras la primera carga de colores (08:30) y el precálculo.</p>
+    {% endif %}
+    {% for fu in e.color.fuentes %}
+    <h3 class="h3-tabla">{{ fu.etiqueta }} · {{ fu.porcentaje }} con color ({{ fu.con_color }} de {{ fu.anuncios }} anuncios), {{ fu.dia }}</h3>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-color" data-fuente="{{ fu.fuente }}">
+        <thead><tr>
+          <th scope="col" class="izq">Estado de la ficha</th><th scope="col">Anuncios</th><th scope="col">Con color</th>
+          <th scope="col">%</th><th scope="col">VIN distinto</th>
+        </tr></thead>
+        <tbody>
+        {% for x in fu.estados %}
+          <tr data-estado="{{ x.codigo }}"><th scope="row" class="izq">{{ x.estado }}</th><td>{{ x.anuncios }}</td><td>{{ x.con_color }}</td><td>{{ x.porcentaje }}</td><td>{{ x.vin_distinto }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+    {% if e.color.textos %}
+    <h3 class="h3-tabla">Los {{ e.color.textos|length }} nombres de color sin familia más frecuentes</h3>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-sin-familia">
+        <thead><tr><th scope="col" class="izq">Tipo</th><th scope="col" class="izq">Color</th><th scope="col">Anuncios</th></tr></thead>
+        <tbody>
+        {% for x in e.color.textos %}
+          <tr><th scope="row" class="izq">{{ x.tipo }}</th><td class="izq detalle">{{ x.color }}</td><td>{{ x.anuncios }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <p class="nota">El color sale de la ficha de cada anuncio (exportación del componente de fichas, cargada a las 08:30), unido por fuente y anuncio. Vale con la ficha leída o el color del listado; si el VIN de la ficha no es el del anuncio, el color no se usa («VIN distinto»). Familias en config/colores.yaml: un nombre sin familia cuenta como «Sin especificar»; añadir su palabra a la familia y ejecutar make precalcular.</p>
+  </section>
+
   <section class="tarjeta" aria-labelledby="t-motor" data-bloque="motor">
     <h2 id="t-motor">Motor de alertas</h2>
     {% if motor.ultima %}

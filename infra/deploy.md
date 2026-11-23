@@ -40,6 +40,7 @@ sudo apt-get update && sudo apt-get install -y make git
 docker compose version          # instalado por provision.sh
 id -u cdf; id -g cdf            # el Makefile construye la imagen con estos UID/GID
 ls -ln /opt/cdf/data            # vo, vn y vn_otros deben ser de ese UID/GID
+ls -ln /opt/cdf/data/vw_details/exports   # exportación de colores del componente de fichas (se monta :ro)
 ```
 
 ## 2. Clave de despliegue de solo lectura (una vez)

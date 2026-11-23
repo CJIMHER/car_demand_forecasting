@@ -91,6 +91,9 @@
   {% if d.matriz %}
   <section aria-labelledby="t-matriz" class="tarjeta">
     <h2 id="t-matriz">Precio por antigüedad y km{% if d.matriz.elegido %} · {{ d.matriz.elegido }}{% endif %}</h2>
+    {% if d.matriz.cobertura %}
+    <p class="recuadro aviso-cobertura{% if d.matriz.cobertura.nota %} incompleta{% endif %}" role="note" data-cobertura="{{ d.matriz.cobertura.pct if d.matriz.cobertura.pct is not none else '' }}">{{ d.matriz.cobertura.texto }}</p>
+    {% endif %}
     {% for g in d.matriz.filtros %}
     <div class="filtro-matriz">
       <span class="filtro-nombre" id="filtro-{{ g.id }}">{{ g.nombre }}</span>
@@ -126,16 +129,23 @@
   </section>
   {% endif %}
 
-  {% if d.colores %}
-  <section aria-labelledby="t-colores" class="tarjeta">
-    <h2 id="t-colores">Por color exterior</h2>
+  <section aria-labelledby="t-colores" class="tarjeta" data-bloque="color">
+    <h2 id="t-colores">Por color</h2>
+    <p class="recuadro aviso-cobertura{% if d.colores.cobertura.nota %} incompleta{% endif %}" role="note" data-cobertura="{{ d.colores.cobertura.pct if d.colores.cobertura.pct is not none else '' }}">{{ d.colores.cobertura.texto }}</p>
+    {% if d.colores.filas %}
     <div class="segs">
-      {% for c in d.colores %}
-      <div class="seg-fila"><span class="seg-nombre">{{ c.nombre }}</span>{{ cifras(c) }}</div>
+      <div class="seg-fila seg-cabecera" aria-hidden="true">
+        <span class="seg-nombre">Color</span><span class="seg-c">Anuncios</span><span class="seg-c">Nuestros</span>
+        <span class="seg-c seg-precio">Precio mediano<span class="rango">p25–p75</span></span><span class="seg-c">Días publicado</span>
+      </div>
+      {% for c in d.colores.filas %}
+      <div class="seg-fila seg-color"><span class="seg-nombre">{{ c.nombre }}</span>{{ cifras(c) }}</div>
       {% endfor %}
     </div>
+    {% else %}
+    <p class="sin-datos">Ningún anuncio de {{ d.modelo }} en {{ d.zona_nombre }} tiene todavía su color.</p>
+    {% endif %}
   </section>
-  {% endif %}
 
   <section class="tarjeta notas-detalle">
     {% for t in d.notas %}<p class="nota">{{ t }}</p>{% endfor %}

@@ -48,9 +48,11 @@ Para cada día, tipo y zona, `panel_mercado_segmento` guarda solo los niveles qu
 de un modelo: modelo; modelo+acabado; modelo+acabado+motor; en VO, además, la matriz antigüedad×km
 de modelo, modelo+acabado, modelo+combustible, modelo+motor, modelo+acabado+combustible y
 modelo+acabado+motor (los filtros de la matriz; el motor implica su combustible, así que no hay cruce
-de los tres); y modelo+color (vacío mientras la web publique el color vacío). Por
-segmento: anuncios, propios, precio p25/p50/p75 de los que tienen precio (como `percentile_cont`) y
-días publicado con la regla «≥ N».
+de los tres); modelo+familia de color (VN y VO) y, en VO, esos seis niveles de la matriz también con
+la familia de color (el filtro de color, combinable con los otros tres; no se cruza el color con el
+acabado ni el motor fuera de la matriz). Por segmento: anuncios, propios, con color (`con_color`, para
+la cobertura), precio p25/p50/p75 de los que tienen precio (como `percentile_cont`) y días publicado
+con la regla «≥ N».
 
 - **Acabado y motor** (`versiones.py`): se leen del texto de versión con el catálogo
   `config/versiones.yaml` (acabados por modelo con sinónimos; comillas, tildes, mayúsculas y espacios
@@ -64,8 +66,18 @@ días publicado con la regla «≥ N».
 - **Antigüedad y km**: años cumplidos desde la primera matriculación hasta el día de la captura, y
   km del anuncio; los tramos, en `config/concesionario.yaml` (`segmentos`). Sin tramos en la
   configuración no se calcula la matriz.
-- La potencia, la cilindrada y el color salen de columnas generadas de `stock_externo_snapshot`
+- La potencia y la cilindrada salen de columnas generadas de `stock_externo_snapshot`
   (migración `0007`), que Postgres rellena desde `datos` sin tocar la carga.
+- **Color** (`colores.py`, migración `0011`): el color exterior de cada anuncio sale de `color_anuncio`
+  (la exportación del componente de fichas, `ingesta/colores.py`), unido por fuente + id del anuncio.
+  Vale el último color con estado `ok` o `listing_color` sabido ese día (por `fetched_at`, en Madrid: sin
+  mirar al futuro); si la ficha trae un VIN distinto del bastidor del anuncio, el color se anula. Sin
+  ficha, el color del propio anuncio si la web lo publica (hoy no). La familia (blanco, negro, gris,
+  plata, azul, rojo, verde, amarillo, naranja, marrón/beige, otros o «sin especificar») sale de
+  `config/colores.yaml`: palabras clave sin mayúsculas ni tildes, gana la primera que aparece en el
+  texto; aparte, el acabado de la pintura (metalizado, perla, mate). `panel_mercado_color_fuente` (por
+  fuente y estado de la ficha: anuncios, con color y anulados por VIN) y
+  `panel_mercado_color_sin_familia` (textos sin familia, España) alimentan «Estado de las fuentes».
 
 ## Cómo se prueba
 
@@ -75,5 +87,8 @@ comprueba además que las cifras de la vista cuadran con una consulta SQL direct
 `tests/test_segmentos.py`: lectura de versiones reales de VO y VN, «Sin clasificar», cortes de
 antigüedad y km en sus bordes, percentiles y n frente a SQL directo, migración, cobertura y la vista
 (con n < 3 nunca se muestra un precio), y cada combinación de los filtros de la matriz (acabado,
-combustible, motor) frente a SQL directo. El resumen del precálculo (`fuentes_estado`) lleva las
+combustible, motor) frente a SQL directo. `tests/test_color.py`: familias con nombres de color reales,
+carga de la exportación (solo añadir, sin tocar los hechos, sin fichero no falla), VIN distinto, sin
+mirar al futuro, niveles de color y cobertura frente a SQL directo, la nota de cobertura en su borde
+(89 % / 90 %), el filtro de color combinable y «Estado de las fuentes». El resumen del precálculo (`fuentes_estado`) lleva las
 filas de segmentos por nivel y los segundos, total y de segmentos.

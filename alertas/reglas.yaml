@@ -19,7 +19,7 @@
 #   texto       el motivo en una frase, con huecos {así} para las cifras (formato español)
 #
 # Los umbrales son una propuesta inicial (docs/diseno.md, Señales y alertas): se calibran en el piloto.
-version: reglas-2026-11-21b
+version: reglas-2026-11-23
 
 reglas:
   # ------------------------------------------------------------------ con datos reales desde ya
@@ -222,6 +222,10 @@ criterios_meta:
     revisar_fuera_zona: "si dominan los de fuera de zona, que el copy, el reel y la foto nombren la provincia, y que el formulario pida como obligatorios el código postal y si quiere ver el coche en la provincia."
   b:
     # Tres señales; cualquiera de ellas la dispara.
+    # Volumen mínimo de cada señal: por debajo, la cifra se muestra pero la señal no salta.
+    n_minimo:
+      impresiones: 1000           # señal 1 (tasa de clic)
+      clics: 50                   # señal 2 (tasa de clic a lead)
     # 1) Tasa de clic = clics / impresiones de Meta. Por debajo: el anuncio no atrae.
     tasa_clic_minima_pct: 1
     revisar_no_atrae: "El anuncio no atrae: revisar la creatividad (reel, foto) y el mensaje."

@@ -1,0 +1,44 @@
+# Familias de color exterior para Mercado (desglose «Por color» y filtro de la matriz de VO).
+#
+# El color llega tal cual lo publica la ficha de cada anuncio («Gris Indy metalizado», «Blanco, y
+# punto»). Cada texto se compara sin distinguir mayúsculas ni tildes, palabra a palabra: una palabra
+# clave casa con una palabra del texto que empiece por ella («gris» casa con «Grisáceo»). Si casan
+# varias familias, gana la palabra que aparece antes en el texto («Rojo con techo negro» es rojo).
+# Un texto sin ninguna palabra clave va a «sin_especificar» («Pintura exterior metalizada»).
+#
+# Tras cambiar este fichero: make precalcular (las familias se calculan en el precálculo; los textos
+# guardados no cambian).
+
+familias:
+  - nombre: Blanco
+    palabras: [blanc]
+  - nombre: Negro
+    palabras: [negr]
+  - nombre: Gris
+    palabras: [gris]
+  - nombre: Plata
+    palabras: [plata, platead]
+  - nombre: Azul
+    palabras: [azul, turquesa]
+  - nombre: Rojo
+    palabras: [roj, granate, burdeos]
+  - nombre: Verde
+    palabras: [verde]
+  - nombre: Amarillo
+    palabras: [amarill]
+  - nombre: Naranja
+    palabras: [naranja]
+  - nombre: Marrón/beige
+    palabras: [marron, beige, bronce, cobre, chocolate]
+  - nombre: Otros
+    palabras: [violeta, morad, purpura, lila, rosa, dorad, oro]
+
+# Texto con color pero sin familia reconocible (o sin color en el texto)
+sin_especificar: Sin especificar
+
+# Acabado de la pintura, aparte de la familia. Aquí la palabra debe ser entera (no un comienzo):
+# «mate» no casa con «matemático».
+acabados_pintura:
+  metalizado: [metalizado, metalizada, metalico, metalica, metallic]
+  perla: [perla, perlado, perlada, nacarado, nacarada]
+  mate: [mate]

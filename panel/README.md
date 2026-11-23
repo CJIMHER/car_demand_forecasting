@@ -29,9 +29,10 @@ conectar sus datos») hasta que lleguen los datos reales.
 | `templates/`, `static/` | Plantillas, CSS, JS propio y, con versión fija y licencia, htmx, ECharts, Inter y Space Grotesk (`static/VERSIONES.md`) |
 
 Rutas: `/acceso`, `/cambiar-clave`, `/salir` (POST), `/mercado`,
-`/mercado/modelo/<modelo>?tipo=VN|VO&zona=provincia|comunidad|espana&acabado=…&combustible=…&motor=…`
-(detalle de un modelo: por acabado y motor y, en VO, precio por antigüedad y km con filtros de
-acabado, combustible y motor, que se conservan al cambiar de zona o tipo si siguen existiendo; uno que
+`/mercado/modelo/<modelo>?tipo=VN|VO&zona=provincia|comunidad|espana&acabado=…&combustible=…&motor=…&color=…`
+(detalle de un modelo: por acabado y motor, por familia de color con su cobertura —«Color conocido en el
+X % de los anuncios» y, por debajo del 90 %, la nota fija— y, en VO, precio por antigüedad y km con filtros
+de acabado, combustible, motor y color, que se conservan al cambiar de zona o tipo si siguen existiendo; uno que
 no existe se descarta y se redirige a la URL sin él; se llega pulsando el modelo en la
 tabla de Mercado), `/direccion?tipo=todo|VN|VO`,
 `/ventas?tipo=…&riesgo=1&v=<número de stock>`, `/ventas/accion` (POST con CSRF: «Pedir campaña a

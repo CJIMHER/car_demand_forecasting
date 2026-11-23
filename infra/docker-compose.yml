@@ -61,6 +61,9 @@ services:
       - /opt/cdf/data/vo:/datos/scrapers/vo
       - /opt/cdf/data/vn:/datos/scrapers/vn
       - /opt/cdf/data/vn_otros:/datos/scrapers/vn_otros
+      # Exportación del componente de fichas (color de cada anuncio): solo lectura y solo la carpeta
+      # de exportaciones (la caché colors.sqlite3 de su carpeta padre no se monta).
+      - /opt/cdf/data/vw_details/exports:/datos/scrapers/vw_details/exports:ro
       - /opt/cdf/logs/jobs:/logs
       # Credenciales en fichero (cuenta de servicio de GA4), fuera del repositorio y solo lectura:
       # /opt/cdf/secretos (700, de cdf), cada fichero 600. GA4_CREDENCIALES=/secretos/<fichero>.json

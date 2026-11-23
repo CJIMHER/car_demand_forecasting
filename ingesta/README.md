@@ -51,6 +51,22 @@ La comprobación de las 09:00 primero carga lo que falte (por si un reintento te
 08:30) y luego escribe en `fuentes_estado`, por fuente: `ok`, `sin_captura` (el scraper no tiene
 pasada success hoy), `sin_cargar` o `error` (base ausente, ámbito equivocado...).
 
+## Color de los anuncios (colores.py)
+
+El componente de fichas (independiente de los scrapers) deja el color de cada anuncio en
+`/opt/cdf/data/vw_details/exports/colors_latest.jsonl.gz`, una línea JSON por anuncio (`source_name`,
+`vehicle_id`, `vin`, `status`, `exterior_color`, `interior_color`, `fetched_at`…). Tras la carga del stock
+de las 08:30 (`make cargar`), `colores.py` lee esa exportación **en solo lectura** (el compose monta solo la
+carpeta `exports`, `:ro`; la caché `colors.sqlite3` no se monta) y añade a `color_anuncio` las líneas cuyo
+estado, VIN, colores o `fetched_at` no estaban ya para ese anuncio, con los colores tal cual. Tabla de solo
+añadir; el panel no la lee.
+
+No toca `stock_externo_snapshot`, `eventos_externos` ni `anuncios_externos`: el color no es un cambio del
+anuncio. La unión con el stock se hace en el precálculo (`analitica/mercado.py`). Se anota en
+`fuentes_estado` (fuente `colores`, tipo `carga`): `ok`, `sin_captura` si no existe el fichero o `error` si
+no se puede leer; en los dos últimos casos la carga del stock sigue y su resultado no cambia. El resumen de
+Telegram de las 09:00 cuenta solo las cargas de los scrapers.
+
 ## Resumen diario por Telegram (telegram.py)
 
 Al terminar la comprobación de las 09:00 se envía siempre, vaya bien o mal, un mensaje de texto

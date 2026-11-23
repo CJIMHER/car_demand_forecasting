@@ -7,6 +7,8 @@ anuncios y precios inventados.
 
 from __future__ import annotations
 
+import gzip
+import json
 import random
 from datetime import date, timedelta
 from pathlib import Path
@@ -52,6 +54,45 @@ def version(fuente: str, modelo: str, acabado: str, motor: tuple, automatico: bo
     cambio = "Automático DSG 7 vel." if automatico else "6 vel."
     return f"{modelo} {acabado}  {cil} {tec} {kw} kW ({cv} CV)  {cambio}"
 TAMANO = {"vo": 260, "vn": 340, "vn_otros": 70}
+# Colores tal como los publican las fichas (nombres reales de la web; ninguno identifica a nadie)
+COLORES = [("Blanco Puro", 14), ("Blanco puro", 3), ("Blanco, y punto", 2), ("Negro Noche (metalizado)", 10),
+           ("Negro Profundo efecto perla", 6), ("Plata Réflex metalizado", 8), ("Gris Ceniza metalizado", 7),
+           ("Gris Grisáceo (metalizado)", 4), ("Gris Delfín (metalizado)", 5), ("Gris Indy metalizado", 6),
+           ("Azul Arrecife metalizado", 6), ("Rojo Kings metalizado", 4), ("Verde Kiwi", 1), ("Naranja Energía", 1),
+           ("Pintura exterior metalizada", 3), ("Bicolor especial", 1)]
+
+
+def exportar_colores(base: Path, coches: dict[str, tuple[str, dict, date]], fin: date, semilla: int = 7,
+                     fraccion: float = 0.6) -> Path:
+    """Exportación del componente de fichas (vw_details/exports/colors_latest.jsonl.gz) para los anuncios
+    vistos: la recuperación va de los más antiguos a los más recientes, así que tienen ficha leída
+    (status ok) los primeros `fraccion`; del resto, unos pendientes y otros sin ficha en la exportación.
+    Algún anuncio trae un VIN distinto. fetched_at: dos días antes de `fin`."""
+    r = random.Random(semilla * 31 + 5)
+    orden = sorted(coches.items(), key=lambda kv: (kv[1][2], kv[0]))
+    corte = int(len(orden) * fraccion)
+    fetched = f"{(fin - timedelta(days=2)).isoformat()}T05:00:00+00:00"
+    lineas = []
+    for i, (vid, (fuente, coche, _)) in enumerate(orden):
+        vin = coche["business"]["vin"]
+        if i < corte:
+            estado = r.choices(["ok", "listing_color", "empty", "error"], [90, 4, 4, 2])[0]
+        else:
+            estado = r.choices(["pending", None], [70, 30])[0]
+            if estado is None:
+                continue                                  # aún no está en la exportación
+        color = r.choices([c for c, _ in COLORES], [w for _, w in COLORES])[0] if estado in ("ok", "listing_color") else None
+        if color and r.random() < 0.01:
+            vin = "WVWZZZ" + "9" * 11                    # la ficha es de otro coche: el color no vale
+        lineas.append({"scope": "x", "source_name": fuente, "vehicle_id": vid, "vin": vin, "status": estado,
+                       "exterior_color": color, "interior_color": "Negro Titanio" if color else None,
+                       "interior_color_json": None, "color_json": None,
+                       "fetched_at": fetched if estado != "pending" else None,
+                       "source_snapshot_day": fin.isoformat(), "present": True})
+    ruta = base / "vw_details" / "exports" / "colors_latest.jsonl.gz"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(gzip.compress("\n".join(json.dumps(x, ensure_ascii=False) for x in lineas).encode()))
+    return ruta
 OTRAS = ["28", "08", "46", "50", "48", "15", "33", "30"]
 
 
@@ -107,17 +148,21 @@ class Generador:
 
 
 def escenario(base: Path, fin: date, provincia: str, provincias_comunidad: tuple[str, ...], dealer_propio: str,
-              dias: int = 40, semilla: int = 7, escala: float = 1.0) -> dict:
+              dias: int = 40, semilla: int = 7, escala: float = 1.0, colores: float = 0.6) -> dict:
     """Capturas de `dias` días hasta `fin`. VO falla el día 12, VN no tiene pasada el día 25 y VN
     eléctricos e híbridos empieza el día 8 (todos contados desde el primero). `escala` multiplica el
     tamaño de cada flota (make panel-dev usa más anuncios para que los segmentos tengan muestra).
 
     En la provincia del concesionario propio, un concesionario (`calla`) no publica nada el
-    antepenúltimo día y otro (`nuevo`) aparece cinco días antes del final."""
+    antepenúltimo día y otro (`nuevo`) aparece cinco días antes del final.
+
+    `colores`: fracción de los anuncios vistos (los más antiguos) con ficha leída en la exportación de
+    colores (exportar_colores); 0, sin exportación."""
     g = Generador(provincia, provincias_comunidad, dealer_propio, semilla)
     inicio = fin - timedelta(days=dias - 1)
     stock: dict[str, list[dict]] = {}
     huecos = {"vo": {12}, "vn": {25}, "vn_otros": set(range(8))}
+    vistos: dict[str, tuple[str, dict, date]] = {}
     calla, nuevo = g.dealers[provincia][0], f"ESP9{provincia}N"
     dia_calla, dia_nuevo = fin - timedelta(days=2), fin - timedelta(days=4)
     for i in range(dias):
@@ -142,5 +187,9 @@ def escenario(base: Path, fin: date, provincia: str, provincias_comunidad: tuple
             publicados = [dict(c) for c in stock[fuente]
                           if not (dia == dia_calla and c["business"]["dealer_id"] == calla)]
             capturar(base, fuente, dia.isoformat(), publicados)
+            for c in publicados:
+                vistos.setdefault(c["vehicle_id"], (fuente, c, dia))
+    if colores:
+        exportar_colores(base, vistos, fin, semilla, colores)
     return {"inicio": inicio, "fin": fin, "calla": (calla, dia_calla), "nuevo": (nuevo, dia_nuevo),
             "huecos": {f: {inicio + timedelta(days=i) for i in h} for f, h in huecos.items()}}

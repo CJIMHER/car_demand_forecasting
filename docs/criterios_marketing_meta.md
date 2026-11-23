@@ -67,6 +67,8 @@ Tres señales; cualquiera de ellas la dispara:
 3. **Leads por impresión** claramente por debajo de otras campañas del mismo modelo y del mismo mes del año.
    - **Revisar**: la creatividad, el mensaje, la llamada a la acción y la oferta.
 
+Volumen mínimo: la señal 1 solo salta con al menos **1.000 impresiones**, y la señal 2 con al menos **50 clics**. Por debajo, la cifra se da igualmente, con su volumen, pero no salta.
+
 ### c) Lead caro
 
 - **Señal**: coste por lead por encima de **10 €**.

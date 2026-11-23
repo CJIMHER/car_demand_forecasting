@@ -11,7 +11,8 @@ duplicados aunque dos cargas coincidan. Desaparecer no es vender: los estados de
 presente, ausente y retirado, tal como los deciden los eventos del scraper.
 
 Órdenes (python -m ingesta.scrapers_vw ...):
-  cargar            carga lo nuevo de las tres fuentes (cron 08:30)
+  cargar            carga lo nuevo de las tres fuentes y, después, el color de los anuncios
+                    (ingesta/colores.py; si falla, se anota y no cambia el resultado) (cron 08:30)
   comprobar         carga lo pendiente, anota en fuentes_estado si falta la captura del día y envía
                     el resumen del día por Telegram (cron 09:00)
   recuento          anuncios cargados por día y fuente, frente a lo que dijo el scraper
@@ -439,13 +440,14 @@ def datos_resumen(pg: psycopg.Connection, dia: date) -> tuple[dict[str, int], di
     """
     filas = dict(pg.execute("SELECT fuente, count(*) FROM stock_externo_snapshot WHERE snapshot_day = %s "
                             "GROUP BY fuente", (dia,)).fetchall())
+    # Solo las cargas de los scrapers (la del color, fuente «colores», va aparte)
     cargadas = pg.execute(
         """SELECT coalesce(sum((detalle->>'anuncios')::bigint), 0) FROM fuentes_estado
-           WHERE tipo = 'carga' AND dia = %s AND estado = 'ok'""", (dia,)).fetchone()[0]
+           WHERE tipo = 'carga' AND dia = %s AND estado = 'ok' AND fuente = ANY(%s)""", (dia, list(FUENTES))).fetchone()[0]
     errores = {}
     for fuente, estado, detalle in pg.execute(
             """SELECT DISTINCT ON (fuente) fuente, estado, detalle FROM fuentes_estado
-               WHERE tipo = 'carga' AND dia = %s ORDER BY fuente, id DESC""", (dia,)):
+               WHERE tipo = 'carga' AND dia = %s AND fuente = ANY(%s) ORDER BY fuente, id DESC""", (dia, list(FUENTES))):
         if estado != "ok":
             errores[fuente] = str((detalle or {}).get("error", estado))
     return filas, errores, int(cargadas)
@@ -531,8 +533,11 @@ def main(argv=None) -> int:
     with conectar(autocommit=True) as pg:
         if args.orden == "cargar":
             res = cargar(pg, args.fuente)
+            if not args.fuente:   # el color, después del stock y sin cambiar su resultado
+                from ingesta import colores
+                res["colores"] = colores.ejecutar(pg, hoy_madrid())
             print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
-            return 1 if any("error" in r for r in res.values()) else 0
+            return 1 if any("error" in r for f, r in res.items() if f in FUENTES) else 0
         if args.orden == "comprobar":
             res = comprobar(pg, dia=args.dia, cargar_antes=not args.sin_cargar,
                             avisar=False if args.sin_telegram else None)

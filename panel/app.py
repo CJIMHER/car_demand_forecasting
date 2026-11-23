@@ -303,11 +303,11 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
 
     @app.get("/mercado/modelo/{modelo}")
     def vista_modelo(request: Request, modelo: str, zona: str = "provincia", tipo: str = "VN", acabado: str = "",
-                     combustible: str = "", motor: str = "", pg=Depends(bd)):
+                     combustible: str = "", motor: str = "", color: str = "", pg=Depends(bd)):
         u = exigir(request, pg, "mercado")
         zona = zona if zona in mercado.ZONAS else "provincia"
         tipo = tipo if tipo in mercado.TIPOS else "VN"
-        pedido = tuple(x[:120] or None for x in (acabado, combustible, motor))
+        pedido = tuple(x[:120] or None for x in (acabado, combustible, motor, color))
         d = mercado.detalle_modelo(pg, app.state.conc, tipo, zona, modelo[:80], app.state.hoy(), *pedido)
         if d["filtro"] != pedido:
             # Un filtro que no existe (en esa zona y tipo o con los otros dos) se descarta: la URL
