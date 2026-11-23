@@ -46,6 +46,19 @@ reglas:
       sin_copia: "Sin copia correcta de Postgres desde el {dia} ({dias} días)."
       descarga_error: "Descarga de {fuente} del {dia} con error: {error}."
 
+  - id: gtrends_pendiente
+    nombre: Google Trends sin descargar
+    calculo: gtrends_pendiente
+    roles: [tecnico]
+    fuente: [gtrends_entrega]
+    tema: datos
+    nivel: aviso
+    umbrales:
+      dias_maximos: 35        # la descarga es manual y mensual (ingesta/gtrends.py)
+    textos:
+      sin_entrega: "Toca descargar Google Trends: todavía no hay ninguna entrega cargada (make gtrends-enlaces en el Mac)."
+      caducada: "Toca descargar Google Trends: la última descarga es del {dia}, hace {dias} días (make gtrends-enlaces en el Mac)."
+
   - id: competidor_stock
     nombre: Presión de un competidor (stock)
     calculo: competidor_stock

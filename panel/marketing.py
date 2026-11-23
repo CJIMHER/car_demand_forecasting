@@ -268,15 +268,28 @@ def atencion(pg, origen) -> dict:
     dia = ng.ultimo_dia(pg, "panel_atencion_relativa", origen)
     if dia is None:
         return ng.bloque(origen, hay=False)
-    filas = pg.execute("""SELECT modelo, mes, relativo_puntos FROM panel_atencion_relativa
+    filas = pg.execute("""SELECT modelo, mes, relativo_puntos, entrega, semana_fin, cuota_pct, cuota_anterior_pct,
+                                 n_competidores, n_comparaciones
+                          FROM panel_atencion_relativa
                           WHERE origen = %s AND dia = %s ORDER BY relativo_puntos DESC, modelo""",
                        (origen, dia)).fetchall()
-    tope = max(abs(float(p)) for _, _, p in filas) or 1
-    mes = filas[0][1]
-    return ng.bloque(origen, mes=f"{fmt.MESES[mes.month - 1]} de {mes.year}", filas=[
-        {"modelo": m, "texto": ("+" if p > 0 else "") + fmt.decimal(float(p), 0),
-         "pos": round(max(float(p), 0) / tope * 100, 1), "neg": round(max(-float(p), 0) / tope * 100, 1)}
-        for m, _, p in filas])
+    tope = max(abs(float(f[2])) for f in filas) or 1
+    mes, entrega, semana_fin = filas[0][1], filas[0][3], filas[0][4]
+    # Con Google Trends (entrega): cuota de búsquedas en su comparación, en puntos con un decimal
+    decimales = 1 if entrega else 0
+    salida = []
+    for m, _, p, _, _, cuota, antes, n_comp, n_cmp in filas:
+        p = float(p)
+        texto = fmt.decimal(p, decimales)
+        salida.append({
+            "modelo": m, "texto": ("+" if round(p, decimales) > 0 else "") + texto,
+            "pos": round(max(p, 0) / tope * 100, 1), "neg": round(max(-p, 0) / tope * 100, 1),
+            "detalle": (f"Cuota de búsquedas: {fmt.porcentaje(float(cuota), 1)}, frente a "
+                        f"{fmt.porcentaje(float(antes), 1)} en las 4 semanas anteriores · {n_comp} competidores"
+                        + (f" en {n_cmp} comparaciones" if n_cmp and n_cmp > 1 else "")) if cuota is not None else ""})
+    return ng.bloque(origen, mes=f"{fmt.MESES[mes.month - 1]} de {mes.year}", filas=salida,
+                     entrega=fmt.fecha(entrega) if entrega else None,
+                     semana_fin=fmt.fecha_corta(semana_fin + timedelta(days=6)) if semana_fin else None)
 
 
 def semanas(pg, origen, tipo: str = "todo") -> dict:

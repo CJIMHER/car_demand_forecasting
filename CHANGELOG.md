@@ -1,5 +1,33 @@
 # Cambios
 
+## 2026-11-23 · Google Trends: descarga manual guiada y atención relativa real (rama hito-1b-gtrends)
+
+- **Sin acceso automático a Google**: ni pytrends, ni navegadores automáticos, ni peticiones a trends.google.com.
+  Trends se descarga a mano una vez al mes desde el perfil de Chrome del proyecto; el resto, automático
+  (`ingesta/gtrends.py`, `config/gtrends.yaml`).
+- **`make gtrends-enlaces`** (Mac): `salidas/gtrends_enlaces.html` con una comparación por fila (identificador,
+  términos, enlace, casilla de descargada y cuántas faltan). Comparaciones de `data/competidores.csv`: el modelo
+  y hasta 4 competidores; con más, varias con el modelo como ancla. URL con España, 12 meses y la categoría
+  «Autos y vehículos» (cat=47), del YAML.
+- **`make gtrends-subir CARPETA=…`** (Mac): identifica cada CSV por los términos de su cabecera; avisa de las que
+  faltan, las repetidas y los ficheros que no casan; rechaza otra categoría (o sin categoría), otra zona, otra
+  frecuencia o un número de semanas distinto de unas 52, diciendo qué comparación volver a descargar. Si todo
+  cuadra, sube los originales y un manifiesto (fecha, comparaciones y huellas) con scp a
+  `/opt/cdf/entrada/gtrends/<fecha>/`. No borra nada local.
+- **`make gtrends`** (servidor, y cron diario a las 07:00): carga la última entrega en `gtrends_entrega` y
+  `gtrends_semana` (migración `0016`, solo añadir; repetir no duplica), con los originales comprimidos al bucket
+  (`gtrends/raw/<fecha>/`). «<1» = 0,5 con `menor_que_1`. Carpeta montada en `cdf_jobs` (solo lectura).
+- **Marketing → «Atención frente a sus rivales»** real: cuota de búsquedas del modelo en su comparación, últimas
+  4 semanas completas frente a las 4 anteriores, en puntos (media de cuotas con varias comparaciones). Mantiene
+  la nota de señal direccional y añade la fecha de la descarga.
+- **Aviso** `gtrends_pendiente` al técnico: «Toca descargar Google Trends» si la última descarga tiene más de 35
+  días (o no hay ninguna). Un error de carga sale en «Fuente caída».
+- **Pruebas** (`tests/test_gtrends.py`): CSV en el formato real de Trends (categoría, «Semana», «término:
+  (España)», «<1»); faltan, repetidas y desconocidos; categoría, zona, frecuencia y semanas; subida simulada;
+  carga sin duplicar; cuota y cambio en puntos; Marketing; aviso de los 35 días.
+- **Despliegue**: `make deploy`. En el Mac, `CDF_SERVIDOR_IP` en el `.env` (`.env.example`). Pasos de cada mes en
+  `infra/deploy.md` (7.11).
+
 ## 2026-11-23 · Tráfico de GA4 por canal; solo Meta en «Campañas sin regla» (rama hito-1b-ga4-canales)
 
 - **`config/canales.yaml`** (nuevo) y **`ingesta/canales.py`**:

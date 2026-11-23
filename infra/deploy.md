@@ -413,6 +413,34 @@ Las provincias de la zona cercana están en `config/concesionario.yaml` (`propio
 Para recibir por Telegram también las alertas calculadas sobre datos de ejemplo: `ALERTAS_ENVIAR_EJEMPLO=1`
 en `/opt/cdf/.env` (por defecto, no).
 
+### 7.11 Google Trends (descarga manual, una vez al mes)
+
+Google Trends se descarga **a mano** desde el perfil de Chrome del proyecto: el código nunca accede a
+Google. Zona (España), periodo (12 meses, datos semanales) y categoría (Autos y vehículos, 47) están en
+`config/gtrends.yaml`; las comparaciones salen de `data/competidores.csv`.
+
+Una vez, en el servidor:
+
+```bash
+make deploy          # migración 0016, carpeta /opt/cdf/entrada/gtrends y cron de carga a las 07:00
+```
+
+Una vez, en el Mac: en el `.env` del repositorio (no se sube), `CDF_SERVIDOR_IP=<ip del servidor>`; la
+clave `~/.ssh/cdf_hetzner` debe entrar como `cdf` (`ssh -i ~/.ssh/cdf_hetzner cdf@<ip>`).
+
+Cada mes (el técnico recibe «Toca descargar Google Trends» si la última descarga tiene más de 35 días):
+
+1. En el Mac: `make gtrends-enlaces`. Abre `salidas/gtrends_enlaces.html`.
+2. En el perfil de Chrome del proyecto, para cada comparación: «Abrir en Google Trends» → en «Interés a
+   lo largo del tiempo», el botón de descarga. Todos los CSV a una misma carpeta (los nombres dan igual)
+   y marcar la casilla. La página dice cuántas faltan.
+3. En el Mac: `make gtrends-subir CARPETA=~/Downloads/trends-noviembre`. Comprueba cada fichero (por sus
+   términos, no por el nombre): categoría, zona, semanal y unas 52 semanas. Si algo falla, dice qué
+   comparación volver a descargar y no sube nada. `SOLO_COMPROBAR=1` comprueba sin subir. No borra nada
+   de la carpeta.
+4. En el servidor, la carga es automática a las 07:00; para verla ya: `make gtrends`. Repetirla no
+   duplica. Marketing → «Atención frente a sus rivales» pasa a real, con la fecha de la descarga.
+
 ## 8. Día a día
 
 ```bash

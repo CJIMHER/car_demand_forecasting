@@ -6,6 +6,8 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Conectores de Meta y GA4: recargan los últimos 7 días (sin credenciales no hacen nada)
 0 6 * * * cdf /app/infra/jobs/tarea.sh meta
 10 6 * * * cdf /app/infra/jobs/tarea.sh ga4
+# Google Trends: carga la última entrega subida a mano (si ya está cargada, no hace nada nuevo)
+0 7 * * * cdf /app/infra/jobs/tarea.sh gtrends
 # Carga de las tres bases SQLite a Postgres, cuando ya han podido terminar los reintentos
 30 8 * * * cdf /app/infra/jobs/tarea.sh cargar
 # Comprobación: carga lo que falte y anota en fuentes_estado si un scraper no tiene captura del día

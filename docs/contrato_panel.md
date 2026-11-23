@@ -337,13 +337,22 @@ No lleva intervalo porque es una decisión, no una cifra. Las cifras en que se a
 ### panel_atencion_relativa · atención frente a los rivales
 
 - **Grano**: día × modelo.
-- **Fuente**: Google Trends (`gt_relativo`), hito 2.
+- **Fuente**: Google Trends, descargado a mano una vez al mes (`ingesta/gtrends.py`: `gtrends_semana`). Las
+  filas reales las escribe la carga de cada entrega, con `dia` = fecha de la descarga.
+- **Cálculo**: para cada modelo, su cuota de búsquedas en cada comparación (su valor entre la suma de los
+  términos de la comparación) en las últimas 4 semanas completas frente a las 4 anteriores. Con varias
+  comparaciones (más de 4 competidores), la media de las cuotas, todas con el mismo peso. «<1» cuenta 0,5.
+  La semana de la descarga no cuenta (va a medias).
 
 | Columna | Unidad | Significado |
 | --- | --- | --- |
-| `mes` | fecha | Mes de la señal |
-| `relativo_puntos` | puntos | 100 × (YoY3 del modelo − media del YoY3 de su conjunto de competidores) |
+| `mes` | fecha | Primera semana usada (real) o mes de la señal (ejemplo) |
+| `relativo_puntos` | puntos | 100 × (cuota reciente − cuota anterior). En las filas de ejemplo: 100 × (YoY3 del modelo − media del YoY3 de su conjunto) |
 | `n_competidores` | | Competidores con dato (mínimo 2) |
+| `entrega` | fecha | Fecha de la descarga de Google Trends (vacía en el ejemplo) |
+| `semana_fin` | fecha | Primer día de la última semana completa usada |
+| `cuota_pct`, `cuota_anterior_pct` | % | Cuota del modelo en las 4 últimas semanas y en las 4 anteriores |
+| `n_comparaciones` | | Comparaciones de Trends en que se apoya |
 
 No es salida de un modelo, así que no lleva intervalo. Es una señal direccional: la nota de la vista lo dice.
 

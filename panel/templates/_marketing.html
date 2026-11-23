@@ -146,19 +146,23 @@
     <section aria-labelledby="t-atencion" class="tarjeta tarjeta-estrecha"{{ attrs("atencion", d.atencion) }}>
       <div>
         <h2 id="t-atencion">Atención frente a sus rivales</h2>
+        {% if d.atencion.hay and d.atencion.entrega %}
+        <p class="nota">Cuota de búsquedas en Google del modelo frente a sus competidores: últimas 4 semanas (hasta el {{ d.atencion.semana_fin }}) frente a las 4 anteriores, en puntos · descarga de Google Trends del {{ d.atencion.entrega }}</p>
+        {% else %}
         <p class="nota">Búsquedas en Google del modelo frente a su segmento, en puntos{% if d.atencion.hay %} · {{ d.atencion.mes }}{% endif %}</p>
+        {% endif %}
       </div>
       {{ marca(d.atencion) }}
       {% if d.atencion.hay %}
       {% for m in d.atencion.filas %}
-      <div class="atencion">
+      <div class="atencion"{% if m.detalle %} title="{{ m.detalle }}"{% endif %}>
         <span class="atencion-modelo">{{ m.modelo }}</span>
         <svg class="atencion-barra neg" viewBox="0 0 100 18" preserveAspectRatio="none" aria-hidden="true"><rect class="relleno viejo" x="{{ 100 - m.neg }}" width="{{ m.neg }}" height="18"></rect></svg>
         <svg class="atencion-barra pos" viewBox="0 0 100 18" preserveAspectRatio="none" aria-hidden="true"><rect class="relleno" width="{{ m.pos }}" height="18"></rect></svg>
         <span class="atencion-texto">{{ m.texto }}</span>
       </div>
       {% endfor %}
-      <p class="nota">Es una señal direccional: la única externa que ha anticipado algo las matriculaciones. Anticipa poco, así que se usa como pista, no como orden.</p>
+      <p class="nota">Es una señal direccional: la única externa que ha anticipado algo las matriculaciones. Anticipa poco, así que se usa como pista, no como orden.{% if d.atencion.entrega %} Cuota: búsquedas del modelo entre las de todos los términos de su comparación (con varias comparaciones, la media); Google Trends se descarga a mano una vez al mes (última descarga: {{ d.atencion.entrega }}).{% endif %}</p>
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
     {% endif %}

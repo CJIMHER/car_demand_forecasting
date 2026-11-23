@@ -12,13 +12,13 @@ JOBS = $(COMPOSE) exec -T -u cdf jobs
 RUN = $(COMPOSE) run --rm --no-deps -u cdf
 # Órdenes en el contenedor del panel (usuario de Postgres cdf_panel); con terminal para pedir contraseñas
 PANEL_RUN = $(COMPOSE) --profile panel run --rm --no-deps panel python -m panel.usuarios
-# Python del Mac para make panel-dev
+# Python del Mac para make panel-dev, gtrends-enlaces y gtrends-subir
 PYTHON ?= .venv/bin/python
 
 .PHONY: help comprobar-entorno deploy migrar cargar comprobar recuento concesionarios remarcar-propio \
         estado copia restaurar-prueba test hora logs ps psql precalcular panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
-        ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas
+        ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas gtrends gtrends-enlaces gtrends-subir
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -35,6 +35,7 @@ comprobar-entorno: ## Comprueba .env, rclone, usuario cdf y carpetas antes de de
 	  test -d $$d || { echo "No existe $$d"; exit 1; }; \
 	  test "$$(stat -c %u:%g $$d)" = "$(CDF_UID):$(CDF_GID)" || { echo "$$d no es de cdf ($(CDF_UID):$(CDF_GID))"; exit 1; }; done
 	@install -d -m 750 /opt/cdf/logs/jobs
+	@install -d -m 750 /opt/cdf/entrada /opt/cdf/entrada/gtrends
 	@echo "Entorno correcto (cdf = $(CDF_UID):$(CDF_GID))"
 
 deploy: comprobar-entorno ## Descarga el repositorio, aplica migraciones y reinicia los contenedores
@@ -133,6 +134,17 @@ ga4: ## Descarga de GA4 (cron 06:10): los últimos 7 días; sin credenciales no 
 
 campanas: ## Reclasifica las campañas con config/campanas.yaml (Marketing y campañas sin regla)
 	$(JOBS) python -m ingesta.campanas
+
+gtrends: ## Carga la última entrega de Google Trends de /opt/cdf/entrada/gtrends (cron 07:00); no duplica
+	$(JOBS) python -m ingesta.gtrends cargar
+
+gtrends-enlaces: ## (Mac) HTML con un enlace de Google Trends por comparación (salidas/gtrends_enlaces.html)
+	$(PYTHON) -m ingesta.gtrends enlaces
+	@open salidas/gtrends_enlaces.html 2>/dev/null || true
+
+gtrends-subir: ## (Mac) Comprueba los CSV de Trends y los sube: make gtrends-subir CARPETA=<ruta> [IP=<ip>] [SOLO_COMPROBAR=1]
+	@test -n "$(CARPETA)" || { echo "Uso: make gtrends-subir CARPETA=<carpeta con los CSV>"; exit 1; }
+	$(PYTHON) -m ingesta.gtrends subir --carpeta "$(CARPETA)" $(if $(IP),--ip $(IP)) $(if $(SOLO_COMPROBAR),--solo-comprobar)
 
 comprobar: ## Comprobación del día y resumen por Telegram (cron 09:00); SIN_TELEGRAM=1 no envía
 	$(JOBS) python -m ingesta.scrapers_vw comprobar $${SIN_TELEGRAM:+--sin-telegram}

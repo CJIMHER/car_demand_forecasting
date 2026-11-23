@@ -103,6 +103,23 @@ manuales); el estado de cada carga, de su última anotación del día. Con probl
 `aviso`, con `"aviso": "copia"` en el detalle), así que el aviso llega aunque Postgres esté caído.
 Nunca lanza; el script sale siempre con el código de la copia.
 
+## Google Trends (gtrends.py), descarga manual
+
+Google Trends se descarga a mano, una vez al mes, desde el perfil de Chrome del proyecto. El código
+nunca accede a Google (ni pytrends, ni navegadores automáticos, ni peticiones a trends.google.com);
+automatiza el resto. Configuración en `config/gtrends.yaml` (zona, periodo, categoría 47 «Autos y
+vehículos», semanas esperadas); comparaciones de `data/competidores.csv`: el modelo propio y hasta 4
+competidores (5 términos, el límite de Trends); con más, varias comparaciones con el modelo como ancla.
+
+| Orden | Dónde | Qué hace |
+| --- | --- | --- |
+| `make gtrends-enlaces` | Mac | `salidas/gtrends_enlaces.html`: un enlace por comparación, casilla de descargada y cuántas faltan |
+| `make gtrends-subir CARPETA=…` | Mac | Identifica cada CSV por sus términos y comprueba categoría, zona, semanal y unas 52 semanas. Avisa de las que faltan, las repetidas y los ficheros que no casan. Si todo cuadra, sube los originales (como `<comparación>.csv`) y `manifiesto.json` con scp a `/opt/cdf/entrada/gtrends/<fecha>/` (clave `~/.ssh/cdf_hetzner`, usuario cdf; IP de `IP=` o de `CDF_SERVIDOR_IP` del `.env` del Mac). Primero a `<fecha>.subiendo` y luego se renombra |
+| `make gtrends` (y cron 07:00) | Servidor | Carga la última entrega: comprueba las huellas del manifiesto, sube los originales comprimidos al bucket (`gtrends/raw/<fecha>/`), los añade a `gtrends_entrega` y `gtrends_semana` (solo añadir; repetir no duplica) y rehace `panel_atencion_relativa` (real) |
+
+«<1» se guarda como 0,5 con `menor_que_1`. Si la última entrega tiene más de 35 días, el técnico recibe
+«Toca descargar Google Trends» (regla `gtrends_pendiente`). Pruebas: `tests/test_gtrends.py`.
+
 ## Conectores de Meta y GA4 (meta.py, ga4.py, conectores.py, campanas.py)
 
 Inactivos hasta tener credenciales: sin ellas no hacen ninguna petición y anotan `sin_credenciales`

@@ -27,7 +27,7 @@ TODOS = "*"           # en Resultado.sin_evaluar: la regla entera
 TIPOS = ("VN", "VO")
 TIPO_TEXTO = {"VN": "nuevos", "VO": "de ocasión"}
 SCRAPERS = {"vo": "VO", "vn": "VN", "vn_otros": "VN eléctricos e híbridos"}
-CONECTORES = {"meta": "Meta", "ga4": "GA4"}
+CONECTORES = {"meta": "Meta", "ga4": "GA4", "gtrends": "Google Trends"}
 
 
 @dataclass
@@ -125,6 +125,23 @@ def fuente_caida(ctx: Contexto) -> Resultado:
         estado, det = ultimos.get((f, "descarga"), ("ok", {}))
         if estado == "error":
             disparo(f"descarga|{f}", "descarga_error", fuente=etiqueta, error=str(det.get("error", ""))[:150])
+    return r
+
+
+# --------------------------------------------------------------------------- Google Trends
+
+def gtrends_pendiente(ctx: Contexto) -> Resultado:
+    """La descarga de Google Trends es manual: aviso si la última entrega cargada tiene más de
+    `dias_maximos` días (o si no hay ninguna)."""
+    ultima = ctx.pg.execute("SELECT max(fecha_descarga) FROM gtrends_entrega").fetchone()[0]
+    r = Resultado()
+    if ultima is None:
+        r.disparos.append(Disparo("gtrends", {"caso": "sin_entrega"}, {}, texto="sin_entrega"))
+        return r
+    dias = (ctx.hoy - ultima).days
+    if dias > int(ctx.u.get("dias_maximos", 35)):
+        r.disparos.append(Disparo("gtrends", {"caso": "caducada", "dia": str(ultima), "dias": dias},
+                                  {"dia": _dia(ultima), "dias": str(dias)}, texto="caducada"))
     return r
 
 
@@ -375,6 +392,6 @@ def ventana_favorable(ctx: Contexto) -> Resultado:
     return r
 
 
-CALCULOS = {f.__name__: f for f in (fuente_caida, competidor_stock, competidor_precio, perdida_peso,
+CALCULOS = {f.__name__: f for f in (fuente_caida, gtrends_pendiente, competidor_stock, competidor_precio, perdida_peso,
                                     vehiculo_envejecido, riesgo_inmovilizacion, ventas_fuera_banda, caida_leads,
                                     criterio_meta, ventana_favorable)}

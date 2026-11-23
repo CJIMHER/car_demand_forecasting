@@ -23,3 +23,6 @@ __pycache__/
 *.dump
 *.dump.gpg
 .pytest_cache/
+
+# Salidas locales del Mac (enlaces de Google Trends)
+salidas/

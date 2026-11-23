@@ -1,0 +1,21 @@
+# Google Trends: descarga a mano, una vez al mes, desde el perfil de Chrome del proyecto. El código
+# nunca accede a Google: genera los enlaces, comprueba los CSV descargados, los sube al servidor y
+# los carga (ingesta/gtrends.py). Las comparaciones salen de data/competidores.csv.
+#
+# Zona, periodo y categoría de todas las comparaciones (los parámetros de la URL de Trends):
+#   https://trends.google.com/trends/explore?cat=47&date=today%2012-m&geo=ES&hl=es&q=<términos>
+geo: ES                      # zona (código de Trends)
+zona: España                 # cómo la escribe Trends en la cabecera de cada columna: «término: (España)»
+periodo: today 12-m          # últimos 12 meses: Trends da datos semanales
+categoria: 47                # Autos y vehículos
+categoria_nombre: Autos y vehículos   # primera línea del CSV: «Categoría: Autos y vehículos»
+idioma: es                   # idioma de la página (y de la cabecera del CSV: «Semana»)
+frecuencia: Semana           # primera columna de la cabecera: datos semanales
+semanas: {minimo: 50, maximo: 54}     # unas 52 semanas
+max_terminos: 5              # límite de Trends por comparación: el modelo VW y hasta 4 competidores
+
+# Atención relativa (Marketing): cuota del modelo en su comparación, en las últimas semanas
+# completas frente a las anteriores
+atencion:
+  semanas: 4
+# El aviso al técnico («Toca descargar Google Trends») y sus 35 días van en alertas/reglas.yaml.

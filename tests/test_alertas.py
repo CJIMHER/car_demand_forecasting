@@ -59,6 +59,9 @@ def todo_en_orden(pg, dia=HOY):
         anotar(pg, f, "carga", "ok", dia)
     anotar(pg, "panel_mercado", "precalculo", "ok", dia)
     anotar(pg, "postgres", "copia", "ok", dia - timedelta(days=1))
+    # Google Trends descargado hace poco (la descarga es manual y mensual)
+    pg.execute("INSERT INTO gtrends_entrega (fecha_descarga, huella_manifiesto, carpeta, manifiesto) "
+               "VALUES (%s, %s, %s, '{}') ON CONFLICT DO NOTHING", (dia - timedelta(days=3), "h", "c"))
 
 
 def fila(pg, tabla, **cols):
@@ -95,10 +98,11 @@ def test_reglas_en_yaml_con_todo_lo_necesario():
     assert {r.id for r in todas} == {
         "fuente_caida", "competidor_stock", "competidor_precio", "perdida_peso", "vehiculo_envejecido",
         "riesgo_inmovilizacion", "ventas_fuera_banda", "caida_leads", "meta_a", "meta_b", "meta_c", "meta_d",
-        "meta_f", "meta_subir", "ventana_favorable"}
+        "meta_f", "meta_subir", "ventana_favorable", "gtrends_pendiente"}
     for r in todas:
         assert r.calculo in CALCULOS and r.roles and r.fuente and (r.datos.get("texto") or r.datos.get("textos"))
     assert {r.id: r.roles for r in todas}["fuente_caida"] == ("tecnico",)
+    assert {r.id: r.roles for r in todas}["gtrends_pendiente"] == ("tecnico",)
     assert set({r.id: r.roles for r in todas}["competidor_stock"]) == {"ventas", "direccion"}
     assert set({r.id: r.roles for r in todas}["perdida_peso"]) == {"ventas", "direccion"}
 
@@ -577,7 +581,7 @@ def test_competidores_cuadran_con_el_mercado_y_con_sql_directo(pg, datos):
     # Y el motor entero corre sobre el escenario sintético
     motor.evaluar(pg, DIA_ESCENARIO, conc)
     estados = dict(pg.execute("SELECT regla, estado FROM alertas_evaluacion WHERE origen = 'real'").fetchall())
-    assert set(estados) == {"fuente_caida", "competidor_stock", "competidor_precio", "perdida_peso"}
+    assert set(estados) == {"fuente_caida", "gtrends_pendiente", "competidor_stock", "competidor_precio", "perdida_peso"}
 
 
 # ================================================================== vistas

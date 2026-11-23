@@ -22,6 +22,7 @@ probabilidades sustituirán a los umbrales (docs/diseno.md, Señales y alertas).
 | --- | --- | --- | --- |
 | Fuente caída | técnico | `fuentes_estado`: un scraper sin captura del día, la carga, el precálculo o la última copia en error; un conector con error | Real |
 | Presión de un competidor (stock) | ventas, dirección | `panel_mercado_competidor`: otro concesionario de la provincia sube su stock de un modelo en 7 días (≥ 5 anuncios y ≥ 25 %) | Real |
+| Google Trends sin descargar | técnico | `gtrends_entrega`: la última descarga manual tiene más de 35 días, o no hay ninguna | Real |
 | Presión de un competidor (precio) | ventas, dirección | `panel_mercado_competidor`: baja el precio mediano de un segmento (modelo + acabado) ≥ 3 % en 7 días | Real |
 | Pérdida de peso | ventas, dirección | `panel_mercado_modelo`: nuestro peso en un modelo cae más de 5 puntos en 7 días | Real |
 | Vehículo envejecido | ventas | `panel_riesgo_vehiculo` + `panel_curva_grupo` | Preparada |

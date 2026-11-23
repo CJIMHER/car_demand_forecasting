@@ -55,6 +55,7 @@ services:
       PGDATABASE: ${POSTGRES_DB:-cdf}
       RCLONE_REMOTE: ${RCLONE_REMOTE:-hz}
       CDF_SCRAPERS_DATA: /datos/scrapers
+      CDF_GTRENDS_ENTRADA: /entrada/gtrends
     volumes:
       # Bases de los scrapers. Se abren SIEMPRE con mode=ro; la carpeta se monta con escritura
       # solo porque SQLite necesita crear su fichero -shm para leer una base en modo WAL.
@@ -68,6 +69,8 @@ services:
       # Credenciales en fichero (cuenta de servicio de GA4), fuera del repositorio y solo lectura:
       # /opt/cdf/secretos (700, de cdf), cada fichero 600. GA4_CREDENCIALES=/secretos/<fichero>.json
       - /opt/cdf/secretos:/secretos:ro
+      # Entregas de Google Trends subidas desde el Mac (make gtrends-subir): solo lectura
+      - /opt/cdf/entrada/gtrends:/entrada/gtrends:ro
     networks: [cdf_net]
 
   # Panel (hito 1b). Perfil «panel»: solo los arranca «make deploy» si PANEL_DOMINIO tiene valor.
