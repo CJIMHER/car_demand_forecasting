@@ -30,7 +30,8 @@ def crit():
 
 
 def campana(pg, cid, *, dias=2, gasto=1000, impresiones=None, clics=None, leads=0, citas=0, ventas=0, zona=None, fuera=None,
-            modelo="Golf", ambito="VN", hasta=HOY, titulo=None, leads_por_dia=None, gasto_por_dia=None):
+            modelo="Golf", ambito="VN", hasta=HOY, titulo=None, leads_por_dia=None, gasto_por_dia=None,
+            sin_mercado=False):
     """Una campaña de `dias` días hasta `hasta` (día de vida = dias − 1). Gasto (céntimos), impresiones,
     leads, citas y ventas totales; los de Walcu, el último día salvo `leads_por_dia`. Por defecto, clics y
     impresiones que no disparan la regla b: 10 clics por lead (10 % de clic a lead) y 10 % de tasa de clic."""
@@ -44,9 +45,10 @@ def campana(pg, cid, *, dias=2, gasto=1000, impresiones=None, clics=None, leads=
     for i in range(dias):
         d = inicio + timedelta(days=i)
         g = gasto_por_dia[i] if gasto_por_dia else (gasto // dias + (gasto % dias if i == dias - 1 else 0))
-        pg.execute("""INSERT INTO panel_campana_dia (dia, origen, campana_id, titulo, tipo_campana, modelo, ambito, inicio,
-                      gasto_cents, impresiones, clics) VALUES (%s, 'real', %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                   (d, cid, titulo or cid, "modelo" if modelo else "general", modelo, ambito, inicio, g,
+        pg.execute("""INSERT INTO panel_campana_dia (dia, origen, campana_id, titulo, tipo_campana, modelo, ambito,
+                      sin_mercado, inicio, gasto_cents, impresiones, clics)
+                      VALUES (%s, 'real', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                   (d, cid, titulo or cid, "modelo" if modelo else "general", modelo, ambito, sin_mercado, inicio, g,
                     impresiones if i == dias - 1 else 0, clics if i == dias - 1 else 0))
         n = leads_por_dia[i] if leads_por_dia else (leads if i == dias - 1 else 0)
         ultimo = i == dias - 1

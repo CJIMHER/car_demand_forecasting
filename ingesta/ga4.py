@@ -187,9 +187,9 @@ def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], 
     with pg.transaction():
         nuevas, iguales = cx.insertar_versionado(pg, "ga4_trafico_dia", "ga4_trafico_dia_vigente", CLAVE, VALORES,
                                                  filas, {"descargado_at": momento, "run_id": run_id, "origen": ORIGEN})
-    sin_regla = cmp.actualizar_sin_regla(pg)
+    campanas = cmp.actualizar(pg)
     return {"desde": str(desde), "hasta": str(hasta), "paginas": len(brutos), "filas": len(filas),
-            "filas_nuevas": nuevas, "filas_iguales": iguales, "brutos": ruta_bucket, "campanas_sin_regla": sin_regla}
+            "filas_nuevas": nuevas, "filas_iguales": iguales, "brutos": ruta_bucket, **campanas}
 
 
 def ejecutar(entorno: Mapping[str, str] | None = None, desde: date | None = None, hasta: date | None = None,

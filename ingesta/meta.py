@@ -142,9 +142,9 @@ def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], 
         nuevas, iguales = cx.insertar_versionado(
             pg, "campanas_meta_dia", "campanas_meta_dia_vigente", CLAVE, VALORES, filas,
             {"descargado_at": momento, "run_id": run_id, "origen": f"meta_marketing_api {config.meta_version}"})
-    sin_regla = cmp.actualizar_sin_regla(pg, config)
+    campanas = cmp.actualizar(pg, config)
     return {"desde": str(desde), "hasta": str(hasta), "paginas": len(brutos), "filas": len(filas),
-            "filas_nuevas": nuevas, "filas_iguales": iguales, "brutos": ruta, "campanas_sin_regla": sin_regla}
+            "filas_nuevas": nuevas, "filas_iguales": iguales, "brutos": ruta, **campanas}
 
 
 def ejecutar(entorno: Mapping[str, str] | None = None, desde: date | None = None, hasta: date | None = None,

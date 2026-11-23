@@ -1,14 +1,24 @@
-"""Campañas: regla de cada una (modelo y ámbito) y unión de Meta, GA4 y Walcu por utm_campaign.
+"""Campañas: tipo, ámbito y modelo de cada una, y unión de Meta, GA4 y Walcu por utm_campaign.
 
-La regla de unión y las reglas de cada campaña están documentadas en config/campanas.yaml. Este
-módulo las aplica y recalcula panel_campanas_sin_regla (las campañas descargadas de Meta y GA4 que
-no encajan en ninguna regla), que el panel lista en «Estado de las fuentes».
+Las reglas están documentadas en config/campanas.yaml. Este módulo:
+- clasifica cada campaña por su nombre (o por su asignación a mano, que manda): tipo modelo o
+  general; ámbito VN, VO o ambos; el modelo, normalizado con el catálogo de config/versiones.yaml, y
+  si ese modelo no está en el catálogo, «sin datos de mercado»;
+- rehace panel_campana_dia (origen real) con las campañas de Meta clasificadas: es la tabla del
+  contrato del panel de la que Marketing y los criterios de Meta leen el tipo y el ámbito;
+- rehace panel_campanas_sin_regla con las campañas de Meta y GA4 que no casan, con el motivo, para
+  «Estado de las fuentes».
+
+Uso: python -m ingesta.campanas (make campanas) tras cambiar config/campanas.yaml. Lo hacen también
+cada descarga de Meta y de GA4.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import re
+import sys
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +27,14 @@ import psycopg
 import yaml
 
 RAIZ = Path(__file__).resolve().parent.parent
-AMBITOS = ("VN", "VO", "general")
+LOG = logging.getLogger("ingesta.campanas")
+TIPOS = ("modelo", "general")
+AMBITOS = ("VN", "VO", "ambos")
+MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "setiembre",
+         "octubre", "noviembre", "diciembre")
+ETIQUETA = re.compile(r"\[\s*(vn|vo)\s*\]")
+ANIO = re.compile(r"\[\s*(20\d\d)\s*\]|(?<![0-9])(20\d\d)(?![0-9])")
+MES = re.compile(r"(?<![a-z])(" + "|".join(MESES) + r")(?![a-z])")
 # Valores de GA4 que no son una campaña: tráfico directo, orgánico o de referencia
 NO_CAMPANA = {"(not set)", "(direct)", "(organic)", "(referral)", "(none)", "(not provided)", ""}
 
@@ -32,22 +49,87 @@ def normalizar(nombre: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", "_", texto).strip("_")
 
 
+def plegar(texto: str | None) -> str:
+    """Sin tildes, en minúsculas y con los espacios reducidos a uno (conserva corchetes y guiones)."""
+    t = unicodedata.normalize("NFKD", str(texto or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c)).casefold()
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def compacto(texto: str | None) -> str:
+    """Solo letras y números: «T-Roc», «t roc» y «TROC» → «troc»."""
+    return re.sub(r"[^a-z0-9]", "", plegar(texto))
+
+
+def catalogo_modelos(fichero: Path | None = None) -> dict[str, str]:
+    """{forma compacta: nombre del modelo} de config/versiones.yaml, con sus nombres «en_texto»."""
+    ruta_v = fichero or Path(os.environ.get("CDF_VERSIONES", RAIZ / "config" / "versiones.yaml"))
+    cfg = yaml.safe_load(ruta_v.read_text(encoding="utf-8")) or {}
+    salida = {}
+    for modelo, datos in (cfg.get("modelos") or {}).items():
+        for forma in [str(modelo)] + [str(n) for n in (datos or {}).get("en_texto") or []]:
+            salida.setdefault(compacto(forma), str(modelo))
+    return salida
+
+
 @dataclass(frozen=True)
-class Regla:
-    patron: re.Pattern
-    modelo: str | None
-    ambito: str
+class Clasificacion:
+    """Tipo, ámbito y modelo de una campaña; sin tipo, no casa con nada y «motivo» dice por qué."""
+    tipo: str | None = None              # modelo, general
+    ambito: str | None = None            # VN, VO, ambos
+    modelo: str | None = None
+    sin_mercado: bool = False            # modelo fuera del catálogo de turismos que capturamos
+    origen: str | None = None            # regla, asignacion
+    motivo: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.tipo is not None
 
 
 @dataclass(frozen=True)
 class Campanas:
-    reglas: tuple[Regla, ...]
+    generales: tuple[str, ...]
+    asignaciones: dict[str, Clasificacion]
     equivalencias: dict[str, str]
     meta_version: str
+    catalogo: dict[str, str]
 
-    def regla(self, nombre: str | None) -> Regla | None:
-        n = normalizar(nombre)
-        return next((r for r in self.reglas if r.patron.search(n)), None)
+    def modelo(self, texto: str) -> tuple[str, bool]:
+        """(modelo normalizado con el catálogo, sin datos de mercado)."""
+        nombre = self.catalogo.get(compacto(texto))
+        return (nombre, False) if nombre else (re.sub(r"\s+", " ", texto).strip(), True)
+
+    def clasificar(self, nombre: str | None) -> Clasificacion:
+        manual = self.asignaciones.get(normalizar(nombre))
+        if manual:
+            return manual
+        original = re.sub(r"\s+", " ", str(nombre or "")).strip()
+        texto = plegar(original)
+        if not texto:
+            return Clasificacion(motivo="sin nombre")
+        etiquetas = set(ETIQUETA.findall(texto))
+        if len(etiquetas) > 1:
+            return Clasificacion(motivo="lleva las etiquetas [VN] y [VO] a la vez")
+        ambito = etiquetas.pop().upper() if etiquetas else "ambos"
+        junto = compacto(texto)
+        if any(g in junto for g in self.generales):
+            return Clasificacion("general", ambito, origen="regla")
+        anio = ANIO.search(texto)
+        if anio is None:
+            return Clasificacion(motivo="no es general (" + ", ".join(self.generales) + ") ni lleva año "
+                                        "(2026) seguido del modelo y el mes")
+        mes = MES.search(texto, anio.end())
+        if mes is None:
+            return Clasificacion(motivo="no es general (" + ", ".join(self.generales) + ") ni lleva el mes "
+                                        "(enero … diciembre) después del año y el modelo")
+        # El modelo, tal como está escrito: plegar() no cambia la longitud salvo letras raras («ß»)
+        tramo = (original if len(original) == len(texto) else texto)[anio.end():mes.start()]
+        tramo = re.sub(r"\[\s*v[no]\s*\]|[\[\]]", " ", tramo, flags=re.I).strip(" -_·|:/")
+        if not compacto(tramo):
+            return Clasificacion(motivo="no hay modelo entre el año y el mes")
+        modelo, sin_mercado = self.modelo(tramo)
+        return Clasificacion("modelo", ambito, modelo, sin_mercado, "regla")
 
     def clave_union(self, utm_campaign: str | None) -> str:
         """Clave con que se unen un lead de Walcu (o una sesión de GA4) y una campaña de Meta."""
@@ -59,39 +141,95 @@ def ruta() -> Path:
     return Path(os.environ.get("CDF_CAMPANAS", RAIZ / "config" / "campanas.yaml"))
 
 
-def cargar(fichero: Path | None = None) -> Campanas:
+def cargar(fichero: Path | None = None, catalogo: dict[str, str] | None = None) -> Campanas:
     cfg = yaml.safe_load((fichero or ruta()).read_text(encoding="utf-8")) or {}
-    reglas = []
-    for i, r in enumerate(cfg.get("reglas") or [], 1):
-        if not isinstance(r, dict) or not r.get("patron"):
-            raise ErrorCampanas(f"config/campanas.yaml, regla {i}: falta «patron»")
-        if r.get("ambito") not in AMBITOS:
-            raise ErrorCampanas(f"config/campanas.yaml, regla {i}: «ambito» debe ser VN, VO o general")
-        if r.get("ambito") != "general" and not r.get("modelo"):
-            raise ErrorCampanas(f"config/campanas.yaml, regla {i}: una campaña de VN o VO necesita «modelo»")
-        try:
-            patron = re.compile(str(r["patron"]))
-        except re.error as exc:
-            raise ErrorCampanas(f"config/campanas.yaml, regla {i}: patrón no válido ({exc})") from None
-        reglas.append(Regla(patron, r.get("modelo") or None, r["ambito"]))
+    reglas = cfg.get("reglas") or {}
+    if not isinstance(reglas, dict):
+        raise ErrorCampanas("config/campanas.yaml: «reglas» lleva la lista «generales» (las reglas campaña a "
+                            "campaña son ahora «asignaciones»)")
+    generales = tuple(dict.fromkeys(compacto(g) for g in reglas.get("generales") or [] if compacto(g)))
+    if not generales:
+        raise ErrorCampanas("config/campanas.yaml: falta la lista «reglas.generales»")
+    catalogo = catalogo_modelos() if catalogo is None else catalogo
+    base = Campanas(generales, {}, {}, "", catalogo)
+    asignaciones = {}
+    for i, a in enumerate(cfg.get("asignaciones") or [], 1):
+        donde = f"config/campanas.yaml, asignación {i}"
+        if not isinstance(a, dict) or not normalizar(a.get("campana")):
+            raise ErrorCampanas(f"{donde}: falta «campana»")
+        if a.get("tipo") not in TIPOS:
+            raise ErrorCampanas(f"{donde}: «tipo» debe ser modelo o general")
+        if a.get("ambito") not in AMBITOS:
+            raise ErrorCampanas(f"{donde}: «ambito» debe ser VN, VO o ambos")
+        if (a["tipo"] == "modelo") != bool(a.get("modelo")):
+            raise ErrorCampanas(f"{donde}: «modelo» va en las de tipo modelo y solo en ellas")
+        clave = normalizar(a["campana"])
+        if clave in asignaciones:
+            raise ErrorCampanas(f"{donde}: la campaña «{a['campana']}» ya tiene asignación")
+        modelo, sin_mercado = base.modelo(str(a["modelo"])) if a.get("modelo") else (None, False)
+        asignaciones[clave] = Clasificacion(a["tipo"], a["ambito"], modelo, sin_mercado, "asignacion")
     equivalencias = {normalizar(k): normalizar(v) for k, v in (cfg.get("equivalencias") or {}).items()}
-    return Campanas(tuple(reglas), equivalencias, str((cfg.get("meta") or {}).get("version_api") or "v24.0"))
+    return Campanas(generales, asignaciones, equivalencias, str((cfg.get("meta") or {}).get("version_api") or "v24.0"),
+                    catalogo)
 
 
-def actualizar_sin_regla(pg: psycopg.Connection, campanas: Campanas | None = None) -> int:
-    """Recalcula panel_campanas_sin_regla con las campañas de Meta y GA4 sin regla. Devuelve cuántas."""
+# --------------------------------------------------------------------------- tablas del panel
+
+def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None) -> dict:
+    """Rehace panel_campana_dia (real) y panel_campanas_sin_regla. Devuelve cuántas campañas de Meta se
+    han clasificado y cuántas campañas (Meta y GA4) han quedado sin regla."""
     campanas = campanas or cargar()
-    meta = pg.execute(
-        """SELECT campana_nombre, min(dia), max(dia), sum(gasto_cents) FROM campanas_meta_dia_vigente
-           WHERE nivel = 'campana' GROUP BY campana_nombre""").fetchall()
-    ga4 = pg.execute(
-        """SELECT campana, min(dia), max(dia), sum(sesiones) FROM ga4_trafico_dia_vigente GROUP BY campana""").fetchall()
-    filas = [("meta", n or "(sin nombre)", p, u, g, None) for n, p, u, g in meta if campanas.regla(n) is None]
-    filas += [("ga4", c, p, u, None, s) for c, p, u, s in ga4
-              if c not in NO_CAMPANA and campanas.regla(campanas.clave_union(c)) is None]
+    filas = pg.execute(
+        """SELECT dia, campana_id, campana_nombre, gasto_cents, impresiones, clics FROM campanas_meta_dia_vigente
+           WHERE nivel = 'campana' ORDER BY campana_id, dia""").fetchall()
+    por_campana: dict[str, list] = {}
+    for f in filas:
+        por_campana.setdefault(f[1], []).append(f)
+    panel, sin_regla, por_clave, clasificadas = [], [], {}, 0
+    for cid, dias in por_campana.items():
+        # El nombre vigente (el del último día con nombre) clasifica todos los días de la campaña
+        nombre = next((d[2] for d in reversed(dias) if d[2]), None) or "(sin nombre)"
+        c = campanas.clasificar(nombre)
+        por_clave.setdefault(normalizar(nombre), c)
+        if not c.ok:
+            sin_regla.append(("meta", nombre, dias[0][0], dias[-1][0], sum(d[3] for d in dias), None, c.motivo))
+            continue
+        clasificadas += 1
+        inicio = dias[0][0]
+        panel += [(d[0], cid, nombre, c.tipo, c.modelo if c.tipo == "modelo" else None, c.ambito, c.sin_mercado,
+                   inicio, d[3], d[4], d[5]) for d in dias]
+    for camp, p, u, s in pg.execute(
+            "SELECT campana, min(dia), max(dia), sum(sesiones) FROM ga4_trafico_dia_vigente GROUP BY campana"):
+        if camp in NO_CAMPANA:
+            continue
+        c = por_clave.get(campanas.clave_union(camp)) or campanas.clasificar(camp)
+        if not c.ok:
+            sin_regla.append(("ga4", camp, p, u, None, s, c.motivo))
     with pg.transaction():
+        pg.execute("DELETE FROM panel_campana_dia WHERE origen = 'real'")
         pg.execute("DELETE FROM panel_campanas_sin_regla")
         with pg.cursor() as cur:
-            cur.executemany("INSERT INTO panel_campanas_sin_regla (fuente, campana, primer_dia, ultimo_dia, gasto_cents, "
-                            "sesiones) VALUES (%s, %s, %s, %s, %s, %s)", filas)
-    return len(filas)
+            cur.executemany(
+                """INSERT INTO panel_campana_dia (origen, dia, campana_id, titulo, tipo_campana, modelo, ambito,
+                   sin_mercado, inicio, gasto_cents, impresiones, clics)
+                   VALUES ('real', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", panel)
+            cur.executemany("INSERT INTO panel_campanas_sin_regla (fuente, campana, primer_dia, ultimo_dia, "
+                            "gasto_cents, sesiones, motivo) VALUES (%s, %s, %s, %s, %s, %s, %s)", sin_regla)
+    return {"campanas_clasificadas": clasificadas, "campanas_sin_regla": len(sin_regla)}
+
+
+def main(argv=None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from ingesta.db import conectar
+    try:
+        config = cargar()
+    except ErrorCampanas as exc:
+        LOG.error("%s", exc)
+        return 1
+    with conectar(autocommit=True) as pg:
+        LOG.info("Campañas: %s", actualizar(pg, config))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

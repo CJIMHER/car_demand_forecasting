@@ -5,10 +5,11 @@ panel_recomendacion_modelo, panel_atencion_relativa, panel_semana_campana,
 panel_campana_resultado y, en VO, panel_riesgo_vehiculo (contrato). Solo sumas y cocientes de filas
 ya preparadas.
 
-Cada campaña tiene un ámbito: VN, VO o general (las dos). En VN o VO se ven las de ese ámbito y las
-generales; de una general, los leads, citas y ventas del tipo elegido, y sin costes por lead, cita
-ni venta: su gasto es común a VN y VO y no se reparte con ninguna regla. Las tarjetas de arriba, en
-VN o VO, cuentan solo las campañas de ese ámbito.
+Cada campaña tiene un tipo (de un modelo o general) y un ámbito (VN, VO o ambos), los dos de
+config/campanas.yaml (ingesta/campanas.py). En VN o VO se ven las de ese ámbito y las de ambos; de una
+de ambos, los leads, citas y ventas del tipo elegido, y sin costes por lead, cita ni venta: su gasto
+es común a VN y VO y no se reparte con ninguna regla. Las tarjetas de arriba, en VN o VO, cuentan
+solo las campañas de ese ámbito.
 """
 
 from __future__ import annotations
@@ -42,7 +43,8 @@ ESLABONES = {"entrega": "Entrega", "anuncio": "Anuncio", "web": "Web", "calidad_
 NIVELES = {"favorable": "Favorable", "normal": "Normal", "poco_favorable": "Poco favorable"}
 MOTIVOS = {"estacionalidad": "Estacionalidad", "calendario": "Calendario", "stock_envejecido": "Stock envejecido",
            "atencion": "Atención", "presion_competencia": "Presión de otros concesionarios"}
-AMBITOS = {"VN": "Nuevos (VN)", "VO": "Ocasión (VO)", "general": "General (VN y VO)"}
+AMBITOS = {"VN": "Nuevos (VN)", "VO": "Ocasión (VO)", "ambos": "VN y VO"}
+SIN_MERCADO = "sin datos de mercado"
 COMUN = "gasto común a VN y VO"
 VEREDICTOS = {"por_encima": "Por encima de lo esperado", "normal": "Dentro de lo normal",
               "por_debajo": "Por debajo de lo esperado"}
@@ -106,17 +108,17 @@ def _leads(pg, origen, desde: date, hasta: date, tipo: str = "todo") -> dict[str
 
 
 def _ambitos(pg, origen) -> dict[str, str]:
-    """Ámbito de cada campaña (VN, VO o general)."""
+    """Ámbito de cada campaña (VN, VO o ambos)."""
     return dict(pg.execute("SELECT DISTINCT campana_id, ambito FROM panel_campana_dia WHERE origen = %s", (origen,)))
 
 
 def _de_tipo(tipo: str) -> tuple[str, ...]:
     """Ámbitos de campaña que se ven con cada opción del selector."""
-    return ("VN", "VO", "general") if tipo == "todo" else (tipo, "general")
+    return ("VN", "VO", "ambos") if tipo == "todo" else (tipo, "ambos")
 
 
-def _sin_generales(n: int) -> str:
-    return "sin la campaña general" if n == 1 else "sin las campañas generales"
+def _sin_comunes(n: int) -> str:
+    return "sin la campaña de VN y VO" if n == 1 else "sin las campañas de VN y VO"
 
 
 def _hay(pg, tabla: str, origen) -> bool:
@@ -124,12 +126,12 @@ def _hay(pg, tabla: str, origen) -> bool:
 
 
 def kpis(pg, origen, tipo: str = "todo") -> dict:
-    """En VN o VO, solo las campañas de ese ámbito (sin las generales, cuyo gasto no se reparte)."""
+    """En VN o VO, solo las campañas de ese ámbito (sin las de ambos, cuyo gasto no se reparte)."""
     v = _ventana(pg, origen)
     if v is None:
         return ng.bloque(origen, hay=False)
     ini, fin, ini_ant, fin_ant = v
-    ambitos = ("VN", "VO", "general") if tipo == "todo" else (tipo,)
+    ambitos = ("VN", "VO", "ambos") if tipo == "todo" else (tipo,)
     gasto, activas = pg.execute(
         """SELECT coalesce(sum(gasto_cents), 0) / 100.0, count(DISTINCT campana_id) FILTER (WHERE dia = %s)
            FROM panel_campana_dia WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = ANY(%s)""",
@@ -137,14 +139,14 @@ def kpis(pg, origen, tipo: str = "todo") -> dict:
     gasto_ant = pg.execute("SELECT coalesce(sum(gasto_cents), 0) / 100.0 FROM panel_campana_dia "
                            "WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = ANY(%s)",
                            (origen, ini_ant, fin_ant, list(ambitos))).fetchone()[0]
-    generales = 0 if tipo == "todo" else pg.execute(
+    comunes = 0 if tipo == "todo" else pg.execute(
         """SELECT count(DISTINCT campana_id) FROM panel_campana_dia
-           WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = 'general'""", (origen, ini, fin)).fetchone()[0]
-    sin_general = f" · {_sin_generales(generales)}" if generales else ""
+           WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = 'ambos'""", (origen, ini, fin)).fetchone()[0]
+    sin_comun = f" · {_sin_comunes(comunes)}" if comunes else ""
     hay_leads = _hay(pg, "panel_leads_dia", origen)
     tarjetas = [{"etiqueta": "Inversión" if tipo == "todo" else f"Inversión {tipo}", "valor": _euros(gasto),
                  "sub": f"{activas} campaña{'s' if activas != 1 else ''} activa{'s' if activas != 1 else ''}"
-                        + sin_general}]
+                        + sin_comun}]
     if hay_leads:
         ambito = _ambitos(pg, origen)
 
@@ -165,8 +167,8 @@ def kpis(pg, origen, tipo: str = "todo") -> dict:
     else:
         for e in ("Leads", "Coste por lead", "Coste por venta"):
             tarjetas.append({"etiqueta": e, "valor": fmt.GUION, "sub": "Sin datos todavía", "sin_dato": True})
-    nota = (f"Solo las campañas de {AMBITOS[tipo]}, {_sin_generales(generales)}: su gasto es común a VN y VO "
-            f"y no se reparte." if generales else "")
+    nota = (f"Solo las campañas de {AMBITOS[tipo]}, {_sin_comunes(comunes)}: su gasto es común a VN y VO "
+            f"y no se reparte." if comunes else "")
     return ng.bloque(origen, tarjetas=tarjetas, desde=fmt.fecha_corta(ini), hasta=fmt.fecha_corta(fin), nota=nota)
 
 
@@ -190,14 +192,14 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
         "SELECT campana_id, decision, reglas FROM panel_campana_decision WHERE origen = %s AND dia = %s",
         (origen, decision_dia))} if decision_dia else {}
     filas = []
-    for cid, titulo, ambito, modelo, inicio, gasto, ultimo in pg.execute(
-            """SELECT campana_id, max(titulo), max(ambito), max(modelo), min(inicio),
-                      sum(gasto_cents) / 100.0, max(dia) FROM panel_campana_dia
+    for cid, titulo, ambito, tipo_campana, modelo, fuera, inicio, gasto, ultimo in pg.execute(
+            """SELECT campana_id, max(titulo), max(ambito), max(tipo_campana), max(modelo), bool_or(sin_mercado),
+                      min(inicio), sum(gasto_cents) / 100.0, max(dia) FROM panel_campana_dia
                WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = ANY(%s) GROUP BY campana_id""",
             (origen, ini, fin, list(_de_tipo(tipo)))):
         gasto = float(gasto)
-        # Una general vista en VN o VO: sus leads de ese tipo y ningún coste (el gasto no se reparte)
-        comun = tipo != "todo" and ambito == "general"
+        # Una de ambos vista en VN o VO: sus leads de ese tipo y ningún coste (el gasto no se reparte)
+        comun = tipo != "todo" and ambito == "ambos"
         l, c, ve = (leads_tipo if comun else leads).get(cid, [0, 0, 0]) if hay_leads else (None, None, None)
         dias_vida = (fin - inicio).days + 1
         estado, fallos, n_salud = "sin_datos", [], None
@@ -213,13 +215,15 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
         coste = (lambda n: None) if comun else (lambda n: _div(gasto, n) if n else None)
         decision, reglas = decisiones.get(cid, (None, []))
         criterios = [f"{NOMBRE_REGLA[r['regla']]}: {r['texto']}" + (f". {r['revisar']}" if r.get("revisar") else "")
-                     + ("" if r["estado"] == "activa" else " (no salta)")
-                     for r in reglas if r["estado"] in ("activa", "sin_volumen") and r["regla"] != "e"]
+                     + ("" if r["estado"] in ("activa", "no_aplica") else " (no salta)")
+                     for r in reglas if r["estado"] in ("activa", "sin_volumen") and r["regla"] != "e"
+                     or r["estado"] == "no_aplica"]
         salud_texto = (f"Frente a campañas con los mismos días de vida: {ESTADOS[estado]}"
                        + (f" (n = {n_salud} campañas)" if n_salud else "")) if salud.get(cid) else ""
         filas.append({
             "nombre": titulo, "cpv_num": coste(ve), "gasto_num": gasto, "ambito": ambito, "comun": comun,
-            "nota": AMBITOS[ambito] + (f" · {modelo}" if modelo else "")
+            "nota": AMBITOS[ambito] + (f" · {modelo}" if tipo_campana == "modelo" else " · General")
+                    + (f" · {SIN_MERCADO}" if fuera else "")
                     + (f" · leads, citas y ventas de {tipo} · {COMUN}" if comun else "")
                     + f" · {dias_vida} días de vida · desde el {fmt.fecha_corta(inicio)}"
                     + ("" if ultimo == fin else " · terminada"),
@@ -228,7 +232,8 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
             # La decisión sale de los criterios de Meta; la salud frente a su referencia es solo detalle
             "decision": decision, "decision_texto": DECISIONES[decision] if decision else "Sin decidir todavía",
             "criterios": criterios, "salud_texto": salud_texto, "estado": estado if salud.get(cid) else None,
-            "fallos": fallos, "alerta": decision in ("revisar", "parar"),
+            "fallos": fallos, "alerta": decision in ("revisar", "parar"), "tipo_campana": tipo_campana,
+            "sin_mercado": bool(fuera),
         })
     if orden == "gasto":
         filas.sort(key=lambda f: (-f["gasto_num"], f["nombre"]))
@@ -293,7 +298,7 @@ def semanas(pg, origen, tipo: str = "todo") -> dict:
 
 
 def pasadas(pg, origen, tipo: str = "todo") -> dict:
-    """Todo: el resultado completo de cada campaña. VN o VO: las de ese ámbito y las generales con sus
+    """Todo: el resultado completo de cada campaña. VN o VO: las de ese ámbito y las de ambos con sus
     leads y ventas de ese tipo."""
     dia = ng.ultimo_dia(pg, "panel_campana_resultado", origen)
     if dia is None:
@@ -305,9 +310,9 @@ def pasadas(pg, origen, tipo: str = "todo") -> dict:
                       veredicto_ventas, n
                FROM panel_campana_resultado WHERE origen = %s AND dia = %s
                 AND (CASE WHEN %s = 'todo' THEN tipo = 'todo'
-                          ELSE (ambito = %s AND tipo = 'todo') OR (ambito = 'general' AND tipo = %s) END)
+                          ELSE (ambito = %s AND tipo = 'todo') OR (ambito = 'ambos' AND tipo = %s) END)
                ORDER BY fin DESC, campana_id""", (origen, dia, tipo, tipo, tipo)):
-        comun = tipo != "todo" and ambito == "general"
+        comun = tipo != "todo" and ambito == "ambos"
         filas.append({
             "nombre": titulo, "ambito": AMBITOS[ambito], "fechas": f"{fmt.fecha(inicio)} – {fmt.fecha(fin)}",
             "gasto": _euros(float(gasto)) + (f" ({COMUN})" if comun else ""),

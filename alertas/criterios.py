@@ -55,7 +55,7 @@ def euros(cents: F | int) -> str:
 class Resultado:
     """Una regla aplicada a una campaña (o la e a un modelo)."""
     regla: str
-    estado: str                 # activa, no, sin_volumen, sin_dato
+    estado: str                 # activa, no, sin_volumen, sin_dato, no_aplica (sin datos de mercado)
     cifras_texto: str
     revisar: str = ""
     decision: str | None = None  # la que propone si está activa
@@ -81,12 +81,19 @@ class Juicio:
     citas: int
     ventas: int
     gasto_cents: int
+    sin_mercado: bool = False   # modelo fuera del catálogo de turismos que capturamos (config/campanas.yaml)
     decision: str = "sin_juzgar"
     reglas: dict[str, Resultado] = field(default_factory=dict)
 
     @property
     def tipo(self) -> str | None:
         return self.ambito if self.ambito in ("VN", "VO") else None
+
+
+def sin_mercado(modelo: str) -> Resultado:
+    """Regla e de una campaña cuyo modelo no capturamos (Caravelle…): no se aplica, no decide."""
+    return Resultado("e", "no_aplica", f"{modelo}: sin datos de mercado (no está en el catálogo de turismos que "
+                     "capturamos); la regla e y la comparación con la competencia no se pueden aplicar")
 
 
 # --------------------------------------------------------------------------- regla e (por modelo)
@@ -191,8 +198,9 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
     medias = _medias(pg, origen, dia, int(crit["media_dias"]))
     tolerancia = 1 + _f(crit["media_tolerancia_pct"]) / CIEN
     juicios = []
-    for cid, titulo, modelo, ambito, inicio in pg.execute(
-            """SELECT DISTINCT ON (campana_id) campana_id, titulo, modelo, ambito, inicio FROM panel_campana_dia
+    for cid, titulo, modelo, ambito, inicio, sin_merc in pg.execute(
+            """SELECT DISTINCT ON (campana_id) campana_id, titulo, modelo, ambito, inicio, sin_mercado
+               FROM panel_campana_dia
                WHERE origen = %s AND dia = %s AND gasto_cents > 0 ORDER BY campana_id""", (origen, dia)).fetchall():
         gasto, impresiones, clics = (int(x) for x in pg.execute(
             "SELECT sum(gasto_cents), sum(impresiones), sum(clics) FROM panel_campana_dia WHERE origen = %s AND campana_id = %s "
@@ -202,7 +210,8 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
                       coalesce(sum(leads_cp_zona), 0), coalesce(sum(leads_cp_fuera), 0), count(leads_cp_zona)
                FROM panel_leads_dia WHERE origen = %s AND campana_id = %s AND dia BETWEEN %s AND %s""",
             (origen, cid, inicio, dia)).fetchone())
-        j = Juicio(cid, titulo, modelo, ambito, (dia - inicio).days, leads, citas, ventas, gasto)
+        j = Juicio(cid, titulo, modelo, ambito, (dia - inicio).days, leads, citas, ventas, gasto,
+                   sin_mercado=bool(sin_merc and modelo))
         juicios.append(j)
         if j.dias_vida < int(crit["dias_vida_minimos"]):
             continue
@@ -217,7 +226,9 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
         r["c"] = _c(crit["c"], gasto, leads, cpc, media_cpc, crit["media_tolerancia_pct"])
         r["d"] = _d(crit["d"], j, cpl_media, cpc_media, media_cpl, media_cpc, modelos_e)
         r["f"] = _fatiga(pg, origen, crit["f"], cid, dia, j.dias_vida)
-        if j.tipo and j.modelo and (j.tipo, j.modelo) in modelos_e:
+        if j.sin_mercado:
+            r["e"] = sin_mercado(j.modelo)
+        elif j.tipo and j.modelo and (j.tipo, j.modelo) in modelos_e:
             r["e"] = modelos_e[(j.tipo, j.modelo)].resultado
         r["subir"] = _subir(crit, j, cpl, cpc, r)
         if r["c"].activa and r["c"].decision == "parar":
@@ -367,8 +378,11 @@ def _d(c: dict, j: Juicio, cpl_media: bool, cpc_media: bool, media_cpl, media_cp
         return Resultado("d", "no", texto + "; coste por lead o por cita fuera de su media (lo cubre la regla c)",
                          cifras=cifras)
     similares = ""
-    m = modelos_e.get((j.tipo, j.modelo)) if j.tipo and j.modelo else None
-    if m and m.segmentos:
+    m = modelos_e.get((j.tipo, j.modelo)) if j.tipo and j.modelo and not j.sin_mercado else None
+    if j.sin_mercado:
+        similares = f" (no se puede aplicar: {j.modelo} sin datos de mercado)"
+        cifras["sin_mercado"] = True
+    elif m and m.segmentos:
         similares = " (" + "; ".join(f"{s['acabado']} {s['motor']}: {s['n_competencia']} de otros concesionarios a "
                                      f"{euros(s['competencia'])}, el nuestro a {euros(s['propio'])}"
                                      for s in m.segmentos[:int(c["segmentos_mostrados"])]) + ")"
@@ -426,7 +440,8 @@ def _subir(crit: dict, j: Juicio, cpl: F | None, cpc: F | None, r: dict[str, Res
          f"coste por venta {euros(cpv) if cpv is not None else '—'} (< {num(_f(s['coste_venta_maximo']))} €)"),
     ]
     e = r.get("e")
-    if j.tipo and j.modelo:
+    no_aplica = j.sin_mercado
+    if j.tipo and j.modelo and not no_aplica:
         pruebas.append(("regla e", e is not None and e.decision == "lanzar",
                         f"regla e: {e.cifras_texto if e else 'sin datos de mercado'}"))
     activas = [k for k in ("a", "b", "c", "d", "f") if r[k].activa]
@@ -434,8 +449,13 @@ def _subir(crit: dict, j: Juicio, cpl: F | None, cpc: F | None, r: dict[str, Res
         pruebas.append(("ninguna regla de revisión", False, f"reglas activas: {', '.join(activas)}"))
     texto = "; ".join(t for _, _, t in pruebas)
     ok = all(cumple for _, cumple, _ in pruebas)
-    return Resultado("subir", "activa" if ok else "no", texto, decision="subir" if ok else None,
-                     cifras={"cumplen": [n for n, c, _ in pruebas if c], "no_cumplen": [n for n, c, _ in pruebas if not c]})
+    cifras = {"cumplen": [n for n, c, _ in pruebas if c], "no_cumplen": [n for n, c, _ in pruebas if not c]}
+    if no_aplica:
+        # Subir exige la regla e; sin datos de mercado no se puede comprobar: ni sube ni lo descarta
+        texto += f"; regla e: no se puede aplicar ({j.modelo} sin datos de mercado)"
+        cifras["sin_mercado"] = True
+        return Resultado("subir", "no_aplica" if ok else "no", texto, cifras=cifras)
+    return Resultado("subir", "activa" if ok else "no", texto, decision="subir" if ok else None, cifras=cifras)
 
 
 # --------------------------------------------------------------------------- escritura

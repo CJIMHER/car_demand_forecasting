@@ -212,24 +212,24 @@ def test_ejemplo_determinista_y_coherente_entre_vistas(conc):
     for tipo in ("todo", "VN", "VO"):
         semanas = [f["semana"] for f in a["panel_semana_campana"] if f["tipo"] == tipo]
         assert len(semanas) == 6 and all(s.weekday() == 0 for s in semanas) and semanas[0] > HOY, tipo
-    # Ámbitos: campañas de VN, de VO y una general con leads de los dos tipos
+    # Ámbitos: campañas de VN, de VO y una de ambos con leads de los dos tipos
     ambito = {f["campana_id"]: f["ambito"] for f in a["panel_campana_dia"]}
-    assert set(ambito.values()) == {"VN", "VO", "general"}
+    assert set(ambito.values()) == {"VN", "VO", "ambos"}
     tipos_de = {}
     for f in a["panel_leads_dia"]:
         if f["campana_id"]:
             tipos_de.setdefault(f["campana_id"], set()).add(f["tipo"])
     for cid, tipos in tipos_de.items():
-        assert tipos == ({"VN", "VO"} if ambito[cid] == "general" else {ambito[cid]}), cid
+        assert tipos == ({"VN", "VO"} if ambito[cid] == "ambos" else {ambito[cid]}), cid
     assert {f["tipo"] for f in a["panel_recomendacion_modelo"]} == {"VN", "VO"}
-    # Campañas pasadas: una fila «todo» por campaña; las generales, además VN y VO, que suman «todo»
+    # Campañas pasadas: una fila «todo» por campaña; las de ambos, además VN y VO, que suman «todo»
     res = {(f["campana_id"], f["tipo"]): f for f in a["panel_campana_resultado"]}
     for (cid, tipo), f in res.items():
-        if f["ambito"] == "general" and tipo == "todo":
+        if f["ambito"] == "ambos" and tipo == "todo":
             for col in ("leads", "ventas", "leads_sin_p50", "ventas_sin_p50"):
                 assert f[col] == res[(cid, "VN")][col] + res[(cid, "VO")][col], (cid, col)
         assert (cid, "todo") in res
-    assert {f["ambito"] for f in a["panel_campana_resultado"]} == {"VN", "VO", "general"}
+    assert {f["ambito"] for f in a["panel_campana_resultado"]} == {"VN", "VO", "ambos"}
 
 
 def _huella(pg, tabla):
@@ -428,8 +428,8 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     camp = b["campanas"][1]
     for estado in ("Bien", "Vigilar", "Revisar", "Sin datos suficientes"):
         assert f"Frente a campañas con los mismos días de vida: {estado}" in camp, estado
-    assert "Nuevos (VN) · " in camp and "Ocasión (VO) · " in camp and "General (VN y VO) · " in camp
-    assert "días de vida" in camp and "gasto común" not in camp           # en Todo, la general con sus costes
+    assert "Nuevos (VN) · " in camp and "Ocasión (VO) · " in camp and "VN y VO · General · " in camp
+    assert "días de vida" in camp and "gasto común" not in camp           # en Todo, la de ambos con sus costes
     # El detalle va en su propia fila, a todo el ancho; en «Decisión» queda solo la decisión
     assert re.search(r'<tr class="fila-diagnostico">\s*<td colspan="9">\s*<p class="diagnostico">Detalle · [^<]*'
                      r"Dónde falla: el anuncio\. Clics por impresión: [\d,]+ %, frente a [\d,]+ % de referencia "
@@ -439,7 +439,7 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     decision = re.findall(r'<td data-etiqueta="Decisión"[^>]*>(.*?)</td>', camp, re.S)
     assert decision and all(re.fullmatch(r'\s*<span class="chip [^"]+">Sin decidir todavía</span>\s*', c)
                             for c in decision)
-    assert "se compara con su referencia en campañas anteriores de su mismo ámbito (VN, VO o general)" in camp
+    assert "se compara con su referencia en campañas anteriores de su mismo ámbito (VN, VO o los dos)" in camp
     assert "explica, pero no decide" in camp
     # Recomendación, atención, semanas y campañas pasadas
     for accion in ("Subir presupuesto", "Continuar", "Revisar o parar"):
@@ -501,14 +501,14 @@ def test_marketing_selector_cuadra_con_las_filas(pg, panel_url, personas, con_ej
     def leads(cid, de_tipo=None):
         return sum(f["leads"] for f in filas["panel_leads_dia"] if f["campana_id"] == cid and ini <= f["dia"] <= fin
                    and (de_tipo is None or f["tipo"] == de_tipo))
-    # Filas: en VN o VO, las de ese ámbito y las generales; de una general, solo los leads del tipo
-    visibles = {cid for cid in gasto if tipo == "todo" or ambito[cid] in (tipo, "general")}
+    # Filas: en VN o VO, las de ese ámbito y las de ambos; de una de ambos, solo los leads del tipo
+    visibles = {cid for cid in gasto if tipo == "todo" or ambito[cid] in (tipo, "ambos")}
     tabla = _filas_campanas(b["campanas"][1])
     assert {f["nombre"] for f in tabla} == {titulo[c] for c in visibles}
     por_nombre = {f["nombre"]: f for f in tabla}
     for cid in visibles:
         f = por_nombre[titulo[cid]]
-        comun = tipo != "todo" and ambito[cid] == "general"
+        comun = tipo != "todo" and ambito[cid] == "ambos"
         assert f["ambito"] == ambito[cid]
         assert f["Gasto"] == f"{fmt.miles(gasto[cid])} €"                 # el gasto, entero: no se reparte
         assert f["Leads"] == fmt.miles(leads(cid, tipo if comun else None)), cid
@@ -525,14 +525,14 @@ def test_marketing_selector_cuadra_con_las_filas(pg, panel_url, personas, con_ej
     assert valor == f"{fmt.miles(g)} €"
     assert _kpi(b["kpis"][1], "Leads")[0] == fmt.miles(l)
     assert _kpi(b["kpis"][1], "Coste por lead")[0] == f"{fmt.miles(g / l)} €"
-    # …y cuadran con las filas de la tabla que no son generales
+    # …y cuadran con las filas de la tabla que no son de ambos
     assert g == pytest.approx(sum(float(f["Gasto"][:-2].replace(".", "")) for f in tabla
                                   if tipo == "todo" or f["ambito"] == tipo), abs=len(tabla))
     if tipo == "todo":
-        assert "sin la campaña general" not in html
+        assert "sin la campaña de VN y VO" not in html
     else:
-        assert "sin la campaña general" in sub and "Solo las campañas de" in html
-        assert "Campaña general (VN y VO): leads, citas y ventas solo de " + tipo in b["campanas"][1]
+        assert "sin la campaña de VN y VO" in sub and "Solo las campañas de" in html
+        assert "Campaña de VN y VO: leads, citas y ventas solo de " + tipo in b["campanas"][1]
     # Recomendación: VN o VO, del stock de ese tipo; Todo, las dos con su etiqueta
     reco = b["recomendacion"][1]
     esperadas = [f for f in filas["panel_recomendacion_modelo"] if tipo == "todo" or f["tipo"] == tipo]
@@ -545,14 +545,14 @@ def test_marketing_selector_cuadra_con_las_filas(pg, panel_url, personas, con_ej
     for f in sem:
         assert f"{fmt.decimal(f['indice_p50'], 2)} veces una semana media" in texto
     assert ("Ventas esperadas:" in texto) == (tipo == "todo")
-    # Campañas pasadas: las generales en los tres, con los leads y ventas del tipo elegido
+    # Campañas pasadas: las de ambos en los tres, con los leads y ventas del tipo elegido
     res = [f for f in filas["panel_campana_resultado"]
            if (tipo == "todo" and f["tipo"] == "todo")
-           or (tipo != "todo" and ((f["ambito"] == tipo and f["tipo"] == "todo") or (f["ambito"] == "general"
+           or (tipo != "todo" and ((f["ambito"] == tipo and f["tipo"] == "todo") or (f["ambito"] == "ambos"
                                                                                      and f["tipo"] == tipo)))]
     pas = b["pasadas"][1]
     assert pas.count('class="pasada"') == len(res)
-    assert sum(f["ambito"] == "general" for f in res) == 2
+    assert sum(f["ambito"] == "ambos" for f in res) == 2
     for f in res:
         assert f'<strong>{fmt.miles(f["leads"])}</strong>' in pas
     if tipo != "todo":
@@ -765,7 +765,7 @@ def test_migracion_0006_desde_una_base_con_ejemplo_de_la_sesion_2(pg_url, pg, co
     with pytest.raises(psycopg.errors.UniqueViolation):
         pg.execute("INSERT INTO panel_leads_dia (dia, origen, modelo, tipo, campana_id, leads, citas, ventas) VALUES "
                    "(%s, 'real', 'Golf', 'VN', NULL, 1, 0, 0)", (HOY,))
-    # Resultado de una campaña de VN: solo su fila «todo» (las filas por tipo, solo en las generales)
+    # Resultado de una campaña de VN: solo su fila «todo» (las filas por tipo, solo en las de ambos)
     with pytest.raises(psycopg.errors.CheckViolation):
         pg.execute("INSERT INTO panel_campana_resultado (dia, origen, campana_id, titulo, ambito, tipo, inicio, fin, "
                    "gasto_cents, leads, leads_sin_p10, leads_sin_p50, leads_sin_p90, ventas, ventas_sin_p10, "

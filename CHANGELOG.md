@@ -1,5 +1,35 @@
 # Cambios
 
+## 2026-11-23 · Campañas clasificadas por reglas sobre el nombre (rama hito-1b-campanas)
+
+- **Reglas en `config/campanas.yaml`** en lugar de la regla campaña a campaña (`ingesta/campanas.py`). El nombre
+  se lee sin mayúsculas, tildes ni espacios de más:
+  - ámbito por la etiqueta: [VN] → VN, [VO] → VO, sin etiqueta → ambos (con las dos a la vez, sin regla);
+  - general si contiene una palabra de `reglas.generales` (days, friday, liquidación/liquidacion, boutique),
+    también pegada a otra («BlackFriday»); conserva su ámbito («VW [VO][2026] Black Friday»: general de VO);
+  - si no, de modelo: lo que va entre el año y el mes, normalizado con el catálogo de `config/versiones.yaml`
+    («TROC», «t roc» → T-Roc). Lo que sigue al mes («Noviembre 2») se ignora;
+  - un modelo fuera del catálogo (Caravelle) se asigna tal como está escrito, marcado «sin datos de mercado»;
+  - las `asignaciones` a mano (por nombre, normalizado) mandan sobre las reglas.
+- **`panel_campana_dia` real**: hasta ahora no la escribía nadie. Tras cada descarga de Meta o GA4 (y con el
+  nuevo `make campanas`) se rehace desde `campanas_meta_dia` con las campañas clasificadas; el nombre vigente
+  clasifica todos los días. Marketing y los criterios de Meta leen de aquí el tipo y el ámbito.
+- **Migración `0013`**: el ámbito «general» pasa a «ambos» en `panel_campana_dia`, `panel_campana_resultado` y
+  `panel_campana_decision` («general» queda solo para el tipo); `panel_campana_dia.sin_mercado`;
+  `panel_campanas_sin_regla.motivo`.
+- **Criterios de Meta**: en una campaña sin datos de mercado, la regla e queda «no se puede aplicar» (estado
+  `no_aplica`, sin lanzar ni no lanzar), la regla d lo dice en lugar de citar similares, y «subir presupuesto» no
+  se propone (la e no se puede comprobar). Documentado en `docs/criterios_marketing_meta.md`.
+- **Marketing**: cada campaña dice su ámbito y su modelo o «General» («Ocasión (VO) · Caravelle · sin datos de
+  mercado»), y lista la regla e no aplicable. En VN o VO, una general de ese ámbito cuenta con su coste; solo las
+  de ambos van sin coste («sin las campañas de VN y VO»).
+- **Estado de las fuentes** → «Campañas sin regla»: columna Motivo.
+- **Pruebas**: `tests/test_campanas.py` (los cinco nombres reales, «Boutique Ocasión», «VW [VO][2026] Black
+  Friday», «VW [VN][2026] Special Days diciembre», «Liquidacion VO» y uno que no casa; mayúsculas y espacios;
+  catálogo; asignaciones; configuración no válida; tablas del panel; GA4 unida a Meta; criterios sin datos de
+  mercado; Marketing y Estado de las fuentes).
+- **Despliegue**: `make deploy` (migración `0013`) y `make campanas`.
+
 ## 2026-11-23 · Color con acabado y motor en el detalle de un modelo (rama hito-1b-color-2)
 
 - **Filtro de color de la página** (VN y VO), en lugar del filtro de color de la matriz: con una familia

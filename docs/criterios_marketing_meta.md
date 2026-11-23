@@ -43,6 +43,8 @@ Prioriza los modelos con más stock y mejor posición de precio frente a la comp
 
 Si en la zona hay muy pocos coches comparables y la mediana no es fiable, dilo, y compara con la versión y acabado más cercanos o con una zona más amplia, indicándolo.
 
+Si el modelo no está entre los que se capturan del mercado (por ejemplo, un vehículo comercial como el Caravelle), no hay datos de mercado: di que la regla e y la comparación con la competencia no se pueden aplicar, sin decidir lanzar o no lanzar por ellas. Por lo mismo, no se propone subir el presupuesto aunque se cumplan las demás condiciones.
+
 ## Cuándo revisar una campaña activa
 
 La campaña se juzga **desde el segundo día**. Motivo: si llegan muchos leads de fuera de zona en VN, casi no hay opción de venta. Ese cliente busca precio fuera, pero compra en su zona enseñando la oferta que le han dado.

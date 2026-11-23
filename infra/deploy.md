@@ -388,8 +388,10 @@ Desde ese momento el cron de `cdf_jobs` lanza `meta` (06:00), `ga4` (06:10), `al
    (y borrarla del Mac). En `/opt/cdf/.env`: `GA4_PROPERTY_ID=<id numérico>` y
    `GA4_CREDENCIALES=/secretos/ga4.json`. Luego `make ga4`.
 
-Después, rellenar `config/campanas.yaml` con las reglas de las campañas que salgan en «Estado de las
-fuentes» → «Campañas sin regla».
+Las campañas se clasifican por su nombre con las reglas de `config/campanas.yaml` («VW [VN][2026] Taigo
+noviembre», «VW [VO][2026] Black Friday»…). Las que salgan en «Estado de las fuentes» → «Campañas sin
+regla», con su motivo: renombrarlas en Meta o añadir su asignación a mano en `config/campanas.yaml`
+(`asignaciones`), desplegar y `make campanas`.
 
 ### 7.10 Criterios de las campañas de Meta
 

@@ -127,8 +127,21 @@ Comunes (`conectores.py`):
 - GA4 firma el JWT de la cuenta de servicio con `cryptography` (RS256), que solo se carga con credenciales.
 
 `campanas.py` aplica `config/campanas.yaml`: la regla de unión (Meta, GA4 y los leads de Walcu por
-`utm_campaign`, normalizado) y la regla de cada campaña (modelo y ámbito VN, VO o general). Las
-campañas descargadas sin regla van a `panel_campanas_sin_regla` y salen en «Estado de las fuentes».
+`utm_campaign`, normalizado) y las reglas que leen el nombre de cada campaña (sin mayúsculas, tildes ni
+espacios de más):
+
+- ámbito por la etiqueta: [VN] → VN, [VO] → VO, sin etiqueta → ambos;
+- general si el nombre contiene una palabra de `reglas.generales` (days, friday, liquidación, boutique),
+  con su ámbito («VW [VO][2026] Black Friday»: general de VO);
+- si no, de modelo: lo que va entre el año y el mes («VW [VN][2026] Taigo Noviembre 2» → Taigo; lo que
+  sigue al mes se ignora), normalizado con el catálogo de `config/versiones.yaml`. Un modelo fuera del
+  catálogo (Caravelle) se asigna igual, marcado «sin datos de mercado»;
+- las asignaciones a mano de `asignaciones` mandan sobre las reglas.
+
+Tras cada descarga de Meta o GA4 (y con `make campanas`) rehace `panel_campana_dia` (origen real) con
+las campañas de Meta clasificadas, y `panel_campanas_sin_regla` con las de Meta y GA4 que no casan y
+el motivo, para «Estado de las fuentes». Una campaña de GA4 que se une a una de Meta por
+`utm_campaign` se clasifica como ella. Pruebas: `tests/test_campanas.py`.
 
     make meta      make ga4      (lo mismo que el cron; DESDE/HASTA a mano: python -m ingesta.meta --desde … --hasta …)
 

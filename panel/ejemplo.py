@@ -107,7 +107,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     # ---- campañas activas y leads (Meta y Walcu)
     fin_meta = hoy - UN_DIA                                # Meta da los datos del día anterior
     # gasto: céntimos al día; cpm: € por mil impresiones; ctr: clics por impresión; conv: leads por clic
-    # ámbito: VN, VO o general (las dos); una general reparte sus leads entre VN y VO según el vehículo
+    # ámbito: VN, VO o ambos; una de ambos reparte sus leads entre VN y VO según el vehículo
     vo_campana = vo[1 % len(vo)]
     campanas = [
         {"campana_id": "EJ-C1", "titulo": f"{vn[2 % len(vn)]} · Oferta del mes", "tipo_campana": "modelo",
@@ -118,7 +118,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
         {"campana_id": "EJ-C3", "titulo": f"{lento} · Entrega inmediata", "tipo_campana": "modelo", "ambito": "VN",
          "modelo": lento, "inicio": hoy - timedelta(days=48), "gasto": 5000, "cpm": 6.1, "ctr": 0.0062, "conv": 0.024},
         {"campana_id": "EJ-C4", "titulo": "Campaña general · Ventas de temporada", "tipo_campana": "general",
-         "ambito": "general", "modelo": None, "inicio": hoy - timedelta(days=5), "gasto": 12000, "cpm": 4.8,
+         "ambito": "ambos", "modelo": None, "inicio": hoy - timedelta(days=5), "gasto": 12000, "cpm": 4.8,
          "ctr": 0.010, "conv": 0.015},
         {"campana_id": "EJ-C5", "titulo": "Ocasión · Seminuevos con garantía", "tipo_campana": "general",
          "ambito": "VO", "modelo": None, "inicio": hoy - timedelta(days=34), "gasto": 4200, "cpm": 4.4,
@@ -152,7 +152,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
                 "ambito": c["ambito"], "modelo": c["modelo"], "inicio": c["inicio"], "gasto_cents": gasto,
                 "impresiones": impresiones, "clics": clics})
             for _ in range(n):
-                tipo = c["ambito"] if c["ambito"] != "general" else ("VN" if r.random() < 0.62 else "VO")
+                tipo = c["ambito"] if c["ambito"] != "ambos" else ("VN" if r.random() < 0.62 else "VO")
                 modelo = c["modelo"] or r.choice(vn[:6] if tipo == "VN" else vo[:6])
                 sumar(d, modelo, tipo, c["campana_id"], 1)
             d += UN_DIA
@@ -422,20 +422,20 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
                 "modelo_version": VERSION, "n": 6})
 
     # ---- campañas terminadas frente a lo esperado sin campaña
-    # Una fila «todo» por campaña; las generales, además, una por tipo con sus leads y ventas
+    # Una fila «todo» por campaña; las de ambos, además, una por tipo con sus leads y ventas
     # (observado, esperado sin campaña p50): (leads VN, leads VO) y (ventas VN, ventas VO)
     pasadas = [
         ("EJ-P1", f"{vn[0]} · Fin de stock", "VN", 150, 120, 6100, {"todo": ((98, 81), (8, 3))}),
         ("EJ-P2", f"{vn[3 % len(vn)]} · Financiación", "VN", 120, 95, 3900, {"todo": ((41, 46), (4, 4))}),
-        ("EJ-P3", "Campaña general · Primavera", "general", 230, 200, 9800,
+        ("EJ-P3", "Campaña general · Primavera", "ambos", 230, 200, 9800,
          {"VN": ((118, 86), (9, 7)), "VO": ((44, 34), (3, 3))}),
         ("EJ-P4", f"{vn[4 % len(vn)]} · Oferta", "VN", 300, 272, 2700, {"todo": ((27, 39), (2, 4))}),
         ("EJ-P5", "Ocasión · Fin de semana de seminuevos", "VO", 90, 86, 2200, {"todo": ((63, 38), (7, 3))}),
-        ("EJ-P6", "Campaña general · Rebajas de enero", "general", 310, 290, 7600,
+        ("EJ-P6", "Campaña general · Rebajas de enero", "ambos", 310, 290, 7600,
          {"VN": ((71, 74), (5, 6)), "VO": ((39, 33), (4, 2))}),
     ]
     for cid, titulo, ambito, ini, fin, gasto, por_tipo in pasadas:
-        if ambito == "general":
+        if ambito == "ambos":
             por_tipo["todo"] = tuple(tuple(x + y for x, y in zip(por_tipo["VN"][k], por_tipo["VO"][k]))
                                      for k in (0, 1))      # leads y ventas: VN + VO
         for tipo, ((leads_obs, leads_sin), (ventas_obs, ventas_sin)) in por_tipo.items():

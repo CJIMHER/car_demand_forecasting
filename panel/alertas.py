@@ -85,9 +85,10 @@ def estado_motor(pg: psycopg.Connection) -> dict:
         """SELECT registrado_at, que, rol, destino, estado, texto FROM alertas_salida ORDER BY id DESC LIMIT 15""")]
     campanas = [{"fuente": "Meta" if f == "meta" else "GA4", "campana": c,
                  "fechas": f"{fmt.fecha_corta(p)}–{fmt.fecha_corta(u)}",
-                 "cifra": fmt.euros(g) if f == "meta" else f"{fmt.miles(s)} sesiones"}
-                for f, c, p, u, g, s in pg.execute(
-        """SELECT fuente, campana, primer_dia, ultimo_dia, gasto_cents, sesiones FROM panel_campanas_sin_regla
+                 "cifra": fmt.euros(g) if f == "meta" else f"{fmt.miles(s)} sesiones",
+                 "motivo": (m[:1].upper() + m[1:]) if m else fmt.GUION}
+                for f, c, p, u, g, s, m in pg.execute(
+        """SELECT fuente, campana, primer_dia, ultimo_dia, gasto_cents, sesiones, motivo FROM panel_campanas_sin_regla
            ORDER BY fuente, ultimo_dia DESC, campana""")]
     return {"ultima": {"dia": fmt.fecha(ultima[0]), "estado": ultima[1], "cuando": fmt.fecha_hora(ultima[3])}
             if ultima else None,

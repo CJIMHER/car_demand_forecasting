@@ -3,7 +3,8 @@
 Qué tablas lee cada vista del panel, qué significa cada columna y quién la rellenará. Conectar
 una fuente consiste en escribir filas reales en estas tablas, sin tocar las vistas. Las tablas
 se crean en la migración `0005` (`infra/migraciones/versions/0005_contrato_panel.py`); la `0006`
-(`0006_marketing_por_tipo.py`) añade el ámbito de las campañas y el tipo VN/VO de Marketing. La
+(`0006_marketing_por_tipo.py`) añade el ámbito de las campañas y el tipo VN/VO de Marketing; la `0013`
+(`0013_campanas_por_reglas.py`), el ámbito «ambos» y «sin datos de mercado». La
 correspondencia entre bloques y tablas está en `panel/contrato.py`.
 
 Mercado no entra en este contrato: lee `panel_mercado_*`, que el precálculo de las 09:10 rellena
@@ -88,15 +89,17 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 
 | Bloque | Todo | VN o VO |
 | --- | --- | --- |
-| Tarjetas | Todas las campañas | Solo las del ámbito elegido, sin las generales; lo dicen («sin la campaña general») |
-| Campañas | Todas, con todos sus leads | Las del ámbito y las generales. De una general: los leads, citas y ventas de ese tipo, y «—» en coste por lead, cita y venta, con la nota «gasto común a VN y VO» |
+| Tarjetas | Todas las campañas | Solo las del ámbito elegido, sin las de ambos; lo dicen («sin la campaña de VN y VO») |
+| Campañas | Todas, con todos sus leads | Las del ámbito y las de ambos. De una de ambos: los leads, citas y ventas de ese tipo, y «—» en coste por lead, cita y venta, con la nota «gasto común a VN y VO» |
 | Recomendación | Las de VN y VO, cada una con su etiqueta | Las del tipo |
 | Atención / Ocasión | Atención | VN: atención. VO: en su lugar, el stock de ocasión por modelo |
 | Semanas | `tipo = 'todo'` | `tipo` elegido |
-| Campañas pasadas | Filas `tipo = 'todo'` | Las del ámbito (fila `todo`) y las generales (fila del tipo) |
+| Campañas pasadas | Filas `tipo = 'todo'` | Las del ámbito (fila `todo`) y las de ambos (fila del tipo) |
 
 El gasto es siempre de la campaña: nunca se reparte entre VN y VO con ninguna regla. Una campaña de
-ámbito VN o VO se muestra con todos sus leads en cualquier vista; solo las generales se parten por tipo.
+ámbito VN o VO se muestra con todos sus leads en cualquier vista; solo las de ambos se parten por tipo.
+El ámbito no depende del tipo de campaña: una general de VO («VW [VO][2026] Black Friday») cuenta en VO
+con su coste, como una de modelo.
 
 El panel muestra de cada tabla el último `dia` con el origen del bloque. Sobre esas filas solo
 hace recuentos, sumas, medias y cocientes; ningún modelo se ajusta al servir una página.
@@ -225,13 +228,22 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 ### panel_campana_dia · gasto por campaña
 
 - **Grano**: día × campaña.
-- **Fuente**: Meta Marketing API, hito 2.
+- **Fuente**: Meta Marketing API (`campanas_meta_dia`, nivel campaña). Las filas reales las rehace
+  `ingesta/campanas.py` tras cada descarga de Meta o GA4 y con `make campanas`: una fila por día y
+  campaña **clasificada** con las reglas de `config/campanas.yaml`. Las que no casan con ninguna regla no
+  entran: salen en «Estado de las fuentes» → «Campañas sin regla», con el motivo.
+- **Tipo, ámbito y modelo salen del nombre de la campaña** (o de su asignación a mano en
+  `config/campanas.yaml`, que manda): [VN] → VN, [VO] → VO, sin etiqueta → ambos; general si contiene
+  una palabra de `reglas.generales` (days, friday, liquidación, boutique); si no, de modelo: lo que va
+  entre el año y el mes, normalizado con el catálogo de `config/versiones.yaml`. El nombre vigente (el
+  del último día) clasifica todos los días de la campaña.
 
 | Columna | Unidad | Significado |
 | --- | --- | --- |
 | `campana_id`, `titulo` | texto | Identificador y nombre de la campaña en Meta |
 | `tipo_campana` | modelo / general | De un modelo (`modelo` obligatorio) o sin modelo concreto |
-| `ambito` | VN / VO / general | A qué stock va dirigida; general: a los dos. El gasto no se reparte entre VN y VO |
+| `ambito` | VN / VO / ambos | A qué stock va dirigida; ambos: a los dos. Independiente del tipo: una general puede ser de VN o de VO. El gasto no se reparte entre VN y VO |
+| `sin_mercado` | sí/no | Campaña de un modelo que no está en el catálogo de turismos que capturamos (Caravelle, de Vehículos Comerciales): sin datos de mercado. La regla e y la comparación con la competencia (regla d, subir presupuesto) dicen que no se pueden aplicar en lugar de decidir |
 | `inicio` | fecha | Primer día de la campaña: de aquí salen sus días de vida |
 | `gasto_cents` | céntimos | |
 | `impresiones`, `clics` | número | |
@@ -240,7 +252,7 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 
 - **Ventana**: 28 días que acaban en el último `dia` con gasto.
 - **Leads, citas y ventas atribuidas**: las de `panel_leads_dia` con campaña. En VN o VO, las de
-  las campañas de ese ámbito; de una general, solo las del tipo elegido.
+  las campañas de ese ámbito; de una de ambos, solo las del tipo elegido.
 - **Coste por lead**: gasto / leads. Se compara con los 28 días anteriores.
 - **Coste por venta**: gasto / ventas.
 - **Campaña activa**: tiene gasto el último día.
@@ -253,7 +265,7 @@ Nada que identifique a una persona: el agregado se hace antes de guardar.
 **Qué significa:**
 
 - Cada eslabón tiene una medida, que se compara con su referencia: la distribución de esa medida en
-  campañas anteriores **de su mismo ámbito** (VN, VO o general) **con los mismos días de vida**.
+  campañas anteriores **de su mismo ámbito** (VN, VO o ambos) **con los mismos días de vida**.
 - El estado sale de la probabilidad de que la campaña esté peor que esa referencia:
   - **vigilar** desde 0,7;
   - **revisar** desde 0,9;
@@ -350,8 +362,8 @@ Es orientativo: describe cómo viene cada semana y no mide el efecto de lanzar e
 
 - **Grano**: día × campaña terminada × tipo.
   - Toda campaña tiene una fila `tipo = 'todo'` con todos sus leads y ventas.
-  - Las de ámbito general tienen además una fila VN y otra VO, con los leads y ventas de ese tipo y
-    lo esperado sin campaña para ese tipo. La base no admite filas VN o VO en una campaña que no sea general.
+  - Las de ámbito ambos tienen además una fila VN y otra VO, con los leads y ventas de ese tipo y
+    lo esperado sin campaña para ese tipo. La base no admite filas VN o VO en una campaña que no sea de ambos.
 - **Fuente**: referencia sin campaña del modelo de ventas, hito 5. El efecto medido con grupo de control llega en el hito 6.
 
 | Columna | Unidad | Significado |
@@ -381,7 +393,7 @@ Es una comparación con un modelo, no un experimento.
 - **Coherentes entre vistas**:
   - las alertas citan vehículos de Ventas por número de stock y campañas de Marketing;
   - los leads de Ventas suman lo mismo que los de Marketing (por modelo y tipo);
-  - hay campañas de VN, de VO y generales, y estas con leads de los dos tipos;
+  - hay campañas de VN, de VO y de ambos, y estas con leads de los dos tipos;
   - el stock de Dirección es el de Ventas.
 - **Modelos**: los de la marca configurada (`config/concesionario.yaml`, `modelos`).
 - **Cifras de modelo**: se escriben tal cual, con p10–p90, versión `ejemplo` y su n. No se ajusta nada.

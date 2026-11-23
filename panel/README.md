@@ -93,7 +93,7 @@ permisos de `cdf_panel`), los datos de ejemplo (deterministas, coherentes, sin t
 mercado, se niegan sin `PANEL_PERMITE_EJEMPLO=1`), la etiqueta de cada bloque y la banda, la
 visibilidad de cada rol por vista, el paso de ejemplo a real tabla a tabla, «Sin datos todavía» y
 el concesionario ficticio de Valladolid en las tres vistas, Marketing por tipo (las tres opciones
-del selector cuadran con las filas; una general nunca tiene coste por venta en VN ni en VO) y la
+del selector cuadran con las filas; una de ambos nunca tiene coste por venta en VN ni en VO) y la
 migración `0006`.
 
 `tests/test_estaticos.py`: la URL de cada estático cambia si cambia su contenido (y la del CSS si

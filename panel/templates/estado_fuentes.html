@@ -158,15 +158,15 @@
     {% if motor.campanas %}
     <div class="tabla-scroll">
       <table class="tabla">
-        <thead><tr><th scope="col" class="izq">Fuente</th><th scope="col" class="izq">Campaña</th><th scope="col">Días</th><th scope="col">Gasto o sesiones</th></tr></thead>
+        <thead><tr><th scope="col" class="izq">Fuente</th><th scope="col" class="izq">Campaña</th><th scope="col" class="izq">Motivo</th><th scope="col">Días</th><th scope="col">Gasto o sesiones</th></tr></thead>
         <tbody>
         {% for c in motor.campanas %}
-          <tr><th scope="row" class="izq">{{ c.fuente }}</th><td class="izq detalle">{{ c.campana }}</td><td>{{ c.fechas }}</td><td>{{ c.cifra }}</td></tr>
+          <tr><th scope="row" class="izq">{{ c.fuente }}</th><td class="izq detalle">{{ c.campana }}</td><td class="izq detalle">{{ c.motivo }}</td><td>{{ c.fechas }}</td><td>{{ c.cifra }}</td></tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
-    <p class="nota">Sin regla no se sabe a qué modelo ni a qué stock (VN, VO o general) va la campaña, ni se pueden unir sus leads de Walcu (por utm_campaign). Añadir su regla y esperar a la descarga siguiente.</p>
+    <p class="nota">Sin regla no se sabe si la campaña es de un modelo o general, ni a qué stock va (VN, VO o los dos): no entra en Marketing ni en los criterios de Meta. Las reglas leen el nombre: [VN] o [VO], el año, el modelo y el mes («[VN][2026] Modelo noviembre»), o una palabra de campaña general (Black Friday, Days…). Renombrar la campaña o añadir su asignación a mano en config/campanas.yaml y ejecutar make campanas (o esperar a la descarga siguiente).</p>
     {% else %}
     <p class="nota">Ninguna: todas las campañas descargadas de Meta y GA4 tienen regla (o los conectores aún no tienen credenciales).</p>
     {% endif %}

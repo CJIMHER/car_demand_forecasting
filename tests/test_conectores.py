@@ -305,36 +305,35 @@ def test_jwt_de_la_cuenta_de_servicio_firmado_con_rs256():
 def test_normalizar_y_union_por_utm_campaign(tmp_path):
     assert cmp.normalizar("T-Roc Ocasión · Noviembre") == "t_roc_ocasion_noviembre"
     f = tmp_path / "campanas.yaml"
-    f.write_text("equivalencias:\n  troc-nov: VN T-Roc Noviembre\n"
-                 "reglas:\n  - {patron: '^vn_t_roc', modelo: T-Roc, ambito: VN}\n  - {patron: '^marca', ambito: general}\n")
+    f.write_text("equivalencias:\n  troc-nov: VN T-Roc Noviembre\nreglas: {generales: [friday]}\n")
     c = cmp.cargar(f)
     assert c.clave_union("VN T-Roc Noviembre") == c.clave_union("vn_t_roc_noviembre") == "vn_t_roc_noviembre"
     assert c.clave_union("TROC-NOV") == "vn_t_roc_noviembre"
-    assert c.regla("VN T-Roc Noviembre").modelo == "T-Roc" and c.regla("Marca general").ambito == "general"
-    assert c.regla("Otra cosa") is None
-    for malo in ("reglas:\n  - {patron: x, ambito: VX}\n", "reglas:\n  - {patron: x, ambito: VN}\n",
-                 "reglas:\n  - {patron: '(', ambito: general}\n"):
-        f.write_text(malo)
-        with pytest.raises(cmp.ErrorCampanas):
-            cmp.cargar(f)
 
 
 def test_campanas_sin_regla_para_estado_de_las_fuentes(pg, monkeypatch, tmp_path):
+    """Tras descargar Meta y GA4: «VN T-Roc Noviembre» (sin año, no casa con las reglas) tiene asignación a
+    mano; en GA4 se clasifica como su campaña de Meta. «Marca general» no casa: sale con su motivo."""
     f = tmp_path / "campanas.yaml"
-    f.write_text("meta: {version_api: v24.0}\nreglas:\n  - {patron: '^vn_t_roc', modelo: T-Roc, ambito: VN}\n")
+    f.write_text("meta: {version_api: v24.0}\nreglas: {generales: [friday]}\nasignaciones:\n"
+                 "  - {campana: VN T-Roc Noviembre, tipo: modelo, ambito: VN, modelo: troc}\n")
     monkeypatch.setenv("CDF_CAMPANAS", str(f))
     monkeypatch.setattr(cx, "_urlopen", Red(_respuestas_meta()))
     meta.ejecutar(entorno=ENTORNO_META, desde=DESDE, hasta=HASTA, subir=Bucket(), dormir=lambda s: None)
     monkeypatch.setattr(cx, "_urlopen", Red(_respuestas_ga4()))
     ga4.ejecutar(entorno=_credenciales(tmp_path), desde=DESDE, hasta=HASTA, subir=Bucket(), dormir=lambda s: None,
                  firmar=lambda cuenta, ahora: "jwt")
-    # «VN T-Roc Noviembre» tiene regla (en Meta y en GA4); «Marca general» no; «(not set)» no es una campaña
-    assert pg.execute("SELECT fuente, campana, gasto_cents FROM panel_campanas_sin_regla").fetchall() == [
-        ("meta", "Marca general", 1234)]
+    filas = pg.execute("SELECT fuente, campana, gasto_cents, motivo FROM panel_campanas_sin_regla").fetchall()
+    assert [f[:3] for f in filas] == [("meta", "Marca general", 1234)]
+    assert filas[0][3].startswith("no es general (friday) ni lleva año")
+    assert pg.execute("SELECT DISTINCT campana_id, titulo, tipo_campana, ambito, modelo, sin_mercado FROM panel_campana_dia "
+                      "WHERE origen = 'real'").fetchall() == [("111", "VN T-Roc Noviembre", "modelo", "VN", "T-Roc", False)]
+    estado = pg.execute("SELECT detalle FROM fuentes_estado WHERE fuente = 'meta' ORDER BY id DESC LIMIT 1").fetchone()[0]
+    assert estado["campanas_clasificadas"] == 1 and estado["campanas_sin_regla"] == 1
 
 
 def test_el_repositorio_no_trae_campanas_ni_credenciales():
     c = cmp.cargar()
-    assert c.reglas == () and c.meta_version.startswith("v")
+    assert c.asignaciones == {} and c.equivalencias == {} and c.meta_version.startswith("v")
     texto = (Path(cmp.RAIZ) / "config" / "campanas.yaml").read_text()
     assert "EAA" not in texto and "private_key" not in texto

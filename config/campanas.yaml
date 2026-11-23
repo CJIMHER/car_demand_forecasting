@@ -1,6 +1,7 @@
 # Campañas: a qué modelo y a qué stock va cada una, y cómo se unen Meta, GA4 y los leads de Walcu.
-# Lo usa ingesta/campanas.py. Tras cambiarlo, las campañas sin regla de «Estado de las fuentes» se
-# recalculan con la descarga siguiente (o a mano: make meta / make ga4).
+# Lo usa ingesta/campanas.py. Tras cambiarlo: make campanas (o esperar a la descarga siguiente de
+# Meta o GA4). Así se reclasifican las campañas de Marketing y las de «Estado de las fuentes» →
+# «Campañas sin regla».
 #
 # 1. Regla de unión (Meta ↔ GA4 ↔ Walcu)
 #    La clave es el utm_campaign de los enlaces de los anuncios:
@@ -12,17 +13,30 @@
 #    convertido en «_» («T-Roc Ocasión · Noviembre» → «t_roc_ocasion_noviembre»).
 #    Si una campaña usa otro utm_campaign, se añade aquí en «equivalencias» (utm_campaign → nombre de
 #    la campaña en Meta, los dos tal como aparecen).
+#    Una campaña de GA4 que se une a una de Meta se clasifica como la de Meta.
 #
-# 2. Regla de cada campaña (nombre de campaña → modelo y ámbito)
-#    La primera regla cuyo «patron» (expresión regular, sobre el nombre normalizado) encaja decide:
-#      modelo  el de config/concesionario.yaml (modelos), o vacío en una campaña general;
-#      ambito  VN (stock nuevo), VO (ocasión) o general (los dos; su gasto nunca se reparte).
-#    Las campañas descargadas sin ninguna regla salen en «Estado de las fuentes» del panel.
+# 2. Reglas por nombre (tipo, ámbito y modelo de cada campaña)
+#    El nombre se lee sin distinguir mayúsculas ni tildes y sin importar los espacios
+#    («VW [VN][2026] Taigo noviembre» = «vw [vn] [2026]  TAIGO Noviembre»):
+#      a. Ámbito, por la etiqueta: [VN] → nuevos (VN); [VO] → ocasión (VO); sin etiqueta → los dos
+#         (ambos). Con [VN] y [VO] a la vez, no hay regla.
+#      b. Tipo general si el nombre contiene alguna palabra de «generales» (también pegada a otra:
+#         «BlackFriday»). Una general mantiene su ámbito: «VW [VO][2026] Black Friday» es general de
+#         ocasión.
+#      c. Si no es general, es de un modelo: lo que va después del año (2026 o [2026]) hasta el mes
+#         (enero … diciembre). Lo que siga al mes («Noviembre 2») se ignora. El modelo se normaliza con
+#         el catálogo de config/versiones.yaml («t roc», «TROC» → T-Roc).
+#      d. Un modelo que no está en ese catálogo (los turismos que capturamos), como Caravelle, se
+#         asigna igual, tal como está escrito, pero «sin datos de mercado»: la regla e y la
+#         comparación con la competencia dicen que no se pueden aplicar en lugar de decidir.
+#    Una campaña que no casa sale en «Estado de las fuentes» → «Campañas sin regla», con el motivo.
 #
-# Ejemplos (descomentar y adaptar a los nombres reales de las campañas):
-#   - {patron: "^vn_t_roc", modelo: T-Roc, ambito: VN}
-#   - {patron: "^vo_.*golf", modelo: Golf, ambito: VO}
-#   - {patron: "^(marca|general)_", ambito: general}
+# 3. Asignaciones a mano (opcional). Tienen prioridad sobre las reglas. «campana»: el nombre en Meta,
+#    tal como aparece (se compara normalizado); tipo: modelo o general; ambito: VN, VO o ambos;
+#    modelo: solo en las de tipo modelo (se normaliza igual que en las reglas).
+#    Ejemplos:
+#      - {campana: "Liquidacion VO", tipo: general, ambito: VO}
+#      - {campana: "Promo Golf GTI", tipo: modelo, ambito: VN, modelo: Golf}
 
 meta:
   # Versión de la Marketing API (Graph API). Meta retira cada versión unos dos años después de
@@ -31,4 +45,8 @@ meta:
 
 equivalencias: {}
 
-reglas: []
+reglas:
+  # Palabras que hacen general una campaña (sin distinguir mayúsculas ni tildes)
+  generales: [days, friday, liquidación, liquidacion, boutique]
+
+asignaciones: []
