@@ -1,5 +1,35 @@
 # Cambios
 
+## 2026-11-24 · Histórico de Meta, Walcu agregado y referencias de coste (rama hito-1b-walcu-meta-hist)
+
+- **`make meta-historico DESDE=2025-01-01 [HASTA=…]`** (`ingesta/meta.py --historico`): insights por campaña
+  y día, por tramos de un mes, con las campañas en cualquier estado (también archivadas y borradas). Espera
+  según `x-business-use-case-usage` (75 % → 60 s, 90 % → 300 s, o lo que diga Meta). Brutos al bucket por
+  tramo antes de guardar; misma tabla y huella que la carga diaria: relanzar no duplica. Nombre y estado de
+  cada campaña en `campanas_meta_estado`.
+- **Migración `0017`**: `walcu_campana_mes` (solo añadir, con `fecha_carga`, `run_id` y `fichero_origen`; la
+  vista `_vigente` da la última carga de cada mes), `campanas_meta_estado`, `panel_campana_mes` y
+  `panel_referencia_meta` (contrato del panel) y `panel_walcu_sin_cruce`.
+- **`make walcu-cargar FICHERO=…`** (`ingesta/walcu.py`): lista cerrada de columnas; rechaza el fichero entero
+  si sobra una columna o un valor parece un correo, un teléfono, un DNI o un NIE (sin citar el valor).
+- **`scripts/walcu_agregar.py`** (Mac, `make walcu-agregar`): de la exportación de leads de Walcu (xlsx o
+  csv) al CSV agregado, leyendo solo las columnas necesarias (`config/walcu_export.yaml`), con la zona
+  cercana de `config/concesionario.yaml` (nuevo `propio.web`) y sin escribir nada personal.
+- **Cruce Meta–Walcu** (`ingesta/referencias_meta.py`, `config/campanas_walcu.yaml`): por nombre normalizado
+  (sin tildes, espacios simplificados, sin `-copy`, `copia`, `-OK`), con equivalencias editables; solo
+  origen Facebook (AiVORA fuera). **`make referencias-meta`**: tabla 2025 frente a 2026 por tipo, con la
+  diferencia, y el informe de lo que no casa.
+- **Reglas** (`alertas/reglas.yaml`, versión `reglas-2026-11-24`): a, fuera de zona 35 % (antes 30 %); d, el
+  texto dice que el 33 % es el óptimo y que saltará a menudo; a, c, d y subir usan las citas y ventas de
+  Walcu del mes o dicen «sin datos de Walcu» y no se aplican (ya no quedan inactivas); c, «coste por cita en
+  la media» = como mucho la referencia de 2025 del mismo tipo (también para la d). Actualizado
+  `docs/criterios_marketing_meta.md`.
+- **Marketing**: bloques «Campañas del último mes» (gasto, leads de Walcu y según Meta, citas, ventas, coste
+  por lead, por cita y por venta, y la decisión) y «Referencias históricas».
+- **Pruebas**: `tests/test_walcu_meta_hist.py` (validador con correo, columna de más, teléfonos, DNI y NIE;
+  normalización; cruce y referencias; reglas con y sin Walcu; histórico sin duplicar y con espera por el
+  límite; script con xlsx y csv; panel).
+
 ## 2026-11-23 · Google Trends: descarga manual guiada y atención relativa real (rama hito-1b-gtrends)
 
 - **Sin acceso automático a Google**: ni pytrends, ni navegadores automáticos, ni peticiones a trends.google.com.

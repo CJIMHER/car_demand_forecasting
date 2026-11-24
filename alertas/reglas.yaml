@@ -19,7 +19,7 @@
 #   texto       el motivo en una frase, con huecos {así} para las cifras (formato español)
 #
 # Los umbrales son una propuesta inicial (docs/diseno.md, Señales y alertas): se calibran en el piloto.
-version: reglas-2026-11-23
+version: reglas-2026-11-24
 
 reglas:
   # ------------------------------------------------------------------ con datos reales desde ya
@@ -142,18 +142,20 @@ reglas:
     texto: "Leads de {modelo} {tipo_texto}: {ahora} en los últimos {dias} días frente a {antes} en los {dias} anteriores (−{caida_pct} %)."
 
   # ------------------------------------------------------------------ campañas de Meta: criterios de Cayetano
-  # (docs/criterios_marketing_meta.md). Umbrales, volúmenes y textos en «criterios_meta», más abajo:
-  # b, c y f no necesitan Walcu: con solo panel_campana_dia real se aplican con los leads que cuenta
-  # Meta (leads_meta; cada cifra dice «leads según Meta»). Cuando entran los leads de Walcu
-  # (panel_leads_dia), mandan los de Walcu. a, d y subir necesitan citas y ventas: esperan a Walcu.
-  # son los mismos para las alertas, la decisión de cada campaña y la recomendación por modelo. La
-  # comparación con la referencia por días de vida (panel_campana_salud) es solo detalle explicativo.
+  # (docs/criterios_marketing_meta.md). Umbrales, volúmenes y textos en «criterios_meta», más abajo;
+  # son los mismos para las alertas, la decisión de cada campaña y la recomendación por modelo.
+  # Todas se activan con solo panel_campana_dia real. Walcu, campaña a campaña: la carga diaria
+  # (panel_leads_dia) si la hay; si no, la mensual (make walcu-cargar → panel_campana_mes) si hay carga
+  # del mes y la campaña casa con sus leads. a, c (coste por cita), d y subir necesitan citas y ventas:
+  # sin Walcu dicen «sin datos de Walcu» y no se aplican. b, c (coste por lead) y f usan los leads de
+  # Walcu o, si no, los de Meta («leads según Meta»). La comparación con la referencia por días de vida
+  # (panel_campana_salud) es solo detalle explicativo.
   - id: meta_a
     nombre: "Campaña: leads que no se convierten en citas (regla a)"
     calculo: criterio_meta
     criterio: a
     roles: [marketing]
-    fuente: [panel_campana_dia, panel_leads_dia]
+    fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
     texto: "Campaña «{titulo}» · {decision} (regla a): {cifras}. Revisar: {revisar}"
@@ -183,10 +185,11 @@ reglas:
     calculo: criterio_meta
     criterio: d
     roles: [marketing]
-    fuente: [panel_campana_dia, panel_leads_dia]
+    fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
-    texto: "Campaña «{titulo}» · {decision} (regla d): {cifras}. Revisar: {revisar}"
+    # 33 % es el óptimo, no un mínimo habitual: se avisa en el texto de que saltará a menudo
+    texto: "Campaña «{titulo}» · {decision} (regla d): {cifras}. Revisar: {revisar} El 33 % es el óptimo: esta alerta saltará a menudo."
 
   - id: meta_f
     nombre: "Campaña: cansancio del anuncio (regla f)"
@@ -203,7 +206,7 @@ reglas:
     calculo: criterio_meta
     criterio: subir
     roles: [marketing]
-    fuente: [panel_campana_dia, panel_leads_dia]
+    fuente: [panel_campana_dia]
     tema: campanas
     nivel: info
     texto: "Campaña «{titulo}» · subir presupuesto: {cifras}."
@@ -225,14 +228,15 @@ reglas:
 # su dato no se aplica (p. ej., «fuera de zona» sin código postal en los leads).
 criterios_meta:
   dias_vida_minimos: 1            # el segundo día de vida: día 0 = el primero
-  # «En su media» (reglas c y d): el coste de la campaña no pasa de la media de todas las campañas
-  # de los últimos `media_dias` (sin ella misma) más esta tolerancia
+  # «En la media» (reglas c y d): el coste de la campaña no pasa de la referencia de c.referencia_anio
+  # del mismo tipo (VN o VO; las de ambos, VN y VO juntos), de make referencias-meta. Sin referencia, la
+  # media de todas las campañas de los últimos `media_dias` (sin ella misma) más esta tolerancia
   media_dias: 90
   media_tolerancia_pct: 20
   a:
     lead_cita_minima_pct: 5       # revisar si citas/leads < 5 %
     n_minimo_leads: 20            # con menos leads se muestra la tasa, pero no salta
-    fuera_zona_maxima_pct: 30     # revisar si fuera de zona > 30 % (desde el segundo día)
+    fuera_zona_maxima_pct: 35     # revisar si fuera de zona > 35 % (desde el segundo día; antes 30 %)
     n_minimo_leads_con_cp: 1      # leads con código postal: sin mínimo
     revisar: "la localización y las audiencias de la campaña; los motivos de descarte que anota el comercial."
     revisar_fuera_zona: "si dominan los de fuera de zona, que el copy, el reel y la foto nombren la provincia, y que el formulario pida como obligatorios el código postal y si quiere ver el coche en la provincia."
@@ -253,14 +257,16 @@ criterios_meta:
     factor_historico: 0.5
     revisar_historico: "Por debajo de campañas del mismo modelo y mes: revisar la creatividad, el mensaje, la llamada a la acción y la oferta."
   c:
-    coste_lead_maximo: 10         # si se pasa: continuar si el coste por cita está en su media; si no, parar
-    continuar: "El coste por cita está en su media: se continúa."
+    coste_lead_maximo: 10         # si se pasa: continuar si el coste por cita está en la media; si no, parar
+    # «Coste por cita en la media» = como mucho el de 2025 del mismo tipo (panel_referencia_meta)
+    referencia_anio: 2025
+    continuar: "El coste por cita está en la media: se continúa."
     parar: "Parar y revisar audiencias y creatividad."
     sin_media: "Sin media de coste por cita para decidir: revisar audiencias y creatividad."
-    # Con leads según Meta (sin Walcu) no hay citas: la decisión es revisar
-    sin_coste_cita: "Falta el coste por cita para decidir entre continuar y parar."
+    # Con leads según Meta (sin datos de Walcu) no hay citas: la decisión es revisar
+    sin_coste_cita: "Sin datos de Walcu: falta el coste por cita para decidir entre continuar y parar."
   d:
-    tasa_venta_minima_pct: 33     # revisar si ventas/citas < 33 % con coste por lead y por cita en su media
+    tasa_venta_minima_pct: 33     # el óptimo: revisar si ventas/citas < 33 % con coste por lead y por cita en la media
     n_minimo_citas: 6
     segmentos_mostrados: 3        # vehículos similares en la zona cercana que se citan
     revisar: "el motivo de descarte del comercial; los similares en la zona cercana{similares}; el desempeño del comercial."

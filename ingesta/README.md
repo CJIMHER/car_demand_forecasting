@@ -169,10 +169,43 @@ por defecto (`campana_id`, `canal_ga4`), respaldo de las reglas. Una campaña de
 
     make meta      make ga4      (lo mismo que el cron; DESDE/HASTA a mano: python -m ingesta.meta --desde … --hasta …)
 
+### Histórico de Meta (meta.py --historico)
+
+`make meta-historico DESDE=2025-01-01 [HASTA=AAAA-MM-DD]` (por defecto, hasta ayer): mismo token y misma
+cuenta (`ads_read`, solo lectura). Solo el nivel de campaña, por día, en tramos de un mes, con las campañas
+en cualquier estado (filtro `campaign.effective_status` con todos, también ARCHIVED y DELETED). Leads: la
+acción `lead` o, si no está, `onsite_conversion.lead_grouped` (la mayor de las de lead), como la carga
+diaria. Nombre y estado de cada campaña en `campanas_meta_estado` (solo añadir; una fila nueva si cambia).
+Límites: además del 429, lee `x-business-use-case-usage` y espera 60 s desde el 75 % de uso, 300 s desde el
+90 % o los minutos de `estimated_time_to_regain_access`. Cada tramo sube sus brutos al bucket y se guarda
+antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la carga diaria: relanzarlo
+(entero o desde donde se cortó) no duplica nada; una cifra corregida por Meta queda como versión nueva.
+
+## Walcu agregado (walcu.py) y referencias de Meta (referencias_meta.py)
+
+- `scripts/walcu_agregar.py` (Mac) agrega la exportación de leads de Walcu por mes, origen, campaña y tipo
+  (ver `scripts/README.md`).
+- `make walcu-cargar FICHERO=/ruta.csv` (servidor): el CSV llega por la entrada estándar al contenedor.
+  Columnas exactamente `mes, origen, campana, tipo, leads, leads_cercana, leads_fuera, leads_sin_zona, citas,
+  ventas, num_inexistente`. Rechaza el fichero entero (no carga nada) si sobra o falta una columna, si un
+  valor tiene «@», 9 dígitos seguidos, un teléfono con espacios o forma de DNI/NIE, o si un valor no tiene
+  formato. Los mensajes dicen fila y columna, nunca el valor. Zonas que no suman leads: aviso. Va comprimido
+  al bucket (`walcu/agregado/<día>/`) y después a `walcu_campana_mes` (solo añadir; recargar un mes lo
+  sustituye en `walcu_campana_mes_vigente`; el mismo fichero dos veces no se carga).
+- `referencias_meta.py` une Meta y Walcu (origen Facebook; AiVORA fuera) por el nombre normalizado
+  (minúsculas, sin tildes, espacios simplificados y sin `-copy`, `copia`, `-OK`; equivalencias en
+  `config/campanas_walcu.yaml`) y rehace `panel_campana_mes`, `panel_referencia_meta` y
+  `panel_walcu_sin_cruce`. Lo llaman `campanas.py` (tras cada descarga de Meta y GA4) y la carga de Walcu.
+  `make referencias-meta` lo rehace y escribe la tabla por año y tipo (gasto, leads según Meta y Walcu,
+  citas, ventas, costes por lead, cita y venta, lead a cita, cita a venta, % fuera de zona y % de número
+  inexistente, con la diferencia entre años) y lo que no casa.
+- Pruebas: `tests/test_walcu_meta_hist.py`.
+
 ## Concesionario de la instancia (concesionario.py)
 
 `ingesta/concesionario.py` lee `config/concesionario.yaml` (o el fichero de `CDF_CONCESIONARIO`):
-nombre, nombre del panel, marca, `dealer_ids`, provincia (código INE) y umbrales del panel. La
+nombre, nombre del panel, marca, `dealer_ids`, provincia (código INE), zona cercana, web propia (origen de
+los leads en Walcu) y umbrales del panel. La
 comunidad autónoma sale de la provincia (`provincias.COMUNIDADES`). Una instancia, un
 concesionario: nada de esto va escrito en el código.
 

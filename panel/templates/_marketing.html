@@ -249,5 +249,102 @@
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 
+  <section aria-labelledby="t-mes" class="tarjeta seccion"{{ attrs("mes", d.mes) }}>
+    <div class="tarjeta-cabeza">
+      <h2 id="t-mes">Campañas del último mes{% if d.mes.hay %}: {{ d.mes.mes }}{% endif %}</h2>
+      {{ marca(d.mes) }}
+    </div>
+    {% if d.mes.hay %}
+    <p class="nota">Meta (gasto y leads según Meta, hasta el {{ d.mes.hasta }}) cruzado con los leads, citas y ventas de Walcu de la misma campaña{% if d.tipo != "todo" %} · campañas de {{ d.tipo }} y de VN y VO{% endif %}</p>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-movil tabla-mes">
+        <thead>
+          <tr>
+            <th scope="col" class="izq">Campaña</th>
+            <th scope="col">Gasto</th>
+            <th scope="col">Leads</th>
+            <th scope="col">Leads según Meta</th>
+            <th scope="col">Citas</th>
+            <th scope="col">Ventas</th>
+            <th scope="col">€ / lead</th>
+            <th scope="col">€ / cita</th>
+            <th scope="col">€ / venta</th>
+            <th scope="col" class="izq">Decisión</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in d.mes.filas %}
+          <tr{% if c.alerta %} class="aviso"{% endif %}>
+            <th scope="row" class="izq">
+              <span class="campana-nombre">{{ c.nombre }}</span>
+              <span class="campana-nota">{{ c.nota }}</span>
+            </th>
+            <td data-etiqueta="Gasto">{{ c.gasto }}</td>
+            <td data-etiqueta="Leads">{{ c.leads }}</td>
+            <td data-etiqueta="Leads según Meta">{{ c.leads_meta }}</td>
+            <td data-etiqueta="Citas">{{ c.citas }}</td>
+            <td data-etiqueta="Ventas">{{ c.ventas }}</td>
+            <td data-etiqueta="€ / lead">{{ c.cpl }}</td>
+            <td data-etiqueta="€ / cita" class="fuerte">{{ c.cpc }}</td>
+            <td data-etiqueta="€ / venta" class="fuerte">{{ c.cpv }}</td>
+            <td data-etiqueta="Decisión" class="izq">{{ c.decision_texto }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10" class="izq">Ninguna campaña{% if d.tipo != "todo" %} de {{ d.tipo }}{% endif %} con gasto este mes.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th scope="row" class="izq">Total{% if d.mes.hay_comun %} (sin el gasto común a VN y VO){% endif %}</th>
+            <td data-etiqueta="Gasto">{{ d.mes.total.gasto }}</td>
+            <td data-etiqueta="Leads">{{ d.mes.total.leads }}</td>
+            <td data-etiqueta="Leads según Meta">{{ d.mes.total.leads_meta }}</td>
+            <td data-etiqueta="Citas">{{ d.mes.total.citas }}</td>
+            <td data-etiqueta="Ventas">{{ d.mes.total.ventas }}</td>
+            <td data-etiqueta="€ / lead">{{ d.mes.total.cpl }}</td>
+            <td data-etiqueta="€ / cita" class="fuerte">{{ d.mes.total.cpc }}</td>
+            <td data-etiqueta="€ / venta" class="fuerte">{{ d.mes.total.cpv }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    {% if not d.mes.walcu %}<p class="nota motivo">Sin carga de Walcu de {{ d.mes.mes }}: leads, citas y ventas sin datos; las reglas que las necesitan no se aplican.</p>{% endif %}
+    {% if d.mes.sin_cruce %}<p class="nota">Además, {{ d.mes.sin_cruce }} leads de Facebook en Walcu sin campaña de Meta con la que casar (no cuentan en el total).</p>{% endif %}
+    <p class="nota">Leads, citas y ventas: de Walcu (origen Facebook), unidos a la campaña de Meta por su nombre. «—»: la campaña no casa con ningún lead de Walcu. Cita: el lead tiene negociación; venta: negociación cerrada como vendida. La decisión es la de los criterios de Meta.</p>
+    {% else %}{{ sin_datos() }}{% endif %}
+  </section>
+
+  <section aria-labelledby="t-referencias" class="tarjeta seccion"{{ attrs("referencias", d.referencias) }}>
+    <div class="tarjeta-cabeza">
+      <h2 id="t-referencias">Referencias históricas</h2>
+      {{ marca(d.referencias) }}
+    </div>
+    {% if d.referencias.hay %}
+    <p class="nota">Campañas de Meta con los leads de Walcu de origen Facebook, por año{% if d.tipo != "todo" %} · {{ d.tipo }}{% endif %} · solo los meses con datos de Meta y de Walcu</p>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-movil tabla-referencias">
+        <thead>
+          <tr>
+            <th scope="col" class="izq">Medida</th>
+            {% for c in d.referencias.columnas %}<th scope="col">{{ c }}</th>{% endfor %}
+            {% if d.referencias.dos %}<th scope="col">Diferencia</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in d.referencias.filas %}
+          <tr data-medida="{{ f.clave }}">
+            <th scope="row" class="izq">{{ f.nombre }}</th>
+            {% for v in f.valores %}<td data-etiqueta="{{ d.referencias.columnas[loop.index0] }}">{{ v }}</td>{% endfor %}
+            {% if d.referencias.dos %}<td data-etiqueta="Diferencia">{{ f.diferencia }}</td>{% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="nota">Las de {{ d.referencias.anio_ref }} son la media de las reglas c y d: un coste por cita (y por lead) como mucho el de {{ d.referencias.anio_ref }} del mismo tipo está «en la media». Los totales de un año incompleto no se comparan con los de uno completo; los costes y las tasas, sí. Las citas y ventas del último mes todavía pueden crecer.{% if d.tipo != "todo" %} El gasto de las campañas de VN y VO se reparte por sus leads de Walcu de cada tipo.{% endif %}</p>
+    {% else %}{{ sin_datos() }}{% endif %}
+  </section>
+
   {{ lista_alertas(d.alertas, "Alertas para marketing", "t-alertas-marketing") }}
 </div>

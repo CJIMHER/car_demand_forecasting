@@ -99,12 +99,12 @@ def test_a_lead_a_cita_necesita_20_leads(pg, conc, crit, leads, estado):
         assert "sin volumen: 19 leads, mínimo 20" in r.cifras_texto
 
 
-@pytest.mark.parametrize("fuera, salta", [(3001, True), (3000, False)])
-def test_a_fuera_de_zona_en_el_borde_del_30(pg, conc, crit, fuera, salta):
+@pytest.mark.parametrize("fuera, salta", [(3501, True), (3500, False)])
+def test_a_fuera_de_zona_en_el_borde_del_35(pg, conc, crit, fuera, salta):
     campana(pg, "C", leads=10_000, citas=2_000, zona=10_000 - fuera, fuera=fuera, gasto=1_000)
     r = juicio(pg, conc, crit, "C").reglas["a"]
     assert r.activa is salta
-    assert f"fuera de zona: {fuera} de 10000 leads con código postal = {'30,01' if salta else '30'} % (umbral 30 %)" \
+    assert f"fuera de zona: {fuera} de 10000 leads con código postal = {'35,01' if salta else '35'} % (umbral 35 %)" \
         in r.cifras_texto
     assert ("nombren la provincia" in r.revisar) is salta
 

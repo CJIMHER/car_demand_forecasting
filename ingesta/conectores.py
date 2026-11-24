@@ -64,8 +64,11 @@ def limpiar(texto: str, secretos: Iterable[str | None]) -> str:
 def peticion_json(url: str, *, metodo: str = "GET", cabeceras: Mapping[str, str] | None = None,
                   cuerpo: bytes | None = None, es_limite: Callable[[int, dict], bool] | None = None,
                   secretos: Iterable[str | None] = (), dormir=time.sleep, intentos: int = 6,
-                  timeout: float = 60) -> tuple[dict, bytes]:
-    """(respuesta como JSON, cuerpo en bruto). Lanza ErrorDescarga si no puede."""
+                  timeout: float = 60, al_responder: Callable[[Mapping[str, str]], None] | None = None
+                  ) -> tuple[dict, bytes]:
+    """(respuesta como JSON, cuerpo en bruto). Lanza ErrorDescarga si no puede. `al_responder` recibe las
+    cabeceras (en minúsculas) de cada respuesta correcta: Meta dice en ellas cuánto lleva gastado de su
+    límite de uso."""
     secretos = list(secretos)
     ultimo = "sin intentos"
     for n in range(1, intentos + 1):
@@ -75,6 +78,9 @@ def peticion_json(url: str, *, metodo: str = "GET", cabeceras: Mapping[str, str]
         try:
             with _urlopen(pet, timeout) as r:
                 bruto = r.read()
+                cabeceras_resp = {str(k).lower(): str(v) for k, v in dict(getattr(r, "headers", None) or {}).items()}
+            if al_responder:
+                al_responder(cabeceras_resp)
             try:
                 return json.loads(bruto.decode("utf-8")), bruto
             except (ValueError, UnicodeDecodeError):
@@ -167,5 +173,9 @@ def ahora() -> datetime:
 
 
 def anotar(pg: psycopg.Connection, fuente: str, dia: date, estado: str, detalle: dict) -> None:
-    pg.execute("INSERT INTO fuentes_estado (fuente, tipo, dia, estado, detalle) VALUES (%s, 'descarga', %s, %s, %s)",
-               (fuente, dia, estado, Jsonb(detalle)))
+    anotar_tipo(pg, fuente, dia, "descarga", estado, detalle)
+
+
+def anotar_tipo(pg: psycopg.Connection, fuente: str, dia: date, tipo: str, estado: str, detalle: dict) -> None:
+    pg.execute("INSERT INTO fuentes_estado (fuente, tipo, dia, estado, detalle) VALUES (%s, %s, %s, %s, %s)",
+               (fuente, tipo, dia, estado, Jsonb(detalle)))

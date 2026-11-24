@@ -321,9 +321,10 @@ def test_reglas_b_y_c_con_los_leads_de_meta_semana_real(pg):
     _semana_real(pg)
     conc = cargar_concesionario()
     resumen = motor.evaluar(pg, SEMANA, conc, reglas("meta_a", "meta_b", "meta_c", "meta_d", "meta_f", "meta_subir"))
-    # Sin Walcu: a, d y subir presupuesto siguen inactivas; b, c y f se evalúan con datos reales
+    # Sin Walcu: a, d y subir presupuesto se evalúan pero no se aplican («sin datos de Walcu»: no saltan);
+    # b, c y f se aplican con los leads de Meta
     for r in ("meta_a", "meta_d", "meta_subir"):
-        assert resumen["reglas"][r].startswith("inactiva"), r
+        assert resumen["reglas"][r] == "real: 0 disparadas", r
     for r in ("meta_b", "meta_c", "meta_f"):
         assert resumen["reglas"][r].startswith("real"), r
     a = {(x["regla"], x["clave"]): x for x in alertas(pg, dia=SEMANA)}
@@ -333,7 +334,7 @@ def test_reglas_b_y_c_con_los_leads_de_meta_semana_real(pg):
             in a[("meta_b", "R0")]["texto"])
     assert a[("meta_c", "R0")]["texto"] == (
         "Campaña «VW [VN][2026] T-Roc noviembre» · revisar (regla c): coste por lead: 244,55 € / 14 leads según Meta "
-        "= 17,47 € (umbral 10 €). Falta el coste por cita para decidir entre continuar y parar.")
+        "= 17,47 € (umbral 10 €). Sin datos de Walcu: falta el coste por cita para decidir entre continuar y parar.")
     assert "clic a lead: 30 leads según Meta de 1222 clics = 2,45 % (umbral 3 %)" in a[("meta_b", "R1")]["texto"]
     assert "coste por lead: 348,01 € / 30 leads según Meta = 11,60 € (umbral 10 €)" in a[("meta_c", "R1")]["texto"]
     assert a[("meta_c", "R1")]["cifras"]["fuente_leads"] == "meta"
@@ -345,7 +346,7 @@ def test_reglas_b_y_c_con_los_leads_de_meta_semana_real(pg):
     assert reglas_tcross["b"]["estado"] == "no" and reglas_tcross["c"]["estado"] == "no"
     assert "6,33 €" in reglas_tcross["c"]["texto"] and "39 leads según Meta" in reglas_tcross["c"]["texto"]
     assert {reglas_tcross[k]["estado"] for k in ("a", "d", "subir")} == {"sin_dato"}
-    assert "falta Walcu" in reglas_tcross["a"]["texto"]
+    assert "sin datos de Walcu: no se aplica; no hay carga de Walcu de noviembre de 2026" in reglas_tcross["a"]["texto"]
 
 
 def test_regla_f_con_los_leads_de_meta(pg):

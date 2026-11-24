@@ -2,8 +2,9 @@
 
 Lee panel_campana_dia (Meta), panel_leads_dia (Walcu), panel_campana_salud,
 panel_recomendacion_modelo, panel_atencion_relativa, panel_semana_campana,
-panel_campana_resultado, panel_trafico_canal_dia (GA4) y, en VO, panel_riesgo_vehiculo (contrato). Solo sumas y cocientes de filas
-ya preparadas.
+panel_campana_resultado, panel_trafico_canal_dia (GA4), panel_campana_mes y panel_referencia_meta (Meta y
+Walcu por mes; ingesta/referencias_meta.py) y, en VO, panel_riesgo_vehiculo (contrato). Solo sumas y
+cocientes de filas ya preparadas.
 
 Cada campaña tiene un tipo (de un modelo o general) y un ámbito (VN, VO o ambos), los dos de
 config/campanas.yaml (ingesta/campanas.py). En VN o VO se ven las de ese ámbito y las de ambos; de una
@@ -412,6 +413,118 @@ def trafico(pg, origen, tipo: str = "todo") -> dict:
                      total=fmt.miles(suma), hay_previo=hay_previo, nota=nota)
 
 
+def _euros2(x: float | None) -> str:
+    """Con dos decimales si no es entero: 17,47 € · 120 €."""
+    if x is None:
+        return fmt.GUION
+    return f"{fmt.miles(x)} €" if abs(x - round(x)) < 0.005 else f"{fmt.decimal(x, 2)} €"
+
+
+def ultimo_mes(pg, origen, tipo: str = "todo") -> dict:
+    """Campañas de Meta del último mes con gasto: gasto, leads (de Walcu y según Meta), citas, ventas y coste
+    por lead, por cita y por venta reales, con la decisión de los criterios de Meta. Las de ambos, en VN o
+    VO, con sus leads, citas y ventas de ese tipo y sin costes (su gasto no se reparte)."""
+    dia = ng.ultimo_dia(pg, "panel_campana_mes", origen)
+    if dia is None:
+        return ng.bloque(origen, hay=False)
+    mes = pg.execute("SELECT max(mes) FROM panel_campana_mes WHERE origen = %s AND dia = %s AND gasto_cents > 0",
+                     (origen, dia)).fetchone()[0]
+    if mes is None:
+        return ng.bloque(origen, hay=False)
+    decision_dia = ng.ultimo_dia(pg, "panel_campana_decision", origen)
+    decisiones = dict(pg.execute("SELECT campana_id, decision FROM panel_campana_decision WHERE origen = %s AND dia = %s",
+                                 (origen, decision_dia)).fetchall()) if decision_dia else {}
+    sufijo = "" if tipo == "todo" else f"_{tipo.lower()}"
+    filas, walcu, sin_cruce = [], False, 0
+    tot = [0.0, 0, 0, 0, 0]
+    for (cid, titulo, ambito, tipo_campana, modelo, gasto, leads_meta, hay_walcu, cruce, leads, citas, ventas,
+         l_t, c_t, v_t) in pg.execute(
+            f"""SELECT campana_id, titulo, ambito, tipo_campana, modelo, gasto_cents / 100.0, leads_meta, walcu, cruce,
+                       leads, citas, ventas, leads{sufijo or ''}, citas{sufijo or ''}, ventas{sufijo or ''}
+                FROM panel_campana_mes WHERE origen = %s AND dia = %s AND mes = %s
+                ORDER BY gasto_cents DESC, titulo""", (origen, dia, mes)):
+        walcu = walcu or hay_walcu
+        if cid is None:                 # leads de Facebook en Walcu sin campaña de Meta
+            sin_cruce += int(l_t or 0)
+            continue
+        if tipo != "todo" and ambito not in (tipo, "ambos"):
+            continue
+        gasto = float(gasto)
+        comun = tipo != "todo" and ambito == "ambos"
+        l, c, v = (l_t, c_t, v_t) if tipo != "todo" else (leads, citas, ventas)
+        con_walcu = cruce is not None
+        coste = (lambda n: None) if comun or not con_walcu else (lambda n: _div(gasto, n) if n else None)
+        if not comun:
+            tot[0] += gasto
+        if con_walcu:
+            tot[1] += int(l or 0)
+            tot[2] += int(c or 0)
+            tot[3] += int(v or 0)
+        tot[4] += int(leads_meta or 0) if not comun else 0
+        decision = decisiones.get(cid)
+        filas.append({
+            "nombre": titulo, "ambito": ambito,
+            "nota": (AMBITOS[ambito] if ambito else "Sin regla")
+                    + (f" · {modelo}" if tipo_campana == "modelo" and modelo else " · General" if tipo_campana else "")
+                    + (f" · leads, citas y ventas de {tipo} · {COMUN}" if comun else "")
+                    + ("" if con_walcu or not hay_walcu else " · no casa con ningún lead de Walcu"),
+            "gasto": _euros2(gasto), "leads": fmt.miles(l) if con_walcu else fmt.GUION,
+            "leads_meta": fmt.miles(leads_meta) if leads_meta is not None else fmt.GUION,
+            "citas": fmt.miles(c) if con_walcu else fmt.GUION, "ventas": fmt.miles(v) if con_walcu else fmt.GUION,
+            "cpl": _euros2(coste(l)), "cpc": _euros2(coste(c)), "cpv": _euros2(coste(v)),
+            "decision": decision, "decision_texto": DECISIONES[decision] if decision else "Sin decidir",
+            "alerta": decision in ("revisar", "parar"), "comun": comun})
+    total = {"gasto": _euros2(tot[0]), "leads": fmt.miles(tot[1]) if walcu else fmt.GUION,
+             "leads_meta": fmt.miles(tot[4]), "citas": fmt.miles(tot[2]) if walcu else fmt.GUION,
+             "ventas": fmt.miles(tot[3]) if walcu else fmt.GUION,
+             "cpl": _euros2(_div(tot[0], tot[1])) if walcu else fmt.GUION,
+             "cpc": _euros2(_div(tot[0], tot[2])) if walcu else fmt.GUION,
+             "cpv": _euros2(_div(tot[0], tot[3])) if walcu else fmt.GUION}
+    nombre_mes = f"{fmt.MESES[mes.month - 1]} de {mes.year}"
+    return ng.bloque(origen, filas=filas, total=total, mes=nombre_mes, walcu=walcu, tipo=tipo,
+                     sin_cruce=fmt.miles(sin_cruce) if sin_cruce else "", hasta=fmt.fecha_corta(dia),
+                     hay_comun=any(f["comun"] for f in filas))
+
+
+METRICAS_REF = (("gasto", "Gasto", "euros"), ("leads_meta", "Leads según Meta", "n"), ("leads", "Leads según Walcu", "n"),
+                ("citas", "Citas", "n"), ("ventas", "Ventas", "n"), ("coste_lead", "Coste por lead", "euros"),
+                ("coste_cita", "Coste por cita", "euros"), ("coste_venta", "Coste por venta", "euros"),
+                ("lead_cita", "Lead a cita", "pct"), ("cita_venta", "Cita a venta", "pct"),
+                ("fuera_zona", "Fuera de zona", "pct"), ("inexistente", "Número inexistente", "pct"))
+
+
+def referencias(pg, origen, tipo: str = "todo") -> dict:
+    """Referencias históricas: por año, con la diferencia entre los dos últimos."""
+    from ingesta import referencias_meta as ref
+    if origen is None:
+        return ng.bloque(origen, hay=False)
+    filas_ref = {a: x for (a, t), x in ref.leer_referencias(pg, origen).items() if t == tipo}
+    if not filas_ref:
+        return ng.bloque(origen, hay=False)
+    anios = sorted(filas_ref)[-2:]
+    ms = [ref.metricas(filas_ref[a]) for a in anios]
+    columnas = [f"{a} ({fmt.MESES[filas_ref[a]['desde_mes'].month - 1][:3]}–"
+                f"{fmt.MESES[filas_ref[a]['hasta_mes'].month - 1][:3]})" for a in anios]
+
+    def valor(x, unidad):
+        if x is None:
+            return fmt.GUION
+        return _euros2(x) if unidad == "euros" else fmt.porcentaje(x, 1) if unidad == "pct" else fmt.miles(x)
+    filas = []
+    for k, nombre, unidad in METRICAS_REF:
+        dif = fmt.GUION
+        if len(ms) == 2 and ms[0][k] is not None and ms[1][k] is not None:
+            if unidad == "pct":
+                dif = f"{fmt.decimal(ms[1][k] - ms[0][k], 1)} puntos".replace("-", "−")
+                dif = dif if dif.startswith("−") else "+" + dif
+            elif ms[0][k]:
+                dif = fmt.porcentaje((ms[1][k] / ms[0][k] - 1) * 100, 0, signo=True)
+        filas.append({"nombre": nombre, "valores": [valor(m[k], unidad) for m in ms], "diferencia": dif,
+                      "clave": k})
+    return ng.bloque(origen, columnas=columnas, filas=filas, dos=len(ms) == 2, tipo=tipo,
+                     anio_ref=anios[0])
+
+
 def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, hoy: date,
           tipo: str = "todo") -> dict:
     org = contrato.origenes(modos, "marketing")
@@ -423,5 +536,6 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, 
         "ocasion": ocasion(pg, org["ocasion"], conc) if tipo == "VO" else None,
         "semanas": semanas(pg, org["semanas"], tipo), "pasadas": pasadas(pg, org["pasadas"], tipo), "origenes": org,
         "trafico": trafico(pg, org["trafico"], tipo),
+        "mes": ultimo_mes(pg, org["mes"], tipo), "referencias": referencias(pg, org["referencias"], tipo),
         "alertas": pal.bloque_rol(pg, org["alertas"], "marketing", tipo),
     }

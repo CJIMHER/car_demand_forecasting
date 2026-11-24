@@ -1,0 +1,25 @@
+# Cruce de las campañas de Meta con las de Walcu (ingesta/referencias_meta.py).
+#
+# Walcu guarda en cada lead el nombre de la campaña («Detalle campaña»); Meta, el suyo. Se unen por el
+# nombre normalizado: minúsculas, sin tildes, con los espacios reducidos a uno y sin los sufijos de esta
+# lista al final del nombre («-copy», «- Copia», «(copy 2)», «-OK»…). Así «SK [VN] [2026] Gama Ahorro-copy» y
+# «sk [vn] [2026] gama ahorro» son la misma campaña.
+#
+# Lo que no casa sale en el informe de  make referencias-meta  (y en la tabla panel_walcu_sin_cruce). Para
+# arreglarlo, añadir aquí una equivalencia: nombre en Walcu → nombre en Meta (los dos tal como aparecen; se
+# comparan normalizados). Si el nombre de Meta se repite en varias campañas, se puede poner su ID:
+# "id:120212345678901234".
+#
+# Tras cambiarlo: make referencias-meta.
+
+# Orígenes de Walcu que son leads de las campañas de Meta (se comparan sin mayúsculas ni tildes)
+origenes_meta: [Facebook]
+
+# Fuera de las referencias de Meta aunque lleguen por Facebook: llamadas a clientes del grupo, no
+# campañas de Facebook. (Con origenes_meta: [Facebook] ya no entran; se deja dicho por si cambia.)
+excluidos: [AiVORA]
+
+# Sufijos que se quitan del final del nombre (palabras enteras, con o sin número detrás)
+sufijos: [copy, copia, ok]
+
+equivalencias: {}

@@ -22,6 +22,9 @@ propio:
   # campañas de Meta (docs/criterios_marketing_meta.md: regla e, leads de fuera de zona) y la zona
   # «cercana» de Mercado. Tras cambiarla: make precalcular.
   provincias_cercanas: ["21", "11", "14"]     # Huelva, Cádiz y Córdoba
+  # Web propia: así aparece como origen de los leads en Walcu (scripts/walcu_agregar.py la conserva
+  # como origen; los que no están en config/walcu_export.yaml van a «otros»)
+  web: volkswagen.avisa.es
   dealer_ids:
     - ESP00710
   # Nombres con que aparece en los scrapers (dealer_name). Comprobar con  make concesionarios

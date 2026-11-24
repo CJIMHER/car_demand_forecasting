@@ -50,20 +50,21 @@ activa desde su segundo día de vida y de ahí salen, con las mismas cifras: las
 marketing, la decisión de cada campaña (`panel_campana_decision`: continuar, revisar, parar o subir
 presupuesto) y la recomendación por modelo (`panel_recomendacion_modelo`).
 
-- a) lead → cita < 5 % (con al menos 20 leads) o fuera de zona > 30 %: revisar.
+- a) lead → cita < 5 % (con al menos 20 leads) o fuera de zona > 35 %: revisar.
 - b) cualquiera de tres señales: tasa de clic (clics / impresiones) < 1 % → el anuncio no atrae: revisar creatividad (reel, foto) y mensaje; tasa de clic a lead (leads / clics) < 3 % → atrae pero no convence: revisar llamada a la acción, oferta y formulario; leads por impresión por debajo de la mitad que las campañas del mismo modelo y mes de años anteriores. Sin clics no se juzga la tasa de clic a lead. Volumen mínimo (`n_minimo`): la tasa de clic salta solo con al menos 1.000 impresiones y la de clic a lead con al menos 50 clics; por debajo se muestra la cifra sin saltar (estado «sin volumen»).
-- c) coste por lead > 10 €: continuar si el coste por cita está en su media (la de las demás campañas de los últimos 90 días, +20 %); si no, parar. Sustituye a «el doble de su media de 28 días».
-- d) tasa de venta < 33 % (con al menos 6 citas) con coste por lead y por cita en su media: revisar, con los similares de la zona cercana (mismo modelo, acabado y motor).
+- c) coste por lead > 10 €: continuar si el coste por cita está en la media = como mucho el de la referencia de 2025 del mismo tipo (`panel_referencia_meta`; sin ella, la media de las demás campañas de los últimos 90 días, +20 %); si no, parar.
+- d) tasa de venta < 33 % (con al menos 6 citas) con coste por lead y por cita en la media (la misma referencia): revisar, con los similares de la zona cercana (mismo modelo, acabado y motor). El texto dice que el 33 % es el óptimo y que saltará a menudo.
 - e) lanzar solo con al menos 3 unidades propias en la zona cercana y nuestro precio por debajo de la mediana de la competencia (mismo modelo, acabado y motor); primero los de más stock y mejor precio. Es real desde ya: sale del precálculo de Mercado.
 - f) cansancio: leads por día de los 3 últimos días al menos un 30 % por debajo de los 7 anteriores, y coste por lead de esos 3 días > 10 €: revisar.
 - Subir presupuesto: todo a la vez (coste por lead < 10 €, por cita < 100 €, lead → cita > 5 %, tasa de venta > 33 %, por venta < 400 €, la regla e) y ninguna regla de revisión activa.
 
-**Leads según Meta.** Mientras `panel_leads_dia` no tiene filas con el origen de las campañas (los
-leads de Walcu aún no se cargan), b, c y f se aplican con los leads que cuenta Meta
-(`panel_campana_dia.leads_meta`) y cada cifra lo dice («14 leads según Meta»). Sin citas no hay coste
-por cita: la regla c propone «revisar» («falta el coste por cita para decidir entre continuar y
-parar»). a, d y subir presupuesto quedan inactivas («falta Walcu»). Cuando entran los leads de Walcu,
-mandan los de Walcu. Las alertas van al rol marketing; sin `TELEGRAM_CHAT_MARKETING`, al chat del técnico
+**Walcu y leads según Meta.** Campaña a campaña: con `panel_leads_dia` (Walcu diario), manda; si no, la
+carga mensual (`panel_campana_mes`, de `make walcu-cargar`) si hay carga del mes del último día y la campaña
+casa con sus leads. Sin ninguna, b, c y f se aplican con los leads que cuenta Meta
+(`panel_campana_dia.leads_meta`) y cada cifra lo dice («14 leads según Meta»); la regla c propone «revisar»
+(«Sin datos de Walcu: falta el coste por cita…»), y a, d y subir presupuesto se evalúan pero no se aplican
+(«sin datos de Walcu: no se aplica» y el motivo). La f compara días: con la carga mensual usa los leads de
+Meta por día. Las alertas van al rol marketing; sin `TELEGRAM_CHAT_MARKETING`, al chat del técnico
 con «[Para marketing]» delante.
 
 Con poco volumen se muestra la cifra y la regla no salta. La comparación con la referencia por días

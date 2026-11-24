@@ -12,13 +12,14 @@ JOBS = $(COMPOSE) exec -T -u cdf jobs
 RUN = $(COMPOSE) run --rm --no-deps -u cdf
 # Órdenes en el contenedor del panel (usuario de Postgres cdf_panel); con terminal para pedir contraseñas
 PANEL_RUN = $(COMPOSE) --profile panel run --rm --no-deps panel python -m panel.usuarios
-# Python del Mac para make panel-dev, gtrends-enlaces y gtrends-subir
+# Python del Mac para make panel-dev, gtrends-enlaces, gtrends-subir y walcu-agregar
 PYTHON ?= .venv/bin/python
 
 .PHONY: help comprobar-entorno deploy migrar cargar comprobar recuento concesionarios remarcar-propio \
         estado copia restaurar-prueba test hora logs ps psql precalcular panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
-        ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas gtrends gtrends-enlaces gtrends-subir
+        ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas gtrends gtrends-enlaces gtrends-subir \
+        meta-historico walcu-cargar walcu-agregar referencias-meta
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -128,6 +129,21 @@ alertas: ## Motor de alertas y envío por Telegram por rol (cron 09:15); SIN_TEL
 
 meta: ## Descarga de Meta (cron 06:00): los últimos 7 días; sin credenciales no hace nada
 	$(JOBS) python -m ingesta.meta
+
+meta-historico: ## Histórico de Meta por meses: make meta-historico DESDE=2025-01-01 [HASTA=AAAA-MM-DD] (por defecto, hasta ayer)
+	@test -n "$(DESDE)" || { echo "Uso: make meta-historico DESDE=2025-01-01 [HASTA=AAAA-MM-DD]"; exit 1; }
+	$(JOBS) python -m ingesta.meta --historico --desde $(DESDE) $(if $(HASTA),--hasta $(HASTA))
+
+walcu-cargar: ## Carga el CSV agregado de Walcu: make walcu-cargar FICHERO=/ruta.csv (rechaza el fichero entero si no vale)
+	@test -n "$(FICHERO)" -a -f "$(FICHERO)" || { echo "Uso: make walcu-cargar FICHERO=/ruta/del/fichero.csv"; exit 1; }
+	$(JOBS) python -m ingesta.walcu cargar --nombre "$(notdir $(FICHERO))" < "$(FICHERO)"
+
+walcu-agregar: ## (Mac) Agrega la exportación de leads de Walcu: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu.csv
+	@test -n "$(ENTRADA)" -a -n "$(SALIDA)" || { echo "Uso: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu_agregado.csv"; exit 1; }
+	$(PYTHON) scripts/walcu_agregar.py "$(ENTRADA)" "$(SALIDA)"
+
+referencias-meta: ## Cruce Meta–Walcu y referencias de coste por año y tipo (tabla e informe de lo que no casa)
+	$(JOBS) python -m ingesta.referencias_meta
 
 ga4: ## Descarga de GA4 (cron 06:10): los últimos 7 días; sin credenciales no hace nada
 	$(JOBS) python -m ingesta.ga4

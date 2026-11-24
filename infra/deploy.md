@@ -441,6 +441,31 @@ Cada mes (el técnico recibe «Toca descargar Google Trends» si la última desc
 4. En el servidor, la carga es automática a las 07:00; para verla ya: `make gtrends`. Repetirla no
    duplica. Marketing → «Atención frente a sus rivales» pasa a real, con la fecha de la descarga.
 
+### 7.12 Histórico de Meta, Walcu agregado y referencias de coste
+
+Una vez, en el servidor:
+
+```bash
+make deploy                                  # migración 0017
+make meta-historico DESDE=2025-01-01         # hasta ayer; por meses, con archivadas y borradas. Se puede relanzar
+```
+
+Si se corta (límite de la API, red), relanzar la misma orden: no duplica filas. `make estado` muestra la
+anotación de `meta` con los tramos.
+
+Cada semana:
+
+1. En el Mac: exportar los leads de Walcu (xlsx o csv) y
+   `make walcu-agregar ENTRADA=~/Descargas/leads.xlsx SALIDA=~/Descargas/walcu_agregado.csv`. La primera vez,
+   revisar los estados, tipos y motivos que escribe y ajustar `config/walcu_export.yaml`.
+2. Copiar el CSV al servidor: `scp -i ~/.ssh/cdf_hetzner ~/Descargas/walcu_agregado.csv cdf@<ip>:/opt/cdf/entrada/`.
+3. En el servidor: `make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_agregado.csv`. Si el fichero trae otra
+   columna o algo con aspecto de correo, teléfono o DNI, lo rechaza entero y no carga nada.
+4. `make referencias-meta`: tabla por año y tipo y lo que no casa entre Meta y Walcu. Para lo que no casa,
+   equivalencias en `config/campanas_walcu.yaml` (commit, `make deploy`) y otra vez `make referencias-meta`.
+5. `SIN_TELEGRAM=1 make alertas` para ver las alertas recalculadas sin enviarlas (o esperar al cron de las
+   09:15). Marketing → «Campañas del último mes» y «Referencias históricas».
+
 ## 8. Día a día
 
 ```bash

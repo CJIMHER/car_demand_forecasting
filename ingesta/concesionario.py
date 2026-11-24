@@ -46,6 +46,8 @@ class Concesionario:
     # Zona cercana: la provincia propia y las de propio.provincias_cercanas (criterios de Meta, regla e;
     # zona «cercana» de Mercado). Sin provincias cercanas, solo la propia.
     provincias_cercanas: tuple[str, ...] = ()
+    # Dominio de la web propia, tal como aparece como origen de los leads en Walcu (scripts/walcu_agregar.py)
+    web: str = ""
 
     @property
     def zona_cercana(self) -> tuple[str, ...]:
@@ -94,6 +96,7 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         tramos_antiguedad=_tramos(cfg, "antiguedad_anios"),
         tramos_km=_tramos(cfg, "km"),
         provincias_cercanas=cercanas,
+        web=str(propio.get("web") or "").strip(),
     )
 
 

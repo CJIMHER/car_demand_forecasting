@@ -9,7 +9,7 @@ Usa esta skill cuando haya que decidir si lanzar una campaña, juzgar cómo va u
 Por campaña y día:
 
 - **Meta**: gasto, impresiones o visualizaciones, clics, frecuencia, leads, texto del anuncio (copy) y respuestas del formulario de lead, incluido el código postal.
-- **CRM (Walcu)**: leads, citas y ventas de la campaña (por utm_campaign), y el motivo de descarte que anota el comercial en cada lead.
+- **CRM (Walcu)**: leads, citas y ventas de la campaña, y el motivo de descarte que anota el comercial en cada lead. Hoy llegan agregados por mes, origen, campaña y tipo (`make walcu-cargar`, una vez por semana) y se unen a la campaña de Meta por su nombre normalizado (`config/campanas_walcu.yaml`). Cita = el lead tiene negociación creada; venta = negociación cerrada como vendida. Solo cuentan los de origen Facebook: AiVORA son llamadas a clientes del grupo, no campañas de Facebook.
 - **Stock propio** del modelo: unidades y precio, por versión y acabado.
 - **Mercado** (web de stock de la marca): unidades y precio mediano de otros concesionarios para el mismo modelo, versión y acabado, en la zona cercana.
 
@@ -17,7 +17,7 @@ Nunca uses ni guardes datos personales de los leads. El código postal sirve sol
 
 Si falta un dato, dilo y no lo supongas. Una regla sin su dato no se aplica.
 
-Mientras no hay leads del CRM, las reglas que no necesitan citas ni ventas (b, c y f) se aplican con los leads que cuenta Meta, diciéndolo en cada cifra («leads según Meta»). En la regla c, sin coste por cita, la decisión es **revisar**: falta el coste por cita para decidir entre continuar y parar. Las reglas a, d y subir presupuesto esperan a tener citas y ventas. Cuando hay leads del CRM, mandan los del CRM.
+**Con y sin Walcu.** Las reglas a, c (la parte del coste por cita), d y subir presupuesto usan las citas y ventas de Walcu cuando hay carga de Walcu del mes y la campaña casa con sus leads. Si no, dicen **«sin datos de Walcu»** y no se aplican: no se inventan citas ni ventas. Las reglas b, c (coste por lead) y f usan los leads de Walcu si los hay; si no, los que cuenta Meta, diciéndolo en cada cifra («leads según Meta»). En la regla c sin Walcu, sin coste por cita, la decisión es **revisar**: falta el coste por cita para decidir entre continuar y parar. La regla f compara días: mientras Walcu llegue por meses, usa los leads de Meta por día.
 
 ## Definiciones
 
@@ -31,6 +31,7 @@ Mientras no hay leads del CRM, las reglas que no necesitan citas ni ventas (b, c
 - **Leads por impresión** = leads / impresiones de Meta (solo para comparar con campañas del mismo modelo y mes).
 - **Zona cercana**: la provincia del concesionario y Andalucía occidental: **Sevilla, Huelva, Cádiz y Córdoba** (para el concesionario de Sevilla). Para otro concesionario, la zona sale de su configuración.
 - **Leads de fuera de zona** = leads cuyo código postal no está en la zona cercana / leads con código postal.
+- **La media** (reglas c y d) = la **referencia de 2025** del mismo tipo (VN o VO; las campañas de VN y VO, con las dos juntas): gasto de Meta de 2025 entre los leads y las citas de Walcu de 2025 de ese tipo (`make referencias-meta`, bloque «Referencias históricas» de Marketing). «En la media» = **como mucho** esa cifra. Sin referencia, la media de las demás campañas de los últimos 90 días, con un 20 % de tolerancia.
 
 Los umbrales en euros y en porcentaje valen igual para nuevos (VN) y para ocasión (VO).
 
@@ -53,7 +54,7 @@ La campaña se juzga **desde el segundo día**. Motivo: si llegan muchos leads d
 
 ### a) Leads que no se convierten en citas
 
-- **Señal**: tasa de lead a cita por debajo del **5 %**, o más del **30 %** de los leads de fuera de zona (esta se mira ya desde el segundo día).
+- **Señal**: tasa de lead a cita por debajo del **5 %**, o más del **35 %** de los leads de fuera de zona (esta se mira ya desde el segundo día). VN y VO.
 - **Revisar**:
   1. La zona de localización y las audiencias de la campaña.
   2. Los motivos de descarte que anota el comercial en el CRM. Si dominan los de fuera de zona:
@@ -77,12 +78,13 @@ Volumen mínimo: la señal 1 solo salta con al menos **1.000 impresiones**, y la
 
 - **Señal**: coste por lead por encima de **10 €**.
 - **Decidir por el coste por cita**:
-  - si el coste por cita está en la media, **se continúa** la campaña;
+  - si el coste por cita está en la media (como mucho el de 2025 del mismo tipo, VN o VO), **se continúa** la campaña;
   - si no, **se para** y se revisan audiencias y creatividad.
 
 ### d) Leads y citas en precio, pero pocas ventas
 
-- **Señal**: tasa de venta por debajo del **33 %**, con el coste por lead y por cita en su media.
+- **Señal**: tasa de venta por debajo del **33 %**, con el coste por lead y por cita en la media (la referencia de 2025 del mismo tipo).
+- El 33 % es el **óptimo**, no lo habitual: esta regla saltará a menudo, y la alerta lo dice.
 - **Revisar**:
   1. El motivo de descarte que anota el comercial de exposición.
   2. El mercado: cuántos vehículos similares (mismo modelo, versión y acabado) tienen otros concesionarios en la zona cercana y a qué precio mediano. Puede ser un vehículo con competidores fuertes en la zona.

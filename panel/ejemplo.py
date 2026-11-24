@@ -24,6 +24,7 @@ import math
 import os
 import random
 import sys
+from collections import defaultdict
 from datetime import date, timedelta
 
 import psycopg
@@ -511,7 +512,70 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
                 filas["panel_trafico_canal_dia"].append({"dia": d, "canal": canal, "tipo": tipo, "sesiones": s,
                                                          "sesiones_interaccion": si,
                                                          "eventos_clave": round(s * ev * rt.uniform(0.7, 1.3))})
+
+    # ---- Meta y Walcu por campaña y mes, y referencias por año (sin azar: salen de las filas de arriba)
+    _campana_mes(filas, fin_meta)
+    _referencias(filas, fin_meta)
     return filas
+
+
+def _campana_mes(filas: dict[str, list[dict]], fin_meta: date) -> None:
+    """panel_campana_mes: las campañas de panel_campana_dia por mes, con los leads de panel_leads_dia."""
+    meta: dict[tuple[date, str], dict] = {}
+    for f in filas["panel_campana_dia"]:
+        m = meta.setdefault((f["dia"].replace(day=1), f["campana_id"]), {
+            "titulo": f["titulo"], "ambito": f["ambito"], "tipo_campana": f["tipo_campana"], "modelo": f["modelo"],
+            "gasto_cents": 0, "impresiones": 0, "clics": 0})
+        m["gasto_cents"] += f["gasto_cents"]
+        m["impresiones"] += f["impresiones"]
+        m["clics"] += f["clics"]
+    walcu: dict[tuple[date, str], dict] = defaultdict(lambda: defaultdict(int))
+    for f in filas["panel_leads_dia"]:
+        if f["campana_id"] is None:
+            continue
+        w = walcu[(f["dia"].replace(day=1), f["campana_id"])]
+        for k in ("leads", "citas", "ventas"):
+            w[k] += f[k]
+            w[f"{k}_{f['tipo'].lower()}"] += f[k]
+    for (mes, cid), m in sorted(meta.items()):
+        w = walcu.get((mes, cid), defaultdict(int))
+        leads = w["leads"]
+        fuera, sin_zona = round(leads * 0.2), round(leads * 0.1)
+        filas["panel_campana_mes"].append({
+            "dia": fin_meta, "mes": mes, "campana_id": cid, **m, "leads_meta": round(leads * 1.1), "walcu": True,
+            "cruce": "nombre", "leads": leads, "citas": w["citas"], "ventas": w["ventas"],
+            **{f"{k}_{t}": w[f"{k}_{t}"] for k in ("leads", "citas", "ventas") for t in ("vn", "vo")},
+            "leads_cercana": leads - fuera - sin_zona, "leads_fuera": fuera, "leads_sin_zona": sin_zona,
+            "num_inexistente": round(leads * 0.08)})
+    mes = fin_meta.replace(day=1)
+    filas["panel_campana_mes"].append({
+        "dia": fin_meta, "mes": mes, "campana_id": None, "titulo": "(sin campaña)", "ambito": None,
+        "tipo_campana": None, "modelo": None, "gasto_cents": 0, "impresiones": 0, "clics": 0, "leads_meta": None,
+        "walcu": True, "cruce": "nombre", "leads": 4, "citas": 0, "ventas": 0, "leads_vn": 3, "leads_vo": 1,
+        "citas_vn": 0, "citas_vo": 0, "ventas_vn": 0, "ventas_vo": 0, "leads_cercana": 3, "leads_fuera": 1,
+        "leads_sin_zona": 0, "num_inexistente": 0})
+
+
+def _referencias(filas: dict[str, list[dict]], fin_meta: date) -> None:
+    """panel_referencia_meta: el año anterior completo y el actual hasta el mes de fin_meta."""
+    anio = fin_meta.year
+    #           tipo: gasto (€), leads Meta, leads, citas, ventas, inexistentes (por mes del año anterior)
+    base = {"VN": (1_900, 230, 190, 18, 6, 15), "VO": (800, 70, 60, 14, 5, 1)}
+    for a, meses, factor in ((anio - 1, 12, 1.0), (anio, fin_meta.month, 1.15)):
+        total = defaultdict(int)
+        for tipo, (g, lm, l, c, v, inex) in base.items():
+            x = {"gasto_cents": round(g * meses * factor * 100), "leads_meta": round(lm * meses * factor),
+                 "leads": round(l * meses * factor), "citas": round(c * meses * (2 - factor)),
+                 "ventas": round(v * meses * (2 - factor)), "num_inexistente": round(inex * meses * factor)}
+            x["leads_fuera"] = round(x["leads"] * (0.22 if tipo == "VN" else 0.12))
+            x["leads_sin_zona"] = round(x["leads"] * 0.1)
+            x["leads_cercana"] = x["leads"] - x["leads_fuera"] - x["leads_sin_zona"]
+            for k, n in x.items():
+                total[k] += n
+            filas["panel_referencia_meta"].append({"dia": fin_meta, "anio": a, "tipo": tipo, "desde_mes": date(a, 1, 1),
+                                                   "hasta_mes": date(a, meses, 1), "meses": meses, **x})
+        filas["panel_referencia_meta"].append({"dia": fin_meta, "anio": a, "tipo": "todo", "desde_mes": date(a, 1, 1),
+                                               "hasta_mes": date(a, meses, 1), "meses": meses, **total})
 
 
 # --------------------------------------------------------------------------- escritura

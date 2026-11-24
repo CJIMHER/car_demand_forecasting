@@ -12,7 +12,8 @@ Las reglas están documentadas en config/campanas.yaml. Este módulo:
   campaña descargada de Meta): los criterios de campañas son solo para Meta;
 - con config/canales.yaml (ingesta/canales.py), rehace el tráfico de GA4 por canal y tipo de stock
   (panel_trafico_canal_dia, real), las fuentes y medios que caen en «otros» (panel_trafico_otros) y
-  las campañas de Google Ads, con su nombre y sin reglas (panel_campanas_google_ads).
+  las campañas de Google Ads, con su nombre y sin reglas (panel_campanas_google_ads);
+- al final, rehace el cruce con Walcu y las referencias de coste (ingesta/referencias_meta.py).
 
 Uso: python -m ingesta.campanas (make campanas) tras cambiar config/campanas.yaml. Lo hacen también
 cada descarga de Meta y de GA4.
@@ -274,6 +275,9 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales
             cur.executemany("INSERT INTO panel_campanas_google_ads (campana, campana_id, primer_dia, ultimo_dia, "
                             "sesiones, sesiones_interaccion, eventos_clave) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                             [(*k, *v) for k, v in google.items()])
+    # Cruce con Walcu y referencias de coste por año (ingesta/referencias_meta.py)
+    from ingesta import referencias_meta as ref
+    LOG.info("Referencias de Meta: %s", ref.actualizar(pg, campanas))
     return {"campanas_clasificadas": clasificadas, "campanas_sin_regla": len(sin_regla)}
 
 

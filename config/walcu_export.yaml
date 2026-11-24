@@ -1,0 +1,38 @@
+# Cómo leer la exportación de leads de Walcu (scripts/walcu_agregar.py, en el Mac).
+#
+# Los valores se comparan sin mayúsculas, sin tildes y con los espacios reducidos a uno. Los estados, los
+# motivos y los tipos son texto que configura cada concesionario en Walcu: COMPROBAR con una exportación
+# real. El script escribe al final cuántos leads ha leído con cada valor de Estado y de Tipo, y los motivos
+# de fracaso que se repiten, para ajustar esto.
+
+# Columnas de la exportación que se leen (todas las demás se ignoran sin leerlas)
+columnas:
+  origen: Origen
+  campana: Detalle campaña
+  tipo: Tipo de vehículo solicitado
+  fecha: Fecha Lead
+  negociacion: Id negociación creada     # con valor: el lead tiene negociación creada = cita
+  estado: Estado
+  motivo_fracaso: Motivo fracaso
+  codigo_postal: Código postal            # solo para la zona; nunca se escribe
+
+# Venta = negociación cerrada como vendida: lead con negociación y con uno de estos estados
+estados_venta: [vendido, vendida, ganado, ganada, venta]
+
+# Número inexistente: el motivo de fracaso contiene alguno de estos textos
+motivos_num_inexistente: [inexistente, "no existe", erroneo, "telefono incorrecto", "numero incorrecto"]
+
+# Tipo de vehículo solicitado → VN o VO. Lo que no esté aquí (o vacío) cuenta como tipo_por_defecto
+tipos:
+  VN: [nuevo, nuevos, vn, "vehiculo nuevo"]
+  VO: [ocasion, "vehiculo de ocasion", seminuevo, usado, vo, km0, "km 0", "kilometro cero"]
+tipo_por_defecto: VN
+
+# Orígenes que se conservan con su nombre (alias → nombre). La web propia sale de config/concesionario.yaml
+# (propio.web). Los demás van a «otros».
+origenes:
+  Facebook: [facebook, instagram, "facebook lead ads", meta]
+  AiVORA: [aivora]
+  Carwow: [carwow]
+  Coches.net: [coches.net, cochesnet]
+  Google Ads: [google ads, google, adwords]
