@@ -566,3 +566,8 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 /* Marketing: cifras provisionales de Walcu (semanas sin citas o ventas completas) */
 .tabla-campanas td.provisional { color: var(--gris); }
 .tabla-campanas td .n { display: block; }
+
+/* Dirección: Meta y Walcu, y «Pendiente de conectar» */
+.cifras-marketing { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin: 8px 0 12px; }
+.cifras-marketing > div { display: flex; flex-direction: column; gap: 4px; }
+.sin-datos.pendiente { font-style: normal; }

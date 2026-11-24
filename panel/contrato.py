@@ -6,6 +6,10 @@ tablas tiene una fila real; si no, 'ejemplo' si alguna tiene filas de ejemplo; s
 entra la primera fila real de una tabla, sus filas de ejemplo (y las de las demás tablas del mismo
 bloque) dejan de mostrarse, y conectar una fuente es sustituir filas sin tocar las vistas.
 
+Dirección no mezcla nunca: fuera del modo ejemplo explícito (PANEL_MODO_EJEMPLO=1), sus bloques solo
+leen filas reales y, sin ellas, dicen «Pendiente de conectar: <fuente>» o «Sin datos todavía»
+(VISTAS_SOLO_REAL; panel/direccion.py).
+
 El estado de una vista sale de sus bloques: 'ejemplo' si alguno es de ejemplo, 'real' si alguno es
 real y ninguno de ejemplo, 'vacia' si no hay filas. Quién ve cada estado lo decide permisos.py.
 """
@@ -47,6 +51,9 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "alertas": ALERTAS,
         "edad": ("panel_stock_vehiculo",),
         "precio": ("panel_precio_vo",),             # precio provisional de nuestros VO (el mismo de Ventas)
+        "marketing": ("panel_campana_semana", "panel_campana_decision"),   # Meta y Walcu, últimas 4 semanas
+        "referencias": ("panel_referencia_meta",),  # 2025 frente a 2026
+        "trafico": ("panel_trafico_canal_dia",),    # GA4 por canal
     },
     "ventas": {
         "resumen": ("panel_riesgo_vehiculo",),
@@ -71,6 +78,8 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 VISTAS = tuple(BLOQUES)
+# Vistas que, fuera del modo ejemplo explícito, nunca muestran filas de ejemplo
+VISTAS_SOLO_REAL = ("direccion",)
 
 
 @dataclass(frozen=True)
@@ -88,24 +97,26 @@ def modos(pg: psycopg.Connection) -> dict[str, Modo]:
     return {t: Modo(r, e) for t, r, e in pg.execute(sql.SQL(" UNION ALL ").join(partes))}
 
 
-def origen_bloque(m: dict[str, Modo], tablas: tuple[str, ...]) -> str | None:
+def origen_bloque(m: dict[str, Modo], tablas: tuple[str, ...], ejemplo: bool = True) -> str | None:
+    """`ejemplo`=False: solo real o nada (nunca filas de ejemplo)."""
     if any(m[t].real for t in tablas):
         return REAL
-    if any(m[t].ejemplo for t in tablas):
+    if ejemplo and any(m[t].ejemplo for t in tablas):
         return EJEMPLO
     return None
 
 
-def origenes(m: dict[str, Modo], vista: str) -> dict[str, str | None]:
-    return {bloque: origen_bloque(m, tablas) for bloque, tablas in BLOQUES[vista].items()}
+def origenes(m: dict[str, Modo], vista: str, ejemplo: bool = True) -> dict[str, str | None]:
+    return {bloque: origen_bloque(m, tablas, ejemplo) for bloque, tablas in BLOQUES[vista].items()}
 
 
-def estado_vista(m: dict[str, Modo], vista: str) -> str:
-    o = set(origenes(m, vista).values())
+def estado_vista(m: dict[str, Modo], vista: str, ejemplo: bool = True) -> str:
+    o = set(origenes(m, vista, ejemplo).values())
     if EJEMPLO in o:
         return "ejemplo"
     return "real" if REAL in o else "vacia"
 
 
-def estados(m: dict[str, Modo]) -> dict[str, str]:
-    return {v: estado_vista(m, v) for v in VISTAS}
+def estados(m: dict[str, Modo], modo_ejemplo: bool = True) -> dict[str, str]:
+    """Sin el modo ejemplo, las VISTAS_SOLO_REAL se juzgan solo por sus filas reales."""
+    return {v: estado_vista(m, v, modo_ejemplo or v not in VISTAS_SOLO_REAL) for v in VISTAS}

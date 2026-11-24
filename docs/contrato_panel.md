@@ -34,6 +34,16 @@ siempre con datos reales (ver `analitica/README.md`).
   - porcentajes en tanto por cien (`_pct`, y las medidas con `unidad = '%'`);
   - días, enteros.
 
+## Dirección: solo datos reales salvo en el modo ejemplo explícito
+
+Sin `PANEL_MODO_EJEMPLO=1` (variable del panel, vacía por defecto), Dirección nunca muestra filas de ejemplo,
+aunque estén cargadas (`make ejemplo-cargar`): cada bloque lee solo filas reales. Sin ellas, dice «Pendiente de
+conectar: <fuente>» si su fuente todavía no existe (stock interno, ventas del CRM y su predicción) o «Sin datos
+todavía» si la fuente existe y aún no ha escrito nada. Sin stock interno real, la tarjeta de stock muestra
+nuestro stock publicado en la web (Mercado). El estado de la vista para los permisos sale también solo de las
+filas reales. Ventas y Marketing no cambian. Con `PANEL_MODO_EJEMPLO=1` (y en `make panel-dev`), Dirección se
+comporta como las demás vistas.
+
 ## Un bloque no mezcla orígenes
 
 Cada bloque de una vista lee una o varias tablas (`panel/contrato.py`, `BLOQUES`). Su origen se
@@ -75,6 +85,11 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Dirección | Tarjeta de alertas abiertas, alertas de hoy | `alertas_evaluacion` y `panel_alertas` (ver más abajo) |
 | Ventas y Marketing | Alertas para su rol | `alertas_evaluacion` y `panel_alertas` |
 | Dirección | Tarjeta del mercado | `panel_mercado_dia`. Siempre real: fuera del contrato |
+| Dirección | Stock publicado (sin stock interno real, en lugar de la tarjeta de stock) | `panel_mercado_dia` (anuncios propios). Siempre real |
+| Dirección | Campañas de Meta con Walcu, últimas 4 semanas (lo mismo que Marketing) | `panel_campana_semana` y `panel_campana_decision` |
+| Dirección | Referencias por año (2025 frente a 2026) | `panel_referencia_meta` |
+| Dirección | Tráfico de la web por canal (GA4) | `panel_trafico_canal_dia` |
+| Dirección y Ventas | Precio de nuestros VO | `panel_precio_vo` |
 | Ventas | Resumen y lista de vehículos | `panel_riesgo_vehiculo` |
 | Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
 | Ventas y Dirección | Precio de nuestros VO (provisional; Marketing no lo ve) | `panel_precio_vo` |

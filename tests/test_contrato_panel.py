@@ -52,8 +52,10 @@ def con_ejemplo(pg, conc):
     return conc
 
 
-def app_con(panel_url, visible=None):
-    return crear_app(dsn=panel_url, hoy=lambda: HOY, ejemplo_para=visible)
+def app_con(panel_url, visible=None, modo_ejemplo=True):
+    """Por defecto, con el modo ejemplo explícito (PANEL_MODO_EJEMPLO=1): estas pruebas miran los datos de
+    ejemplo. Sin él, Dirección solo muestra filas reales (tests/test_direccion_real.py)."""
+    return crear_app(dsn=panel_url, hoy=lambda: HOY, ejemplo_para=visible, modo_ejemplo=modo_ejemplo)
 
 
 def bloques(html: str) -> dict[str, tuple[str, str]]:
@@ -666,7 +668,8 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     assert BANDA in tec.get("/direccion").text and not _ve(dire, "/direccion")
     # 2. El resto de Dirección (con el precio de nuestros VO, que llega del precálculo de Mercado): la vista
     # se abre a dirección, sin banda ni etiquetas
-    a_real(pg, "panel_ventas_mes", "panel_alertas", "panel_precio_vo")
+    a_real(pg, "panel_ventas_mes", "panel_alertas", "panel_precio_vo", "panel_campana_semana", "panel_referencia_meta",
+           "panel_trafico_canal_dia")
     html = dire.get("/direccion").text
     assert _ve(dire, "/direccion") and BANDA not in html and ETIQUETA not in html
     assert 'href="/direccion"' in html
@@ -683,9 +686,8 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     b = bloques(tec.get("/marketing").text)
     assert b["kpis"][0] == "real" and "Sin datos todavía" in b["kpis"][1] and ETIQUETA not in b["kpis"][1]
     assert b["recomendacion"][0] == "ejemplo" and ETIQUETA in b["recomendacion"][1]
-    # Las campañas leen Walcu por semanas (panel_campana_semana), como las reglas: sin Meta, sin datos
-    a_real(pg, "panel_campana_semana")
-    b = bloques(tec.get("/marketing").text)
+    # Las campañas leen Walcu por semanas (panel_campana_semana, real desde el paso 2), como las reglas: sin
+    # Meta, sin datos
     assert b["campanas"][0] == "real" and "Sin datos todavía" in b["campanas"][1]
     assert not _ve(dentro(app, "marketing"), "/marketing")
     a_real(pg, "panel_campana_dia")
@@ -693,7 +695,7 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     assert "Sin datos todavía" not in b["kpis"][1]
     assert ">Sin decidir todavía</span>" in b["campanas"][1]            # sin pasar el motor: sin decisión
     a_real(pg, "panel_campana_salud", "panel_recomendacion_modelo", "panel_atencion_relativa",
-           "panel_semana_campana", "panel_campana_resultado", "panel_trafico_canal_dia", "panel_referencia_meta")
+           "panel_semana_campana", "panel_campana_resultado")
     html = dentro(app, "marketing").get("/marketing").text
     assert PENDIENTE not in html and BANDA not in html and ETIQUETA not in html
 
@@ -705,7 +707,9 @@ def test_sin_filas_dice_sin_datos_todavia_nunca_cero(pg, panel_url, personas, co
     b = bloques(cl.get("/direccion").text)
     for nombre in ("alertas_kpi", "alertas", "ventas_kpi", "ventas_mes"):
         origen, trozo = b[nombre]
-        assert origen == "" and "Sin datos todavía" in trozo and ETIQUETA not in trozo, nombre
+        # Las alertas tienen fuente (el motor): «Sin datos todavía»; las ventas del CRM, todavía no
+        esperado = "Sin datos todavía" if nombre.startswith("alertas") else "Pendiente de conectar: ventas del CRM"
+        assert origen == "" and esperado in trozo and ETIQUETA not in trozo, nombre
         assert 'class="kpi-valor">0<' not in trozo
     b = bloques(cl.get("/marketing").text)
     for nombre in ("atencion", "pasadas"):
@@ -727,7 +731,7 @@ def test_concesionario_ficticio_sin_rastro_del_propio_en_las_tres_vistas(pg, dat
     conc = cargar_concesionario()
     _con_datos(pg, datos, conc)
     ejemplo.cargar(pg, HOY, conc)
-    app = crear_app(dsn=panel_url, hoy=lambda: HOY)
+    app = crear_app(dsn=panel_url, hoy=lambda: HOY, modo_ejemplo=True)
     cl = dentro(app, "tecnico")
     paginas = []
     for ruta in VISTAS.values():
@@ -749,7 +753,7 @@ def test_concesionario_ficticio_sin_rastro_del_propio_en_las_tres_vistas(pg, dat
 @pytest.mark.parametrize("dia", [date(2026, 11, 1), date(2027, 1, 31), date(2027, 3, 2)])
 def test_ejemplo_en_otros_dias(pg, panel_url, personas, conc, dia):
     ejemplo.cargar(pg, dia, conc)
-    app = crear_app(dsn=panel_url, hoy=lambda: dia)
+    app = crear_app(dsn=panel_url, hoy=lambda: dia, modo_ejemplo=True)
     cl = dentro(app, "tecnico")
     for ruta in VISTAS.values():
         r = cl.get(ruta)

@@ -64,7 +64,7 @@ class Prohibido(Exception):
 def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = None,
               hoy: Callable[[], date] | None = None, sesion_dias: int | None = None,
               proxy: str | None = None, ejemplo_para: str | None = None,
-              estaticos: Path | None = None) -> FastAPI:
+              estaticos: Path | None = None, modo_ejemplo: bool | None = None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.dsn = dsn if dsn is not None else os.environ.get("PANEL_DATABASE_URL", "")
     app.state.conc = concesionario or cargar_concesionario()
@@ -73,6 +73,9 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
     app.state.proxy = seg.Proxy(proxy if proxy is not None else os.environ.get("PANEL_PROXY"))
     app.state.ejemplo_para = permisos.roles_ejemplo(
         ejemplo_para if ejemplo_para is not None else os.environ.get("PANEL_EJEMPLO_VISIBLE_PARA"))
+    # Modo ejemplo explícito (PANEL_MODO_EJEMPLO=1): sin él, Dirección no muestra nunca filas de ejemplo
+    app.state.modo_ejemplo = (modo_ejemplo if modo_ejemplo is not None
+                              else os.environ.get("PANEL_MODO_EJEMPLO", "").strip() == "1")
     plantillas = Jinja2Templates(directory=str(AQUI / "templates"))
     huellas = Huellas(estaticos or AQUI / "static")   # `estaticos`: otra carpeta, solo en pruebas
     plantillas.env.globals.update(f=formato, TEXTO_DESACTIVADA=permisos.TEXTO_DESACTIVADA, estatico=huellas.url)
@@ -108,7 +111,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         return request.state.modos
 
     def estados_de(request: Request, pg) -> dict[str, str]:
-        return contrato.estados(modos_de(request, pg)) if pg is not None else {}
+        return contrato.estados(modos_de(request, pg), app.state.modo_ejemplo) if pg is not None else {}
 
     def poner_cookie(resp: Response, nombre: str, valor: str, max_age: int | None, samesite: str) -> None:
         # Sin Domain (cookie solo de este host), Secure, HttpOnly
@@ -337,7 +340,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
         return vista_contrato(request, pg, "direccion", "direccion.html", "_direccion.html", lambda: {
             "d": direccion.datos(pg, app.state.conc, modos_de(request, pg), tipo, app.state.hoy(),
-                                 modelo_vo[:80] or None)})
+                                 modelo_vo[:80] or None, ejemplo=app.state.modo_ejemplo)})
 
     @app.get("/ventas")
     def vista_ventas(request: Request, tipo: str = "todo", riesgo: str = "", v: str = "", n: str = "",

@@ -90,7 +90,7 @@ def main() -> None:
     for rol, (_, clave) in USUARIOS.items():
         print(f"  {rol:<10} contraseña: {clave}")
     print("\nPanel en http://localhost:8000  (Ctrl+C para parar)\n")
-    uvicorn.run(crear_app(dsn=dsn), host="127.0.0.1", port=8000, proxy_headers=False, access_log=False,
+    uvicorn.run(crear_app(dsn=dsn, modo_ejemplo=True), host="127.0.0.1", port=8000, proxy_headers=False, access_log=False,
                 server_header=False)
 
 

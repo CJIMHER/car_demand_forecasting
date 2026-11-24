@@ -7,7 +7,10 @@ plantillas y a una hoja de estilos con variables. Hoy tiene datos reales la vist
 (`docs/contrato_panel.md`), que de momento solo tienen datos de ejemplo (`make ejemplo-cargar`):
 con ellos las ve el rol técnico (o los de `PANEL_EJEMPLO_VISIBLE_PARA`), con una banda y una
 etiqueta «Datos de ejemplo» en cada bloque; el resto de roles las ve desactivadas («Se activa al
-conectar sus datos») hasta que lleguen los datos reales.
+conectar sus datos») hasta que lleguen los datos reales. **Dirección** no mezcla nunca: sin el modo ejemplo
+explícito (`PANEL_MODO_EJEMPLO=1`) solo muestra datos reales (Mercado, stock publicado, precio provisional,
+Meta con Walcu, referencias por año, GA4 y alertas) y, donde aún no hay fuente, «Pendiente de conectar:
+<fuente>».
 
 ## Qué hay
 

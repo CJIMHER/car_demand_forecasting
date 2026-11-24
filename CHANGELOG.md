@@ -1,5 +1,20 @@
 # Cambios
 
+## 2026-11-24 · Dirección: solo datos reales, con lo pendiente dicho (rama hito-1b-walcu-tipo)
+
+- **Sin mezclar ejemplo y real**: sin el modo ejemplo explícito (`PANEL_MODO_EJEMPLO=1`, nueva variable del
+  panel, vacía por defecto), Dirección no muestra nunca filas de ejemplo, aunque estén cargadas. Lo que no
+  tiene fuente real dice «Pendiente de conectar: <fuente>»: stock interno (stock, antigüedad media y días en
+  exposición), ventas del CRM (ventas del mes) y su predicción (gráfico). Ventas y Marketing no cambian; `make
+  panel-dev` arranca con el modo ejemplo.
+- **Conectado a lo real**: stock publicado en la web (anuncios propios de Mercado) en lugar de la tarjeta de
+  stock mientras no haya stock interno; bloques nuevos «Campañas de Meta con Walcu» (últimas 4 semanas: gasto,
+  leads, citas, ventas y costes por lead, cita y venta, con los mismos cálculos que Marketing), «Referencias
+  por año» (2025 frente a 2026) y «Tráfico de la web por canal» (GA4). Siguen: tarjeta del mercado, precio
+  provisional de nuestros VO y alertas del motor.
+- Contrato: bloques `marketing`, `referencias` y `trafico` de Dirección; `contrato.estados(…, modo_ejemplo)`.
+- Inventario de cada bloque en `docs/hitos/hito_1b_direccion_real_resumen.md`.
+
 ## 2026-11-24 · Marketing: las tarjetas de campaña leen Walcu por semanas (rama hito-1b-walcu-tipo)
 
 - **Arreglo**: en «Campañas: decisión y venta», Leads, Citas, Ventas y los costes salían «—» aunque la regla de

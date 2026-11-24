@@ -96,6 +96,8 @@ services:
       PANEL_SESION_DIAS: ${PANEL_SESION_DIAS:-30}
       # Roles que ven las vistas con datos de ejemplo (docs/contrato_panel.md)
       PANEL_EJEMPLO_VISIBLE_PARA: ${PANEL_EJEMPLO_VISIBLE_PARA:-tecnico}
+      # Modo ejemplo explícito: solo con 1, Dirección muestra datos de ejemplo (si no, «Pendiente de conectar»)
+      PANEL_MODO_EJEMPLO: ${PANEL_MODO_EJEMPLO:-}
       PANEL_PROXY: caddy
     # Sin privilegios: usuario panel (UID 10001) de la imagen, sistema de ficheros de solo lectura
     read_only: true

@@ -314,6 +314,9 @@ tales (`docs/contrato_panel.md`):
 echo "PANEL_PERMITE_EJEMPLO=1" >> /opt/cdf/.env      # sin esto, make ejemplo-* se niega
 # Opcional: roles que ven las vistas con datos de ejemplo (por defecto, solo tecnico)
 # echo "PANEL_EJEMPLO_VISIBLE_PARA=tecnico,direccion" >> /opt/cdf/.env
+# Opcional: Dirección con datos de ejemplo. Sin esto, Dirección nunca los muestra: solo datos reales y, donde
+# no hay fuente, «Pendiente de conectar: <fuente>»
+# echo "PANEL_MODO_EJEMPLO=1" >> /opt/cdf/.env
 make deploy                                          # migración 0005; el panel lee la variable nueva
 make precalcular                                     # Mercado: modelos sin la marca delante (rehace el histórico)
 make ejemplo-cargar                                  # filas origen = 'ejemplo' en las tablas del contrato

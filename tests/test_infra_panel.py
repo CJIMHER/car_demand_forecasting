@@ -107,6 +107,7 @@ def test_panel_sin_privilegios_y_sin_secretos_ajenos():
     assert env["PGUSER"] == "cdf_panel" and env["PANEL_PROXY"] == "caddy"
     assert env["PANEL_EJEMPLO_VISIBLE_PARA"] == "${PANEL_EJEMPLO_VISIBLE_PARA:-tecnico}"
     assert "PANEL_PERMITE_EJEMPLO" not in env                    # el panel nunca escribe datos de ejemplo
+    assert env["PANEL_MODO_EJEMPLO"] == "${PANEL_MODO_EJEMPLO:-}"  # sin valor: Dirección solo con datos reales
     assert set(PANEL["networks"]) == {"cdf_net", "cdf_web"} and CADDY["networks"] == ["cdf_web"]
     dockerfile = (RAIZ / "panel/Dockerfile").read_text()
     assert re.search(r"^USER panel$", dockerfile, re.M)
@@ -138,7 +139,7 @@ def test_variables_nuevas_en_env_example_sin_valor():
     lineas = (RAIZ / ".env.example").read_text().splitlines()
     variables = dict(l.split("=", 1) for l in lineas if re.match(r"^[A-Z_]+=", l))
     for v in ("PANEL_DOMINIO", "PANEL_DB_PASSWORD", "PANEL_SESION_DIAS", "PANEL_PERMITE_EJEMPLO",
-              "PANEL_EJEMPLO_VISIBLE_PARA"):
+              "PANEL_EJEMPLO_VISIBLE_PARA", "PANEL_MODO_EJEMPLO"):
         assert v in variables and variables[v] == "", v
 
 

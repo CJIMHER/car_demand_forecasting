@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, precio_vo %}
+{% from "_bloques.html" import attrs, marca, sin_datos, sin_datos_o_pendiente, segmentos, precio_vo %}
 <div id="direccion" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -22,7 +22,7 @@
       <span class="kpi-sub">{{ k.sub }}</span>
       {% else %}
       <span class="kpi-etiqueta">{{ vacias[loop.index0] }}</span>
-      {{ sin_datos() }}
+      {{ sin_datos_o_pendiente(k) }}
       {% endif %}
       {{ marca(k) }}
     </div>
@@ -44,7 +44,7 @@
         <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect width="14" height="14" rx="3" fill="#1D5FD6" fill-opacity="0.18"></rect></svg>Lo normal: 8 de cada 10 meses caen aquí</span>
       </div>
       <p class="nota">{{ d.ventas_mes.resumen }} La banda va del percentil 10 al 90 de la previsión (n = {{ d.ventas_mes.n }} meses).</p>
-      {% else %}{{ sin_datos() }}{% endif %}
+      {% else %}{{ sin_datos_o_pendiente(d.ventas_mes) }}{% endif %}
     </section>
 
     <section aria-labelledby="t-alertas" class="tarjeta tarjeta-estrecha bloque-alertas"{{ attrs("alertas", d.alertas) }}>
@@ -84,7 +84,7 @@
       </div>
       {% endfor %}
       <p class="nota">En naranja, lo que ya supera los 90 días: ahí están casi todas las alertas de stock.</p>
-      {% else %}{{ sin_datos() }}{% endif %}
+      {% else %}{{ sin_datos_o_pendiente(d.edad) }}{% endif %}
     </section>
 
     <section aria-labelledby="t-mercado" class="tarjeta tarjeta-estrecha tarjeta-oscura" data-bloque="mercado" data-origen="real">
@@ -100,6 +100,63 @@
       <a class="boton-enlace" href="/mercado">Ver el mercado</a>
     </section>
   </div>
+
+  <div class="dos-columnas">
+    <section aria-labelledby="t-dir-marketing" class="tarjeta tarjeta-ancha"{{ attrs("marketing", d.marketing) }}>
+      <div class="tarjeta-cabeza">
+        <h2 id="t-dir-marketing">Campañas de Meta con Walcu{% if d.marketing.hay %}: {{ d.marketing.mes }}{% endif %}</h2>
+        <a class="boton-enlace" href="/marketing?tipo={{ d.tipo }}">Ver Marketing</a>
+      </div>
+      {{ marca(d.marketing) }}
+      {% if d.marketing.hay %}
+      {% set t = d.marketing.total %}
+      <div class="cifras-marketing">
+        <div><span class="kpi-etiqueta">Gasto</span><span class="kpi-valor">{{ t.gasto }}</span></div>
+        <div><span class="kpi-etiqueta">Leads</span><span class="kpi-valor">{{ t.leads }}</span><span class="kpi-sub">€ / lead: {{ t.cpl }}</span></div>
+        <div><span class="kpi-etiqueta">Citas</span><span class="kpi-valor">{{ t.citas }}</span><span class="kpi-sub">€ / cita: {{ t.cpc }}</span></div>
+        <div><span class="kpi-etiqueta">Ventas</span><span class="kpi-valor">{{ t.ventas }}</span><span class="kpi-sub">€ / venta: {{ t.cpv }}</span></div>
+      </div>
+      <p class="nota">Las 4 últimas semanas terminadas, con los leads, citas y ventas de Walcu de las campañas de Meta. € / cita y € / venta solo con las semanas que ya tienen las citas ({{ d.marketing.dias_cita }} días) o las ventas ({{ d.marketing.dias_venta }} días) completas.</p>
+      {% if not d.marketing.walcu %}<p class="nota motivo">Sin carga de Walcu de estas semanas.</p>{% endif %}
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+
+    <section aria-labelledby="t-dir-referencias" class="tarjeta tarjeta-estrecha"{{ attrs("referencias", d.referencias) }}>
+      <h2 id="t-dir-referencias">Referencias por año</h2>
+      {{ marca(d.referencias) }}
+      {% if d.referencias.hay %}
+      <div class="tabla-scroll">
+        <table class="tabla tabla-referencias-direccion">
+          <thead><tr><th scope="col" class="izq">Medida</th>{% for c in d.referencias.columnas %}<th scope="col">{{ c }}</th>{% endfor %}{% if d.referencias.dos %}<th scope="col">Diferencia</th>{% endif %}</tr></thead>
+          <tbody>
+            {% for f in d.referencias.filas if f.clave in ("gasto", "leads", "citas", "ventas", "coste_lead", "coste_cita", "coste_venta", "lead_cita", "cita_venta") %}
+            <tr><th scope="row" class="izq">{{ f.nombre }}</th>{% for v in f.valores %}<td>{{ v }}</td>{% endfor %}{% if d.referencias.dos %}<td>{{ f.diferencia }}</td>{% endif %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="nota">Semanas terminadas con datos de Meta y de Walcu. Los totales de un año incompleto no se comparan; los costes y las tasas, sí.</p>
+      {% else %}{{ sin_datos() }}{% endif %}
+    </section>
+  </div>
+
+  <section aria-labelledby="t-dir-trafico" class="tarjeta"{{ attrs("trafico", d.trafico) }}>
+    <h2 id="t-dir-trafico">Tráfico de la web por canal{% if d.trafico.hay %} · {{ d.trafico.desde }}–{{ d.trafico.hasta }}{% endif %}</h2>
+    {{ marca(d.trafico) }}
+    {% if d.trafico.hay %}
+    <div class="tabla-scroll">
+      <table class="tabla tabla-trafico-direccion">
+        <thead><tr><th scope="col" class="izq">Canal</th><th scope="col">Sesiones</th><th scope="col">Frente a los 28 días anteriores</th><th scope="col">Eventos clave</th></tr></thead>
+        <tbody>
+          {% for f in d.trafico.filas %}
+          <tr><th scope="row" class="izq">{{ f.nombre }}</th><td>{{ f.sesiones }}</td><td>{{ f.variacion }}</td><td>{{ f.eventos }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="nota">GA4, últimos 28 días: {{ d.trafico.total }} sesiones.</p>
+    {% else %}{{ sin_datos() }}{% endif %}
+  </section>
 
   {{ precio_vo(d.precio, "#direccion") }}
 </div>
