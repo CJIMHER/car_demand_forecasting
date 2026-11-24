@@ -565,25 +565,54 @@ def test_valores_reales_en_la_configuracion(wa):
 
 
 OTRAS = ["SK [VN] [2026] Mayo", "AU[VO][2026] ABRIL", "SE [VN] [2025] Gama ahorro", "CU [VN] [2026] Marzo Cuota",
-         "SEAT [VN] [2026] Arona", "sk [vo][2025] Boutique ocasion"]
-NUESTRAS = ["VW [VN][2026] Golf noviembre", "Semana del SUV", "Special Days", "Seminuevos garantía", "Auto Days",
-            "Skyline promo"]
+         "SEAT [VN] [2026] Arona", "sk [vo][2025] Boutique ocasion",
+         # palabras en cualquier posición (las del encargo)
+         "EXT SK [2026] SKODA DAYS", "VN [2025] SEAT Ibiza/Ateca febrero", "Avisa Days marzo 2025-SK",
+         "3-dias-de-ocasion-audi", "SK [VN] [2026] Škoda Nuevo ELROQ", "Promo_CUPRA_Born", "[AUDI] Q3"]
+NUESTRAS = ["VW [VN][2026] Golf noviembre", "Semana del SUV", "Seminuevos", "Se acaba el stock", "Special Days",
+            "Seminuevos garantía", "Auto Days", "Skyline promo", "Audiencias amplias", "Cuota cero", "SE ACABA YA",
+            "Cuprum promo"]
 
 
-def test_prefijos_de_otras_marcas_en_la_configuracion(conc):
-    assert conc.prefijos_excluidos == ("sk", "au", "se", "cu", "seat")
+def test_otras_marcas_en_la_configuracion(conc):
+    assert conc.prefijos_excluidos == ("au", "se", "cu")
+    assert conc.palabras_excluidas == ("sk", "skoda", "seat", "audi", "cupra")
     for nombre in OTRAS:
         assert conc.otra_marca(nombre), nombre
-    for nombre in NUESTRAS:                   # como palabra entera: «Semana», «Skyline» o «Auto» no son prefijos
+    # Palabra entera; el prefijo, solo como primera palabra seguida de su etiqueta entre corchetes
+    for nombre in NUESTRAS:
         assert not conc.otra_marca(nombre), nombre
 
 
-def test_sin_prefijos_no_se_excluye_nada(tmp_path):
+def _conc_con(tmp_path, quitar: list[str]):
+    texto = (Path(__file__).resolve().parent.parent / "config" / "concesionario.yaml").read_text(encoding="utf-8")
+    for linea in quitar:
+        assert linea in texto
+        texto = texto.replace(linea, "")
+    f = tmp_path / "concesionario.yaml"
+    f.write_text(texto, encoding="utf-8")
+    return cargar_concesionario(f)
+
+
+def test_sin_listas_no_se_excluye_nada(tmp_path):
+    otro = _conc_con(tmp_path, ["  prefijos_excluidos: [AU, SE, CU]\n", "  palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA]\n"])
+    assert otro.prefijos_excluidos == otro.palabras_excluidas == () and not any(otro.otra_marca(n) for n in OTRAS)
+
+
+def test_solo_prefijos_o_solo_palabras(tmp_path):
+    solo_prefijos = _conc_con(tmp_path, ["  palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA]\n"])
+    assert solo_prefijos.otra_marca("AU [VN] x") and not solo_prefijos.otra_marca("EXT SK [2026] SKODA DAYS")
+    solo_palabras = _conc_con(tmp_path, ["  prefijos_excluidos: [AU, SE, CU]\n"])
+    assert solo_palabras.otra_marca("EXT SK [2026] SKODA DAYS") and not solo_palabras.otra_marca("AU [VN] x")
+
+
+def test_una_entrada_que_no_es_una_palabra_es_un_error(tmp_path):
+    from ingesta.concesionario import ErrorConfiguracion
     texto = (Path(__file__).resolve().parent.parent / "config" / "concesionario.yaml").read_text(encoding="utf-8")
     f = tmp_path / "concesionario.yaml"
-    f.write_text(texto.replace("  prefijos_excluidos: [SK, AU, SE, CU, SEAT]\n", ""), encoding="utf-8")
-    otro = cargar_concesionario(f)
-    assert otro.prefijos_excluidos == () and not any(otro.otra_marca(n) for n in OTRAS)
+    f.write_text(texto.replace("[SK, SKODA, SEAT, AUDI, CUPRA]", "[SK, ALFA ROMEO]"), encoding="utf-8")
+    with pytest.raises(ErrorConfiguracion, match="palabras_excluidas"):
+        cargar_concesionario(f)
 
 
 def test_script_excluye_otras_marcas_cuenta_y_avisa(tmp_path, conc, capsys, wa):
@@ -597,8 +626,8 @@ def test_script_excluye_otras_marcas_cuenta_y_avisa(tmp_path, conc, capsys, wa):
     registro = capsys.readouterr().out
     texto = salida.read_text(encoding="utf-8")
     assert not any(n in texto for n in OTRAS)
-    assert "de campañas de otras marcas (no cuentan): 6" in registro
-    assert "Aviso: 6 leads de campañas de otras marcas excluidos" in registro
+    assert f"de campañas de otras marcas (no cuentan): {len(OTRAS)}" in registro
+    assert f"Aviso: {len(OTRAS)} leads de campañas de otras marcas excluidos" in registro
     golf = _filas(texto)[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
     assert golf["leads"] == "4"                              # las nuestras no se tocan
 
@@ -624,6 +653,51 @@ def test_referencias_excluyen_otras_marcas_y_lo_cuentan(pg):
                           ).fetchone()[0]
     assert not pg.execute("SELECT count(*) FROM panel_walcu_sin_cruce WHERE campana LIKE 'SK %' OR campana LIKE 'AU %'"
                           ).fetchone()[0]
+
+
+def test_referencias_excluyen_palabras_de_otras_marcas(pg):
+    _escenario(pg)
+    _meta(pg, date(2025, 3, 16), "71", "Avisa Days marzo 2025-SK", 500, leads=10)
+    _meta(pg, date(2025, 3, 17), "72", "3-dias-de-ocasion-audi", 300, leads=5)
+    resumen = ref.actualizar(pg)
+    assert resumen["otras_marcas"]["meta_campanas"] == 2 and resumen["otras_marcas"]["meta_gasto_cents"] == 80_000
+    assert ref.leer_referencias(pg)[(2025, "todo")]["gasto_cents"] == 55_000
+
+
+def test_marketing_y_criterios_sin_las_campanas_de_otras_marcas(pg, panel_url, conc):
+    from test_contrato_panel import ROLES, CLAVE, app_con, dentro
+    from panel import usuarios
+    for rol in ROLES:
+        usuarios.alta(pg, rol, f"Persona {rol}", rol, CLAVE)
+    pg.execute("UPDATE panel_usuarios SET cambiar_clave = false")
+    _campana_real(pg, "9", "VW [VN][2026] Golf noviembre", 100, 5)
+    _campana_real(pg, "80", "EXT SK [2026] SKODA DAYS", 40, 5)          # 5 días a 40 € = 200 €
+    _campana_real(pg, "81", "VN [2025] SEAT Ibiza/Ateca febrero", 25, 4)  # 4 días a 25 € = 100 €
+    # Fuera de panel_campana_dia (tarjetas, campañas y criterios) y de «Campañas sin regla»
+    assert pg.execute("SELECT DISTINCT campana_id FROM panel_campana_dia").fetchall() == [("9",)]
+    assert pg.execute("SELECT count(*) FROM panel_campanas_sin_regla WHERE campana ~ 'SK|SEAT'").fetchone()[0] == 0
+    assert pg.execute("SELECT count(DISTINCT campana_id), sum(gasto_cents) FROM panel_campana_otra_marca "
+                      "WHERE origen = 'real'").fetchone() == (2, 30_000)
+    _, js = cr.juzgar(pg, HOY, "real", conc, motor.cargar_criterios(), {})
+    assert [j.campana_id for j in js] == ["9"]
+    motor.evaluar(pg, HOY, conc)
+    assert pg.execute("SELECT DISTINCT campana_id FROM panel_campana_decision").fetchall() == [("9",)]
+    html = dentro(app_con(panel_url), "marketing").get("/marketing").text
+    bloque = html.split('id="t-campanas"')[1].split("</section>")[0]
+    assert "SKODA DAYS" not in bloque and "SEAT Ibiza" not in bloque and "Golf noviembre" in bloque
+    assert "Campañas de otras marcas en esta cuenta: 2, gasto 300 € en 28 días." in bloque
+    assert "SKODA" not in html.split('id="t-mes"')[1].split("</section>")[0]
+
+
+def test_sin_campanas_de_otras_marcas_no_hay_linea(pg, panel_url, conc):
+    from test_contrato_panel import ROLES, CLAVE, app_con, dentro
+    from panel import usuarios
+    for rol in ROLES:
+        usuarios.alta(pg, rol, f"Persona {rol}", rol, CLAVE)
+    pg.execute("UPDATE panel_usuarios SET cambiar_clave = false")
+    _campana_real(pg, "9", "VW [VN][2026] Golf noviembre", 100, 5)
+    html = dentro(app_con(panel_url), "marketing").get("/marketing").text
+    assert "Campañas de otras marcas" not in html
 
 
 def test_los_ficheros_de_excluidos_no_se_versionan():

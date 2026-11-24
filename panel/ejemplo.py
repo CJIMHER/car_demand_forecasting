@@ -513,6 +513,12 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
                                                          "sesiones_interaccion": si,
                                                          "eventos_clave": round(s * ev * rt.uniform(0.7, 1.3))})
 
+    # ---- campaña de otra marca del grupo en la misma cuenta (solo se cuenta)
+    for i in range(10):
+        filas["panel_campana_otra_marca"].append({"dia": fin_meta - timedelta(days=i), "campana_id": "EJ-OM1",
+                                                  "titulo": "Otra marca del grupo · Oferta", "gasto_cents": 2500,
+                                                  "impresiones": 4000, "clics": 40})
+
     # ---- Meta y Walcu por campaña y mes, y referencias por año (sin azar: salen de las filas de arriba)
     _campana_mes(filas, fin_meta)
     _referencias(filas, fin_meta)

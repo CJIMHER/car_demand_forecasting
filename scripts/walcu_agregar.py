@@ -20,8 +20,8 @@ leen. En un .xlsx, las celdas de las otras columnas se saltan sin convertirlas.
 - Cita: el lead tiene negociación creada, salvo que su «Resultado última actividad» sea una de
   actividades_no_cita (PRESUPUESTO POR TELÉFONO). Venta: además, su Estado contiene uno de estados_venta
   («… (Cerrada / Vendido)»).
-- Otras marcas: los leads de campañas cuyo nombre empieza por un prefijo de propio.prefijos_excluidos
-  (config/concesionario.yaml) se descartan; se cuentan y se avisa.
+- Otras marcas: los leads de campañas de otras marcas del grupo (propio.prefijos_excluidos y
+  propio.palabras_excluidas de config/concesionario.yaml) se descartan; se cuentan y se avisa.
 - Zona: por los dos primeros dígitos del código postal, con la zona cercana de config/concesionario.yaml
   (la provincia propia y provincias_cercanas): cercana, fuera o sin zona (sin código postal válido).
 - Número inexistente: el motivo de fracaso contiene alguno de motivos_num_inexistente.
@@ -318,7 +318,7 @@ def main(argv=None) -> int:
     print(ag.registro())
     if ag.cuentas["otra_marca"]:
         print(f"Aviso: {ag.cuentas['otra_marca']} leads de campañas de otras marcas excluidos "
-              "(prefijos_excluidos de config/concesionario.yaml).")
+              "(prefijos_excluidos y palabras_excluidas de config/concesionario.yaml).")
     print(f"Escrito {args.salida.name}: {len(v.filas)} filas." + "".join(f"\nAviso: {a}." for a in v.avisos))
     print(f"Para cargarlo en el servidor: make walcu-cargar FICHERO=<ruta en el servidor>/{args.salida.name}")
     return 0

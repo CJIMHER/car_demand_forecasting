@@ -104,6 +104,7 @@
         </table>
       </div>
       {% if not d.campanas.hay_leads %}<p class="nota motivo">Leads, citas y ventas: sin datos todavía.</p>{% endif %}
+      {% if d.campanas.otras %}<p class="nota otras-marcas">{{ d.campanas.otras }}</p>{% endif %}
       {% if d.campanas.hay_comun %}<p class="nota">Campaña de VN y VO: leads, citas y ventas solo de {{ d.tipo }}. Su gasto es común a VN y VO y no se reparte con ninguna regla, así que aquí no tiene coste por lead, por cita ni por venta; se ve completo en «Todo».</p>{% endif %}
       <p class="nota">Decisión (continuar, revisar, parar o subir presupuesto): con los criterios de las campañas de Meta, desde el segundo día de vida; cada regla dice sus cifras frente a su umbral y su n, y con poco volumen se muestra sin saltar. Detalle: cada medida de la campaña (entrega, anuncio, web, calidad del lead y stock) se compara con su referencia en campañas anteriores de su mismo ámbito (VN, VO o los dos) con los mismos días de vida; explica, pero no decide. El tipo (de un modelo o general) y el ámbito de cada campaña salen de su nombre, con las reglas de config/campanas.yaml. Con un modelo que no capturamos en Mercado («sin datos de mercado»), la regla e y la comparación con la competencia no se aplican.</p>
       {% else %}{{ sin_datos() }}{% endif %}

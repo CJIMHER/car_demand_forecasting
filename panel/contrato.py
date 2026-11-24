@@ -25,6 +25,7 @@ TABLAS = (
     "panel_curva_grupo", "panel_leads_dia", "panel_campana_dia", "panel_campana_salud",
     "panel_recomendacion_modelo", "panel_atencion_relativa", "panel_semana_campana",
     "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_mes", "panel_referencia_meta",
+    "panel_campana_otra_marca",
 )
 
 # Tablas del motor de alertas (migración 0009) con el mismo formato (dia, origen, calculado_at). No
@@ -55,7 +56,8 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
     "marketing": {
         "kpis": ("panel_campana_dia", "panel_leads_dia"),
         "recomendacion": ("panel_recomendacion_modelo",),
-        "campanas": ("panel_campana_dia", "panel_leads_dia", "panel_campana_salud", "panel_campana_decision"),
+        "campanas": ("panel_campana_dia", "panel_leads_dia", "panel_campana_salud", "panel_campana_decision",
+                     "panel_campana_otra_marca"),     # otras marcas: solo la línea de debajo
         "atencion": ("panel_atencion_relativa",),
         "ocasion": ("panel_riesgo_vehiculo",),      # solo en VO: stock de ocasión que mover
         "semanas": ("panel_semana_campana",),

@@ -420,7 +420,7 @@ Es una comparación con un modelo, no un experimento.
 - **Grano**: mes × campaña de Meta (o campaña de Walcu sin campaña de Meta: `campana_id` vacío).
 - **Fuente**: `campanas_meta_dia_vigente` (nivel campaña) y `walcu_campana_mes_vigente` (origen Facebook;
   AiVORA fuera), unidas por el nombre normalizado (`config/campanas_walcu.yaml`), sin las campañas de otras
-  marcas (`propio.prefijos_excluidos` de `config/concesionario.yaml`). Las rehace
+  marcas (`propio.prefijos_excluidos` y `propio.palabras_excluidas` de `config/concesionario.yaml`). Las rehace
   `ingesta/referencias_meta.py` tras cada descarga de Meta y GA4, tras cada carga de Walcu y con
   `make referencias-meta`. `dia`: el último día con datos de Meta.
 
@@ -452,6 +452,15 @@ citas y ventas de ese tipo y sin costes (su gasto no se reparte).
 | `leads_cercana`, `leads_fuera`, `leads_sin_zona`, `num_inexistente` | número | Para % fuera de zona (fuera / con código postal) y % de número inexistente (/ leads) |
 
 Las de 2025 (`criterios_meta.c.referencia_anio`) son la «media» de las reglas c y d.
+
+### panel_campana_otra_marca · campañas de otras marcas del grupo
+
+- **Grano**: día × campaña de Meta de otra marca (`propio.prefijos_excluidos` y `propio.palabras_excluidas`
+  de `config/concesionario.yaml`). Esas campañas no están en `panel_campana_dia`: no salen en las tarjetas ni
+  en el bloque de campañas, y no se juzgan con los criterios. La rehace `ingesta/campanas.py`.
+- Columnas: `campana_id`, `titulo`, `gasto_cents`, `impresiones`, `clics`.
+- **Cifras de Marketing:** debajo del bloque de campañas, «Campañas de otras marcas en esta cuenta: N, gasto
+  X € en 28 días» (campañas con gasto en la misma ventana de 28 días). Sin ninguna, no hay línea.
 
 Fuera del contrato: `panel_walcu_sin_cruce` (lo que no casa entre Meta y Walcu, con el motivo; lo escribe
 `make referencias-meta`).

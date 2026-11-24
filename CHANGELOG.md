@@ -31,9 +31,13 @@
   (`actividades_no_cita` en `config/walcu_export.yaml`).
 - **Valores reales de Walcu** (`config/walcu_export.yaml`): venta = Estado que contiene «Vendido»; número
   inexistente = «Número inexistente»; tipo «Nuevo» → VN, «VO» y «Km0» → VO, vacío → VN.
-- **Otras marcas del grupo**: `propio.prefijos_excluidos` (SK, AU, SE, CU, SEAT) en `config/concesionario.yaml`;
-  las campañas que empiezan por uno (como palabra) no cuentan en `walcu_agregar.py` ni en
-  `make referencias-meta`. Se cuentan y se avisa; no se rechaza el fichero.
+- **Otras marcas del grupo** (`config/concesionario.yaml`): `propio.prefijos_excluidos: [AU, SE, CU]` (primera
+  palabra seguida de su etiqueta entre corchetes) y `propio.palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA]`
+  (palabra entera en cualquier posición). No cuentan en `walcu_agregar.py`, `make referencias-meta` ni
+  Marketing; se cuentan y se avisa, sin rechazar el fichero.
+- **Migración `0018`**: `panel_campana_otra_marca`. Las campañas de Meta de otras marcas salen de
+  `panel_campana_dia` (tarjetas, bloque de campañas y criterios) y de «Campañas sin regla»; debajo del bloque
+  de campañas, «Campañas de otras marcas en esta cuenta: N, gasto X € en 28 días».
 - **Marketing**: bloques «Campañas del último mes» (gasto, leads de Walcu y según Meta, citas, ventas, coste
   por lead, por cita y por venta, y la decisión) y «Referencias históricas».
 - **Pruebas**: `tests/test_walcu_meta_hist.py` (validador con correo, columna de más, teléfonos, DNI y NIE;

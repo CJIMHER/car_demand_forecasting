@@ -446,7 +446,7 @@ Cada mes (el técnico recibe «Toca descargar Google Trends» si la última desc
 Una vez, en el servidor:
 
 ```bash
-make deploy                                  # migración 0017
+make deploy                                  # migraciones 0017 y 0018
 make meta-historico DESDE=2025-01-01         # hasta ayer; por meses, con archivadas y borradas. Se puede relanzar
 ```
 

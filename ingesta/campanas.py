@@ -13,6 +13,9 @@ Las reglas están documentadas en config/campanas.yaml. Este módulo:
 - con config/canales.yaml (ingesta/canales.py), rehace el tráfico de GA4 por canal y tipo de stock
   (panel_trafico_canal_dia, real), las fuentes y medios que caen en «otros» (panel_trafico_otros) y
   las campañas de Google Ads, con su nombre y sin reglas (panel_campanas_google_ads);
+- las campañas de Meta de otras marcas del grupo (propio.prefijos_excluidos y palabras_excluidas de
+  config/concesionario.yaml) no van a panel_campana_dia ni a «Campañas sin regla»: no salen en Marketing ni
+  se juzgan con los criterios. Van a panel_campana_otra_marca, solo para contarlas;
 - al final, rehace el cruce con Walcu y las referencias de coste (ingesta/referencias_meta.py).
 
 Uso: python -m ingesta.campanas (make campanas) tras cambiar config/campanas.yaml. Lo hacen también
@@ -199,10 +202,12 @@ def _ampliar(acum: dict, clave, dia, *valores) -> None:
         a[i] += v
 
 
-def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales=None) -> dict:
+def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales=None, conc=None) -> dict:
     """Rehace panel_campana_dia (real), panel_campanas_sin_regla y las tablas de tráfico de GA4.
     Devuelve cuántas campañas de Meta se han clasificado y cuántas (Meta y GA4) han quedado sin regla."""
     from ingesta import canales as cn     # aquí: canales.py importa este módulo
+    from ingesta import concesionario as cc
+    conc = conc or cc.cargar()
     campanas = campanas or cargar()
     canales = canales or cn.cargar()
     filas = pg.execute(
@@ -212,9 +217,16 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales
     for f in filas:
         por_campana.setdefault(f[1], []).append(f)
     panel, sin_regla, por_clave, por_id, clasificadas = [], [], {}, {}, 0
+    otras, otras_ids = [], set()
     for cid, dias in por_campana.items():
         # El nombre vigente (el del último día con nombre) clasifica todos los días de la campaña
         nombre = next((d[2] for d in reversed(dias) if d[2]), None) or "(sin nombre)"
+        if conc.otra_marca(nombre):
+            # Otra marca del grupo: solo se cuenta; su tráfico de GA4 sigue siendo del canal Meta
+            otras_ids.add(str(cid))
+            por_clave.setdefault(normalizar(nombre), Clasificacion(motivo="otra marca"))
+            otras += [(d[0], cid, nombre, d[3], d[4], d[5]) for d in dias]
+            continue
         c = campanas.clasificar(nombre)
         por_clave.setdefault(normalizar(nombre), c)
         por_id[str(cid)] = c
@@ -237,7 +249,8 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales
         reservado = canales.reservado(camp)
         canal = canales.canal(fuente, medio, canal_ga4)
         # Una campaña descargada de Meta (por nombre o por ID) es de Meta aunque llegue con otra fuente
-        if not reservado and (camp_id and str(camp_id) in por_id or campanas.clave_union(camp) in por_clave):
+        if not reservado and (camp_id and str(camp_id) in por_id.keys() | otras_ids
+                              or campanas.clave_union(camp) in por_clave):
             canal = cn.META
         t = trafico[(dia, canal, canales.tipo(pagina) or "sin_tipo")]
         t[0], t[1], t[2] = t[0] + s, t[1] + si, t[2] + ek
@@ -250,12 +263,15 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales
         elif canal == "google_ads":
             _ampliar(google, (camp, camp_id), dia, s, si, ek)
     for (camp, camp_id), (p, u, s) in de_meta.items():
+        if (camp_id and str(camp_id) in otras_ids) or conc.otra_marca(camp):
+            continue
         c = (por_id.get(str(camp_id)) if camp_id else None) or por_clave.get(campanas.clave_union(camp)) \
             or campanas.clasificar(camp)
         if not c.ok:
             sin_regla.append(("ga4", camp, p, u, None, s, c.motivo))
     with pg.transaction():
         pg.execute("DELETE FROM panel_campana_dia WHERE origen = 'real'")
+        pg.execute("DELETE FROM panel_campana_otra_marca WHERE origen = 'real'")
         pg.execute("DELETE FROM panel_campanas_sin_regla")
         pg.execute("DELETE FROM panel_trafico_canal_dia WHERE origen = 'real'")
         pg.execute("DELETE FROM panel_trafico_otros")
@@ -265,6 +281,8 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales
                 """INSERT INTO panel_campana_dia (origen, dia, campana_id, titulo, tipo_campana, modelo, ambito,
                    sin_mercado, inicio, gasto_cents, impresiones, clics, leads_meta)
                    VALUES ('real', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", panel)
+            cur.executemany("INSERT INTO panel_campana_otra_marca (origen, dia, campana_id, titulo, gasto_cents, "
+                            "impresiones, clics) VALUES ('real', %s, %s, %s, %s, %s, %s)", otras)
             cur.executemany("INSERT INTO panel_campanas_sin_regla (fuente, campana, primer_dia, ultimo_dia, "
                             "gasto_cents, sesiones, motivo) VALUES (%s, %s, %s, %s, %s, %s, %s)", sin_regla)
             cur.executemany("INSERT INTO panel_trafico_canal_dia (origen, dia, canal, tipo, sesiones, "
@@ -277,7 +295,7 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales
                             [(*k, *v) for k, v in google.items()])
     # Cruce con Walcu y referencias de coste por año (ingesta/referencias_meta.py)
     from ingesta import referencias_meta as ref
-    LOG.info("Referencias de Meta: %s", ref.actualizar(pg, campanas))
+    LOG.info("Referencias de Meta: %s", ref.actualizar(pg, campanas, conc=conc))
     return {"campanas_clasificadas": clasificadas, "campanas_sin_regla": len(sin_regla)}
 
 

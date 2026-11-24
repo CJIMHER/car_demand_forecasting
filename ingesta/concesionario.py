@@ -8,6 +8,7 @@ La ruta del fichero se puede cambiar con CDF_CONCESIONARIO.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,16 +49,24 @@ class Concesionario:
     provincias_cercanas: tuple[str, ...] = ()
     # Dominio de la web propia, tal como aparece como origen de los leads en Walcu (scripts/walcu_agregar.py)
     web: str = ""
-    # Prefijos de campañas de otras marcas del grupo (Walcu y Meta los traen mezclados): las campañas cuyo
-    # nombre empieza por uno de ellos, como palabra («SK [VN] …», «AU[VO] …»), no cuentan
+    # Campañas de otras marcas del grupo (Walcu y Meta las traen mezcladas). Sin mayúsculas ni tildes:
+    # - prefijos_excluidos: la PRIMERA palabra del nombre, seguida de su etiqueta entre corchetes
+    #   («AU [VN] …», «SE[VO] …»), que es como el grupo nombra las campañas de cada marca. Así «Se acaba el
+    #   stock» o «Semana del SUV» no caen;
+    # - palabras_excluidas: una palabra entera en cualquier posición («EXT SK [2026] …», «… 2025-SK»,
+    #   «3-dias-de-ocasion-audi»). Cualquier carácter que no sea letra ni número separa palabras.
     prefijos_excluidos: tuple[str, ...] = ()
+    palabras_excluidas: tuple[str, ...] = ()
 
     def otra_marca(self, campana: str | None) -> bool:
-        """La campaña empieza por un prefijo de otra marca (sin mayúsculas ni tildes, como palabra entera)."""
-        if not self.prefijos_excluidos:
+        """La campaña es de otra marca del grupo (prefijos_excluidos o palabras_excluidas)."""
+        if not self.prefijos_excluidos and not self.palabras_excluidas:
             return False
         texto = _plegar(campana)
-        return any(texto.startswith(p) and not texto[len(p):len(p) + 1].isalnum() for p in self.prefijos_excluidos)
+        if any(p in self.palabras_excluidas for p in _PALABRA.findall(texto)):
+            return True
+        m = _PREFIJO.match(texto)
+        return bool(m and m.group(1) in self.prefijos_excluidos)
 
     @property
     def zona_cercana(self) -> tuple[str, ...]:
@@ -107,9 +116,20 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         tramos_km=_tramos(cfg, "km"),
         provincias_cercanas=cercanas,
         web=str(propio.get("web") or "").strip(),
-        prefijos_excluidos=tuple(dict.fromkeys(_plegar(p) for p in propio.get("prefijos_excluidos") or []
-                                               if _plegar(p))),
+        prefijos_excluidos=_marcas(propio, "prefijos_excluidos"),
+        palabras_excluidas=_marcas(propio, "palabras_excluidas"),
     )
+
+
+def _marcas(propio: dict, clave: str) -> tuple[str, ...]:
+    valores = tuple(dict.fromkeys(_plegar(p) for p in propio.get(clave) or [] if _plegar(p)))
+    if any(not _PALABRA.fullmatch(v) for v in valores):
+        raise ErrorConfiguracion(f"config/concesionario.yaml: {clave} lleva algo que no es una sola palabra")
+    return valores
+
+
+_PALABRA = re.compile(r"[^\W_]+")                   # letras y números; «-», «_», «[», «]»… separan
+_PREFIJO = re.compile(r"\s*([^\W_]+)\s*\[")         # primera palabra seguida de su etiqueta entre corchetes
 
 
 def _plegar(texto) -> str:

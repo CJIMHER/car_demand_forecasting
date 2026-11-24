@@ -17,8 +17,9 @@ Rehace:
   VO en proporción a sus leads de Walcu de ese mes y, si no tiene, solo cuenta en «todo».
 - panel_walcu_sin_cruce: lo que no casa, con el motivo.
 
-Las campañas de otras marcas del grupo (nombre que empieza por un prefijo de propio.prefijos_excluidos de
-config/concesionario.yaml), de Meta y de Walcu, no entran en nada de lo anterior: se cuentan y se avisa.
+Las campañas de otras marcas del grupo (propio.prefijos_excluidos y propio.palabras_excluidas de
+config/concesionario.yaml; Concesionario.otra_marca), de Meta y de Walcu, no entran en nada de lo anterior:
+se cuentan y se avisa.
 
 Las referencias de 2025 son la «media» de las reglas c y d (alertas/criterios.py).
 
@@ -400,7 +401,7 @@ def main(argv=None) -> int:
               f"{resumen['leads_facebook_con_campana_de_meta_pct']} %.")
         x = resumen["otras_marcas"]
         if x["meta_campanas"] or x["walcu_filas"]:
-            print(f"Aviso: campañas de otras marcas excluidas (prefijos_excluidos de config/concesionario.yaml): "
+            print(f"Aviso: campañas de otras marcas excluidas (prefijos_excluidos y palabras_excluidas de config/concesionario.yaml): "
                   f"{x['meta_campanas']} de Meta ({_fmt(x['meta_gasto_cents'] / 100, '€')} de gasto) y "
                   f"{x['walcu_filas']} filas de Walcu ({x['walcu_leads']} leads).")
     return 0

@@ -241,7 +241,13 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
         filas.sort(key=lambda f: (-f["gasto_num"], f["nombre"]))
     else:
         filas.sort(key=lambda f: (f["cpv_num"] is None, f["cpv_num"] or 0, f["nombre"]))
-    return ng.bloque(origen, filas=filas, orden=orden, hay_leads=hay_leads, hay_salud=bool(salud_dia),
+    # Campañas de otras marcas del grupo en la misma cuenta: fuera de la tabla y de los criterios; solo se cuentan
+    n_otras, gasto_otras = pg.execute(
+        """SELECT count(DISTINCT campana_id), coalesce(sum(gasto_cents), 0) / 100.0 FROM panel_campana_otra_marca
+           WHERE origen = %s AND dia BETWEEN %s AND %s AND gasto_cents > 0""", (origen, ini, fin)).fetchone()
+    otras = (f"Campañas de otras marcas en esta cuenta: {n_otras}, gasto {_euros(float(gasto_otras))} en "
+             f"{VENTANA} días." if n_otras else "")
+    return ng.bloque(origen, filas=filas, orden=orden, hay_leads=hay_leads, hay_salud=bool(salud_dia), otras=otras,
                      hay_decision=bool(decisiones),
                      tipo=tipo, hay_comun=any(f["comun"] for f in filas),
                      ordenes=[{"id": o, "etiqueta": e, "activa": o == orden, "url": f"/marketing?tipo={tipo}&orden={o}"}

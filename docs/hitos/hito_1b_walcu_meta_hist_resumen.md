@@ -1,8 +1,8 @@
 Histórico de Meta, cargas de Walcu agregadas y referencias de coste, en la rama `hito-1b-walcu-meta-hist`
 (desde `main` en `7139d1f`), sin push y sin conectarme al servidor.
 
-**Pruebas:** suite completa con Postgres (`.venv/bin/python -m pytest -q`): 574 en verde y 1 saltada (la de
-`cryptography`, que falta en el entorno local). Las nuevas están en `tests/test_walcu_meta_hist.py` (65).
+**Pruebas:** suite completa con Postgres (`.venv/bin/python -m pytest -q`): 579 en verde y 1 saltada (la de
+`cryptography`, que falta en el entorno local). Las nuevas están en `tests/test_walcu_meta_hist.py` (70).
 
 **Paso 0 (ordenar el repositorio):** `hito-1b-gtrends` ya estaba rebasada sobre `hito-1b-ga4-canales` con la
 0016 detrás de la 0015 (sesión anterior). La fusioné en `main` con `--ff-only` (`7139d1f`, ya en GitHub) y
@@ -105,7 +105,7 @@ de las 09:15).
 ## Despliegue en el servidor
 
 ```bash
-make deploy                                   # migración 0017
+make deploy                                   # migraciones 0017 y 0018
 make meta-historico DESDE=2025-01-01          # relanzable; mira los tramos con make estado
 # en el Mac:
 #   scp -i ~/.ssh/cdf_hetzner ~/cdf_walcu/walcu_agregado_historico.csv cdf@<ip>:/opt/cdf/entrada/
@@ -155,21 +155,27 @@ Cada semana: `make walcu-agregar` en el Mac, `scp` y `make walcu-cargar`. Lo exp
 18. **Presupuesto por teléfono** tampoco cuenta como venta (venta = cita con estado de venta).
 19. **`make meta-historico` sin credenciales** termina con error (lo lanza alguien a mano). La carga diaria
     sigue anotando «sin_credenciales».
-20. **Otras marcas**: `propio.prefijos_excluidos` en `config/concesionario.yaml` = SK, AU, SE, CU y **SEAT**.
-    Añadí SEAT porque el prefijo cuenta como palabra entera («SE» no quita «Semana…», «Seminuevos…» ni
-    «SEAT…»), y tu CSV trae «SEAT [VN] [2026] Arona». Se aplica en `walcu_agregar.py` (leads descartados,
-    contados y con aviso) y en `make referencias-meta` (campañas de Meta y filas de Walcu fuera del cruce, del
-    último mes y de las referencias, contadas y con aviso). No se rechaza ningún fichero.
+20. **Otras marcas, en dos listas** de `config/concesionario.yaml` (sin mayúsculas ni tildes):
+    `propio.prefijos_excluidos: [AU, SE, CU]` y `propio.palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA]`.
+    - Palabras: palabra entera en cualquier posición; todo lo que no es letra ni número separa palabras
+      («2025-SK», «ocasion-audi», «Promo_CUPRA»).
+    - **Prefijos: la primera palabra del nombre seguida de su etiqueta entre corchetes** («AU [VN] …»,
+      «SE[VO] …»). Con «primera palabra entera» a secas, «Se acaba el stock» caería por «SE»; en todos los
+      nombres reales del grupo el prefijo de marca va seguido de «[». Una campaña «AU Promo» (sin corchete)
+      no caería.
+    - Una entrada de las listas que no sea una sola palabra es un error de configuración.
+    - Se aplica en `walcu_agregar.py` y `make referencias-meta` (contado y con aviso, sin rechazar nada) y en el
+      panel: `ingesta/campanas.py` saca esas campañas de `panel_campana_dia` y de «Campañas sin regla» (no
+      salen en las tarjetas, ni en el bloque de campañas, ni en el último mes, ni se juzgan) y las guarda en
+      `panel_campana_otra_marca` (migración 0018) solo para la línea «Campañas de otras marcas en esta
+      cuenta: N, gasto X € en 28 días» debajo del bloque de campañas. Su tráfico de GA4 sigue contando en el
+      canal Meta.
 
 ## Para revisar
 
-- **Otras marcas que no empiezan por el prefijo.** En tu CSV de 535 filas el filtro solo quita 3 filas (3
-  leads). Siguen contando, porque no empiezan por un prefijo: «EXT SK [2026] SKODA DAYS», «VN [2025] SEAT
-  Ibiza/Ateca febrero», «Avisa Days marzo 2025-SK», «3-dias-de-ocasion-audi» y dos de AiVORA con Audi (estas
-  dos no cuentan en las referencias de Meta de todos modos). Se pueden quitar con más prefijos (EXT) o con
-  equivalencias, o dejarlos como están.
-- **Marketing y criterios.** El filtro de marca está en la agregación de Walcu y en las referencias, como se
-  pidió. Las campañas de Meta de otras marcas siguen en el bloque de campañas de 28 días y en los criterios
-  (`ingesta/campanas.py`). Si no deben salir ahí, es un cambio pequeño.
+- **Campañas que mezclan marcas.** «AiVORA Campaign BBDD Audi y Volkswagen Junio 2026» cae por «Audi», aunque
+  también es de Volkswagen (es de AiVORA, que no entra en las referencias de Meta de todos modos).
+- **Una cuenta solo con campañas de otras marcas**: el bloque de campañas dice «Sin datos todavía» y no
+  muestra la línea, porque la ventana de 28 días sale de las campañas propias.
 - **Atribución de AiVORA.** AiVORA tiene leads con campaña «(sin campaña)». Quedan fuera de las referencias
   de Meta, como pide el encargo.

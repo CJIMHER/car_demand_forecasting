@@ -26,8 +26,10 @@ campaña y tipo, y escribe el CSV que carga `make walcu-cargar` en el servidor.
   inexistente: el motivo de fracaso contiene uno de `motivos_num_inexistente`. Tipo VN/VO por `tipos`. Venta:
   el Estado contiene «Vendido»; número inexistente: «Número inexistente»; tipo: «Nuevo» → VN, «VO» y «Km0» →
   VO, vacío → VN (valores reales de la exportación).
-- **Otras marcas**: los leads de campañas cuyo nombre empieza por un prefijo de `propio.prefijos_excluidos`
-  (`config/concesionario.yaml`; como palabra entera) se descartan, se cuentan y se avisa.
+- **Otras marcas**: los leads de campañas de otras marcas del grupo se descartan, se cuentan y se avisa.
+  Listas en `config/concesionario.yaml`: `propio.prefijos_excluidos` (primera palabra seguida de su etiqueta
+  entre corchetes: «AU [VN] …») y `propio.palabras_excluidas` (palabra entera en cualquier posición: «EXT SK
+  …», «… 2025-SK», «3-dias-de-ocasion-audi»).
 - Zona por el código postal con la zona cercana de `config/concesionario.yaml` (nada de provincias en el
   código). El código postal no se escribe nunca.
 - Orígenes: los de `config/walcu_export.yaml` y la web propia (`propio.web` de
