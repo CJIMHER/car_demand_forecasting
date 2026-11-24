@@ -29,7 +29,7 @@ TABLAS = (
     "panel_curva_grupo", "panel_leads_dia", "panel_campana_dia", "panel_campana_salud",
     "panel_recomendacion_modelo", "panel_atencion_relativa", "panel_semana_campana",
     "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_semana", "panel_referencia_meta",
-    "panel_campana_otra_marca", "panel_precio_vo",
+    "panel_campana_otra_marca", "panel_precio_vo", "panel_salidas_stock",
 )
 
 # Tablas del motor de alertas (migración 0009) con el mismo formato (dia, origen, calculado_at). No
@@ -45,11 +45,12 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
     "direccion": {
         "stock": ("panel_stock_vehiculo",),
         "antiguedad": ("panel_stock_vehiculo",),
-        "ventas_kpi": ("panel_ventas_mes",),
+        "ventas_kpi": ("panel_salidas_stock",),     # salidas de nuestro stock del mes (estimación de ventas)
         "alertas_kpi": ALERTAS,
         "ventas_mes": ("panel_ventas_mes",),
         "alertas": ALERTAS,
         "edad": ("panel_stock_vehiculo",),
+        "salidas": ("panel_salidas_stock",),        # salidas por mes, tipo y modelo (analitica/salidas.py)
         "precio": ("panel_precio_vo",),             # precio provisional de nuestros VO (el mismo de Ventas)
         "marketing": ("panel_campana_semana", "panel_campana_decision"),   # Meta y Walcu, últimas 4 semanas
         "referencias": ("panel_referencia_meta",),  # 2025 frente a 2026
@@ -61,6 +62,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "detalle": ("panel_riesgo_vehiculo", "panel_curva_grupo"),
         "alertas": ALERTAS,
         "precio": ("panel_precio_vo",),             # precio provisional de nuestros VO (analitica/precio.py)
+        "salidas": ("panel_salidas_stock",),        # salidas de las últimas 4 semanas, un coche por fila
     },
     "marketing": {
         "kpis": ("panel_campana_dia", "panel_leads_dia"),

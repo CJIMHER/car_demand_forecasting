@@ -6,7 +6,9 @@ panel_mercado_capturas, panel_mercado_competidor (analitica/competidores.py, par
 presión de un competidor) y, para el detalle de cada modelo, panel_mercado_segmento y
 panel_mercado_sin_clasificar (analitica/segmentos.py); para la cobertura del color,
 panel_mercado_color_fuente y panel_mercado_color_sin_familia; y el precio provisional de nuestros VO,
-panel_precio_vo (analitica/precio.py, tabla del contrato del panel con origen 'real'). El color de cada anuncio sale de
+panel_precio_vo (analitica/precio.py, tabla del contrato del panel con origen 'real'); y las salidas de
+nuestro stock publicado, panel_salidas_stock (analitica/salidas.py, contrato del panel, solo anuncios
+propios: para los demás, desaparecer no es vender). El color de cada anuncio sale de
 color_anuncio (ingesta/colores.py), unido por fuente + id_anuncio: vale el último color con estado ok
 o listing_color sabido hasta ese día (fetched_at), y un VIN de la ficha distinto del del anuncio lo
 anula. El panel solo lee estas tablas: nunca
@@ -59,7 +61,7 @@ from datetime import date, timedelta
 import psycopg
 from psycopg.types.json import Jsonb
 
-from analitica import colores, competidores, precio, segmentos, versiones
+from analitica import colores, competidores, precio, salidas, segmentos, versiones
 from ingesta import aviso_copia, telegram
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
 from ingesta.db import conectar
@@ -231,18 +233,31 @@ class Hechos:
             if len(self._dias) > 16:  # se recorre en orden: basta con los últimos días
                 for viejo in sorted(self._dias)[:-9]:
                     del self._dias[viejo]
-            filas = {}
-            for f, i, p, d, pr, m, *resto, color_scraper, bastidor in self.pg.execute(
-                    """SELECT fuente, id_anuncio, provincia_codigo, dealer_id, es_propio, modelo, precio_cents,
-                              version, combustible, potencia_cv, fecha_matriculacion, km, color_exterior, bastidor
-                       FROM stock_externo_snapshot WHERE snapshot_day = %s""", (dia,)):
-                color, estado, vin_distinto = self.color((f, i), dia, bastidor)
-                if color is None and not vin_distinto:
-                    color = color_scraper   # el del propio anuncio, si algún día lo publica la web
-                filas[(f, i)] = Fila(p, d, bool(pr), self.modelo(m), *resto, color, estado, vin_distinto)
-            self._dias[dia] = filas
+            self._dias[dia] = {(f, i): self._fila(f, i, dia, resto) for f, i, _, *resto in self.pg.execute(
+                f"SELECT fuente, id_anuncio, snapshot_day, {self.COLUMNAS} FROM stock_externo_snapshot "
+                "WHERE snapshot_day = %s", (dia,))}
         fuentes = TIPOS[tipo]
         return {k: v for k, v in self._dias[dia].items() if k[0] in fuentes}
+
+    COLUMNAS = ("provincia_codigo, dealer_id, es_propio, modelo, precio_cents, version, combustible, potencia_cv, "
+                "fecha_matriculacion, km, color_exterior, bastidor")
+
+    def _fila(self, fuente: str, id_anuncio: str, dia: date, valores) -> Fila:
+        p, d, pr, m, *resto, color_scraper, bastidor = valores
+        color, estado, vin_distinto = self.color((fuente, id_anuncio), dia, bastidor)
+        if color is None and not vin_distinto:
+            color = color_scraper   # el del propio anuncio, si algún día lo publica la web
+        return Fila(p, d, bool(pr), self.modelo(m), *resto, color, estado, vin_distinto)
+
+    def propias(self) -> dict[Clave, list[tuple[date, Fila]]]:
+        """Cada anuncio nuestro (es_propio) con sus días vistos, en orden, y su fila de cada día
+        (analitica/salidas.py). Los de otros concesionarios no se leen."""
+        propias: dict[Clave, list[tuple[date, Fila]]] = defaultdict(list)
+        for f, i, dia, *resto in self.pg.execute(
+                f"SELECT fuente, id_anuncio, snapshot_day, {self.COLUMNAS} FROM stock_externo_snapshot "
+                "WHERE es_propio ORDER BY fuente, id_anuncio, snapshot_day"):
+            propias[(f, i)].append((dia, self._fila(f, i, dia, resto)))
+        return dict(propias)
 
     def zonas(self, provincia: str | None) -> tuple[str, ...]:
         """Zonas en que cuenta un anuncio: la provincia propia; la zona cercana (la propia y las de
@@ -403,6 +418,7 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
     catalogo = versiones.cargar(conc.marca)
     paleta = colores.cargar()
     reglas_precio = precio.cargar_reglas()
+    reglas_salidas = salidas.cargar_reglas()
     h = Hechos(pg, conc)
     hasta = hasta or hoy_madrid()
     todos = set().union(*h.completos.values())
@@ -458,6 +474,19 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
         d += UN_DIA
     with pg.transaction():
         resumen["filas_capturas"] = _capturas(pg, h, desde, hasta)
+    # Salidas de nuestro stock: cada noche, la ventana de los últimos R + K días (o más, si se pide)
+    if reglas_salidas is None:
+        resumen["salidas"] = "sin salidas_stock en config/concesionario.yaml: no se calcula"
+        resumen["filas_salidas"] = 0
+    else:
+        desde_s = min(desde, hasta - (reglas_salidas.dias_reaparicion + reglas_salidas.dias_ausente) * UN_DIA)
+        filas_s = salidas.calcular(h, catalogo, reglas_salidas, desde_s, hasta, reglas_precio)
+        with pg.transaction():
+            pg.execute("DELETE FROM panel_salidas_stock WHERE origen = 'real' AND dia BETWEEN %s AND %s",
+                       (desde_s, hasta))
+            _insertar(pg, "panel_salidas_stock", salidas.COLS, filas_s)
+        resumen["filas_salidas"] = len(filas_s)
+        resumen["salidas_desde"] = str(desde_s)
     resumen["filas_segmento_por_nivel"] = dict(sorted(por_nivel.items()))
     resumen["segundos_segmento"] = round(t_segmentos, 1)
     resumen["segundos"] = round(time.monotonic() - inicio, 1)

@@ -95,6 +95,21 @@ precio_provisional:
   # 3. En precio pero no sale: precio en la mediana o por debajo y al menos estos días → fotos, anuncio, leads
   dias_en_precio: 90
 
+# Salidas de nuestro stock publicado (analitica/salidas.py): estimación de ventas mientras no lleguen las del
+# CRM. Solo nuestros anuncios; para los de otros concesionarios desaparecer no es vender.
+salidas_stock:
+  # Un anuncio nuestro visto el día D sale el D+1 si no aparece en estos días siguientes con captura buena
+  # (los días sin captura completa no cuentan: la ventana se alarga)
+  dias_ausente: 3
+  # Si reaparece antes de estos días desde la salida, se anula (reserva o retirada temporal); las salidas
+  # más recientes que esto son provisionales
+  dias_reaparicion: 14
+  # Republicación: otro anuncio nuestro nuevo del mismo coche en esta ventana de días centrada en la salida
+  # (VO: modelo, acabado, motor, año, color y km; VN: modelo, acabado, motor y color) no es una salida
+  republicacion_dias: 7
+  # VO: diferencia máxima de km (estrictamente menor) para considerarlo el mismo coche
+  republicacion_km: 1000
+
 # Modelos de la marca, de más a menos habituales. Hoy solo los usan los datos de ejemplo del panel
 # (make ejemplo-cargar); el catálogo de versiones llega con Walcu.
 modelos:

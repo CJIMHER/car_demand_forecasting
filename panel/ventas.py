@@ -1,6 +1,7 @@
 """Vista «Ventas» (docs/prototipo/Ventas.dc.html): vehículos en stock ordenados por riesgo.
 
-Lee panel_riesgo_vehiculo y panel_curva_grupo (contrato). Las probabilidades, curvas y medianas
+Lee panel_riesgo_vehiculo y panel_curva_grupo (contrato), el precio provisional de nuestros VO
+(panel_precio_vo) y las salidas de nuestro stock de las últimas 4 semanas (panel_salidas_stock). Las probabilidades, curvas y medianas
 llegan ya calculadas, con su p10–p90, su versión de modelo y su n; aquí solo se ordenan y se escriben.
 """
 
@@ -17,6 +18,7 @@ from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
 from panel import precio as pr
+from panel import salidas as sal
 
 POR_PAGINA = 25
 # Botones del detalle: acción → (texto del botón, quién recibe el aviso, cómo se dice hecha)
@@ -149,8 +151,9 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, s
         detalle = ng.bloque(org["detalle"], hay=False, filtrado=True)
     alertas = pal.bloque_rol(pg, org["alertas"], "ventas", tipo)
     precio = pr.bloque(pg, conc, org["precio"], modelo_vo, f"/ventas?tipo={tipo}{riesgo}", "#ventas")
+    salidas = sal.recientes(pg, conc, org["salidas"], tipo, hoy)
     return {**base, "resumen": resumen, "lista": lista, "detalle": detalle, "dia": dia, "alertas": alertas,
-            "mostrar": mostrar, "precio": precio}
+            "mostrar": mostrar, "precio": precio, "salidas": salidas}
 
 
 # --------------------------------------------------------------------------- botones del detalle

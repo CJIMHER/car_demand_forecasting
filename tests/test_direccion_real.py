@@ -2,7 +2,8 @@
 
 Lo que ya tiene fuente se ve con sus filas reales: Mercado y nuestro stock publicado, el precio provisional,
 Meta con Walcu por semanas (últimas 4 semanas y referencias por año), GA4 por canal y las alertas del motor.
-Lo que todavía no tiene fuente (stock interno, ventas del CRM y su predicción) dice «Pendiente de conectar:
+Las ventas del mes se estiman con las salidas de nuestro stock publicado (scrapers). Lo que todavía no tiene
+fuente (stock interno y la predicción de ventas) dice «Pendiente de conectar:
 <fuente>», aunque haya filas de ejemplo cargadas. Las filas de ejemplo solo se ven con PANEL_MODO_EJEMPLO=1.
 """
 
@@ -35,13 +36,17 @@ def test_sin_modo_ejemplo_direccion_no_muestra_ejemplo_y_dice_lo_pendiente(pg, d
     assert origen == "real" and "Stock publicado" in stock and f'class="kpi-valor">{publicados}<' in stock
     assert "stock interno: pendiente de conectar" in stock
     for nombre, fuente in (("antiguedad", "stock interno (Walcu o DMS)"), ("edad", "stock interno (Walcu o DMS)"),
-                           ("ventas_kpi", "ventas del CRM"), ("ventas_mes", "ventas del CRM y predicción de ventas")):
+                           ("ventas_mes", "predicción de ventas")):
         origen, trozo = b[nombre]
         assert origen == "" and f"Pendiente de conectar: {fuente}" in trozo, nombre
     # Lo que tiene fuente pero aún no ha escrito nada real: «Sin datos todavía», sin el ejemplo
     for nombre in ("marketing", "referencias", "trafico", "alertas", "alertas_kpi"):
         origen, trozo = b[nombre]
         assert origen == "" and "Sin datos todavía" in trozo and "Pendiente" not in trozo, nombre
+    # Las salidas de nuestro stock (estimación de ventas), del mismo precálculo: reales
+    assert b["ventas_kpi"][0] == "real" and "Salidas del mes" in b["ventas_kpi"][1]
+    assert b["salidas"][0] == "real" and "Salidas de nuestro stock (estimación de ventas)" in b["salidas"][1]
+    assert "Se validará con las ventas del CRM" in b["salidas"][1]
     # Mercado y el precio provisional, reales
     assert b["mercado"][0] == "real" and "El mercado en Sevilla" in b["mercado"][1]
     assert b["precio"][0] == "real" and "Precio de nuestros VO" in b["precio"][1]

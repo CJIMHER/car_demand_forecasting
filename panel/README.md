@@ -8,8 +8,8 @@ plantillas y a una hoja de estilos con variables. Hoy tiene datos reales la vist
 con ellos las ve el rol técnico (o los de `PANEL_EJEMPLO_VISIBLE_PARA`), con una banda y una
 etiqueta «Datos de ejemplo» en cada bloque; el resto de roles las ve desactivadas («Se activa al
 conectar sus datos») hasta que lleguen los datos reales. **Dirección** no mezcla nunca: sin el modo ejemplo
-explícito (`PANEL_MODO_EJEMPLO=1`) solo muestra datos reales (Mercado, stock publicado, precio provisional,
-Meta con Walcu, referencias por año, GA4 y alertas) y, donde aún no hay fuente, «Pendiente de conectar:
+explícito (`PANEL_MODO_EJEMPLO=1`) solo muestra datos reales (Mercado, stock publicado, salidas de nuestro
+stock como estimación de ventas, precio provisional, Meta con Walcu, referencias por año, GA4 y alertas) y, donde aún no hay fuente, «Pendiente de conectar:
 <fuente>».
 
 ## Qué hay
@@ -21,6 +21,7 @@ Meta con Walcu, referencias por año, GA4 y alertas) y, donde aún no hay fuente
 | `contrato.py` | Qué tablas lee cada bloque y de qué origen (real o ejemplo; un bloque nunca los mezcla) |
 | `direccion.py`, `ventas.py`, `marketing.py`, `negocio.py` | Consultas de las tres vistas sobre las tablas del contrato |
 | `precio.py` | Bloque «Precio de nuestros VO» de Ventas y Dirección (`panel_precio_vo`), con el filtro por modelo |
+| `salidas.py` | Salidas de nuestro stock (`panel_salidas_stock`): tarjeta y bloque por mes de Dirección, últimas 4 semanas en Ventas |
 | `alertas.py` | Alertas de las vistas: las del motor (tabla `alertas`) o, sin él, las de ejemplo; y el motor, las campañas sin regla y el tráfico de GA4 por canal en «Estado de las fuentes» |
 | `ejemplo.py` | Datos de ejemplo deterministas y coherentes entre vistas (`make ejemplo-cargar` / `ejemplo-borrar`) |
 | `seguridad.py` | argon2id, sesiones en Postgres, CSRF de doble envío, bloqueo de intentos, IP detrás de Caddy |

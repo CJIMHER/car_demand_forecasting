@@ -38,7 +38,7 @@ siempre con datos reales (ver `analitica/README.md`).
 
 Sin `PANEL_MODO_EJEMPLO=1` (variable del panel, vacía por defecto), Dirección nunca muestra filas de ejemplo,
 aunque estén cargadas (`make ejemplo-cargar`): cada bloque lee solo filas reales. Sin ellas, dice «Pendiente de
-conectar: <fuente>» si su fuente todavía no existe (stock interno, ventas del CRM y su predicción) o «Sin datos
+conectar: <fuente>» si su fuente todavía no existe (stock interno y la predicción de ventas) o «Sin datos
 todavía» si la fuente existe y aún no ha escrito nada. Sin stock interno real, la tarjeta de stock muestra
 nuestro stock publicado en la web (Mercado). El estado de la vista para los permisos sale también solo de las
 filas reales. Ventas y Marketing no cambian. Con `PANEL_MODO_EJEMPLO=1` (y en `make panel-dev`), Dirección se
@@ -81,7 +81,8 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Vista | Bloque | Tablas |
 | --- | --- | --- |
 | Dirección | Tarjeta de stock, tarjeta de antigüedad, stock por días en exposición | `panel_stock_vehiculo` |
-| Dirección | Tarjeta de ventas del mes, gráfico de ventas acumuladas | `panel_ventas_mes` |
+| Dirección | Tarjeta «Salidas del mes» y bloque «Salidas de nuestro stock (estimación de ventas)» | `panel_salidas_stock` |
+| Dirección | Gráfico de ventas acumuladas frente a lo previsto (sin modo ejemplo: «Pendiente de conectar: predicción de ventas») | `panel_ventas_mes` |
 | Dirección | Tarjeta de alertas abiertas, alertas de hoy | `alertas_evaluacion` y `panel_alertas` (ver más abajo) |
 | Ventas y Marketing | Alertas para su rol | `alertas_evaluacion` y `panel_alertas` |
 | Dirección | Tarjeta del mercado | `panel_mercado_dia`. Siempre real: fuera del contrato |
@@ -93,6 +94,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Ventas | Resumen y lista de vehículos | `panel_riesgo_vehiculo` |
 | Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
 | Ventas y Dirección | Precio de nuestros VO (provisional; Marketing no lo ve) | `panel_precio_vo` |
+| Ventas | Salidas de nuestro stock de las últimas 4 semanas, un coche por fila | `panel_salidas_stock` |
 | Marketing | Tarjetas de 28 días | `panel_campana_dia` y `panel_leads_dia` |
 | Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_campana_semana` (Walcu por semanas, como las reglas), `panel_campana_salud` y `panel_campana_decision` |
 | Marketing | Recomendación por modelo | `panel_recomendacion_modelo` |
@@ -511,6 +513,36 @@ Las de 2025 (`criterios_meta.c.referencia_anio`) son la «media» de las reglas 
 - **Cifras de Ventas y Dirección**: «Precio de nuestros VO», un coche por fila ordenado por `orden` y, dentro,
   por días publicado de más a menos; filtro por modelo (`?modelo_vo=`); el aviso «Recomendación provisional
   basada en el mercado actual; no es una probabilidad de venta».
+
+### panel_salidas_stock · salidas de nuestro stock publicado (estimación de ventas)
+
+- **Grano**: salida × anuncio propio (`fuente`, `id_anuncio`: el anuncio en la web de stock; ni matrícula ni
+  bastidor, nada del cliente). `dia` es la fecha de salida: el día siguiente al último en que se vio. Lo
+  escribe `analitica/salidas.py` dentro de `make precalcular`, con origen `real`; cada noche recalcula la
+  ventana de los últimos R + K días (`dias_reaparicion` + `dias_ausente`), y el histórico entero con
+  `make precalcular` sin argumentos. Las filas de ejemplo no se tocan.
+- **Solo nuestros anuncios** (`es_propio`, los de «Nuestros» en Mercado). Para los de otros concesionarios
+  desaparecer no es vender: no se leen.
+- **Cuándo hay salida** (umbrales en `config/concesionario.yaml`, `salidas_stock`):
+  - no aparece en los `dias_ausente` días siguientes con captura buena de su fuente (un día sin captura
+    completa no cuenta: la ventana se alarga);
+  - no reaparece antes de `dias_reaparicion` días (si reaparece, se anula); las de los últimos
+    `dias_reaparicion` días son provisionales;
+  - no es una republicación: ningún anuncio nuestro nuevo del mismo coche en la ventana de
+    `republicacion_dias` días centrada en la salida (VO: modelo, acabado, motor, año, color y km a menos de
+    `republicacion_km`; VN: modelo, acabado, motor y color);
+  - arranque: solo desde el primer día con captura buena de la fuente más `dias_ausente` días.
+- Columnas: `tipo`, `modelo`, `version`, `acabado` (NULL si no está en el catálogo), `motor`, `anio` (año de
+  matriculación, VO), `km` (etiqueta del tramo, VO), `color`, `precio_cents` (último precio publicado),
+  `dias_publicado` y `dias_cota` (true: «al menos N días»), `ultimo_dia`, `provisional`, y la mediana de su
+  segmento el último día que se vio: `nivel`, `n_comparables`, `mediana_cents` (los mismos niveles que
+  `panel_precio_vo`; en VN, sin tramos de antigüedad ni de km; NULL sin comparables suficientes).
+- **Cifras de Dirección**: tarjeta «Salidas del mes» (mes en curso, con VN · VO y las provisionales) y bloque
+  por mes en curso y anterior, tipo y modelo, con las provisionales en gris y la nota «Estimación: un coche
+  que deja de estar publicado. Incluye coches traspasados a otras sedes o empresas del grupo. Se validará con
+  las ventas del CRM».
+- **Cifras de Ventas**: las salidas de las últimas 4 semanas, un coche por fila: fecha (provisional en gris),
+  último precio, días publicado, mediana del segmento y la diferencia del precio frente a ella.
 
 Fuera del contrato: `panel_walcu_sin_cruce` (lo que no casa entre Meta y Walcu, con el motivo; lo escribe
 `make referencias-meta`).

@@ -502,6 +502,21 @@ Después lo mantiene el cron del precálculo (09:10). Los umbrales están en `co
 «Precio de nuestros VO». Si hay datos de ejemplo cargados en Ventas (`make ejemplo-cargar`), la vista sigue
 siendo «de ejemplo» y el rol de ventas no la ve hasta `make ejemplo-borrar` (7.7).
 
+### 7.14 Salidas de nuestro stock (estimación de ventas)
+
+Una vez, en el servidor:
+
+```bash
+make deploy          # migración 0021 (panel_salidas_stock) y la imagen del panel con los bloques nuevos
+make precalcular     # rehace Mercado y calcula las salidas de todo el histórico
+```
+
+Después lo mantiene el cron del precálculo (09:10), recalculando los últimos 17 días (R + K) cada noche. Los
+umbrales están en `config/concesionario.yaml` (`salidas_stock`); tras cambiarlos, commit, `make deploy` y
+`make precalcular`. Dirección → tarjeta «Salidas del mes» y «Salidas de nuestro stock (estimación de
+ventas)»; Ventas → «Salidas de nuestro stock: últimas 4 semanas». Como el precio provisional, si hay datos de
+ejemplo de Ventas cargados, la vista sigue siendo «de ejemplo» (7.7).
+
 ## 8. Día a día
 
 ```bash

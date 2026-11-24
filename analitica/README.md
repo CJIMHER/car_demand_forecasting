@@ -33,6 +33,24 @@ mediano solo con precio). Zonas: la provincia del concesionario, su comunidad y 
 segmentos, además, la mediana de nuestro precio y la de la competencia por separado, con su n: las
 usan los criterios de Meta (regla e y contexto de la d).
 
+## salidas.py · salidas de nuestro stock publicado (en el mismo precálculo)
+
+`panel_salidas_stock` (contrato del panel, origen `real`): estimación de ventas mientras no lleguen las del
+CRM. Solo anuncios propios; para los de otros concesionarios desaparecer no es vender y ni se leen.
+
+- Un anuncio nuestro visto el día D sale el D+1 si no aparece en los `dias_ausente` días siguientes con
+  captura buena de su fuente (los días sin captura completa no cuentan), no reaparece antes de
+  `dias_reaparicion` días (si reaparece, se anula; las de los últimos `dias_reaparicion` días son
+  provisionales) y no es una republicación (otro anuncio nuestro nuevo del mismo coche en la ventana de
+  `republicacion_dias` días centrada en la salida; VO con año, color y km a menos de `republicacion_km`).
+- Arranque: nada sale antes del primer día con captura buena de la fuente más `dias_ausente` días.
+- Cada salida guarda el coche, su último precio, sus días publicado («al menos N» como en Mercado) y la mediana
+  de su segmento el último día que se vio (los niveles del precio provisional; en VN, sin tramos).
+- Cada noche (`--ultimos 8`) se recalcula la ventana de los últimos `dias_reaparicion` + `dias_ausente` días;
+  `make precalcular` sin argumentos, todo el histórico. Umbrales en `config/concesionario.yaml`
+  (`salidas_stock`); sin la sección no se calcula y el resumen lo dice.
+- Pruebas: `tests/test_salidas_stock.py`.
+
 ## precio.py · precio provisional de nuestros VO (en el mismo precálculo)
 
 `panel_precio_vo` (contrato del panel, origen `real`): para cada día válido de VO, cada anuncio propio del

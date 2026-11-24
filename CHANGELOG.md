@@ -1,5 +1,24 @@
 # Cambios
 
+## 2026-11-24 · Salidas de nuestro stock como estimación de ventas (rama hito-1b-salidas-stock)
+
+- **Cálculo** (`analitica/salidas.py`, dentro de `make precalcular`): un anuncio NUESTRO visto el día D tiene
+  una salida el D+1 si no aparece en los 3 días siguientes con captura buena (los días sin captura completa
+  alargan la ventana), no reaparece en 14 días (si reaparece, se anula; las de los últimos 14 días son
+  provisionales) y no es una republicación (otro anuncio nuestro nuevo del mismo coche en los 7 días
+  alrededor). Arranque: nada sale antes del primer día de datos + 3. Los competidores nunca generan salidas.
+  Umbrales en `config/concesionario.yaml` (`salidas_stock`). Cada noche se recalculan los últimos 17 días.
+- **Migración `0021`**: `panel_salidas_stock` (contrato del panel): coche, último precio, días publicado
+  («al menos»), fecha de salida, provisional y la mediana de su segmento el último día visto. Sin matrícula ni
+  bastidor.
+- **Dirección**: la tarjeta «Ventas del mes» pasa a «Salidas del mes» y el bloque nuevo «Salidas de nuestro
+  stock (estimación de ventas)», por mes en curso y anterior, VN y VO y modelo, con las provisionales en gris y
+  la nota de que es una estimación. «Ventas frente a lo previsto»: «Pendiente de conectar: predicción de
+  ventas».
+- **Ventas**: «Salidas de nuestro stock: últimas 4 semanas», un coche por fila con su último precio, sus días
+  publicado y la diferencia frente a la mediana de su segmento.
+- Resumen y decisiones en `docs/hitos/hito_1b_salidas_stock_resumen.md`.
+
 ## 2026-11-24 · Dirección: solo datos reales, con lo pendiente dicho (rama hito-1b-walcu-tipo)
 
 - **Sin mezclar ejemplo y real**: sin el modo ejemplo explícito (`PANEL_MODO_EJEMPLO=1`, nueva variable del

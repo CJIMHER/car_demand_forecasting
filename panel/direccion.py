@@ -1,6 +1,7 @@
 """Vista «Dirección» (docs/prototipo/Main.dc.html y Movil.dc.html).
 
-Lee panel_stock_vehiculo, panel_ventas_mes y las alertas (las del motor, tabla alertas, o las de
+Lee panel_stock_vehiculo, panel_ventas_mes, las salidas de nuestro stock publicado (panel_salidas_stock,
+estimación de ventas: panel/salidas.py) y las alertas (las del motor, tabla alertas, o las de
 ejemplo de panel_alertas: panel/alertas.py); el precio provisional de nuestros VO (panel_precio_vo); Meta y
 Walcu por semanas (panel_campana_semana) con las referencias por año (panel_referencia_meta) y GA4 por canal
 (panel_trafico_canal_dia), con los mismos cálculos que Marketing; y, para la tarjeta del mercado y nuestro
@@ -28,11 +29,12 @@ from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
 from panel import precio as pr
+from panel import salidas as sal
 
 # Bloques cuya fuente real aún no existe: lo que dicen en vez de datos de ejemplo
 STOCK_INTERNO = "stock interno (Walcu o DMS)"
 PENDIENTE = {"stock": STOCK_INTERNO, "antiguedad": STOCK_INTERNO, "edad": STOCK_INTERNO,
-             "ventas_kpi": "ventas del CRM", "ventas_mes": "ventas del CRM y predicción de ventas"}
+             "ventas_mes": "predicción de ventas"}
 
 TRAMOS = (("0–30 días", 0, 30), ("31–60 días", 31, 60), ("61–90 días", 61, 90), ("Más de 90", 91, None))
 
@@ -112,45 +114,31 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, h
     else:
         edad = ng.bloque(org["edad"], hay=False)
 
-    # ---- ventas del mes frente a la banda prevista
+    # ---- salidas de nuestro stock (estimación de ventas mientras no lleguen las del CRM): tarjeta y bloque
+    ventas_kpi, _ = sal.mensual(pg, org["ventas_kpi"], tipo, hoy)
+    _, salidas = sal.mensual(pg, org["salidas"], tipo, hoy)
+
+    # ---- ventas del mes frente a la banda prevista (solo con el modo ejemplo: la predicción aún no existe)
     clave = "todo" if tipo == "todo" else tipo
-    ventas_kpi = ng.bloque(org["ventas_kpi"], hay=False)
     ventas_mes = ng.bloque(org["ventas_mes"], hay=False)
-    for nombre in ("ventas_kpi", "ventas_mes"):
-        origen = org[nombre]
-        dia = ng.ultimo_dia(pg, "panel_ventas_mes", origen)
-        if dia is None:
-            continue
-        filas = pg.execute(
-            """SELECT dia_mes, ventas_acumuladas, previsto_p10, previsto_p50, previsto_p90, n FROM panel_ventas_mes
-               WHERE origen = %s AND dia = %s AND tipo = %s ORDER BY dia_mes""", (origen, dia, clave)).fetchall()
-        if not filas:
-            continue
+    dia = ng.ultimo_dia(pg, "panel_ventas_mes", org["ventas_mes"])
+    filas = pg.execute(
+        """SELECT dia_mes, ventas_acumuladas, previsto_p10, previsto_p50, previsto_p90, n FROM panel_ventas_mes
+           WHERE origen = %s AND dia = %s AND tipo = %s ORDER BY dia_mes""",
+        (org["ventas_mes"], dia, clave)).fetchall() if dia else []
+    if filas:
         hoy_f = next((f for f in filas if f[0] == dia.day), filas[-1])
         real = hoy_f[1]
         p10, p90 = round(float(hoy_f[2])), round(float(hoy_f[4]))
-        if real is None:
-            badge, tono = None, "neutro"
-        elif real < float(hoy_f[2]):
-            badge, tono = "Por debajo", "aviso"
-        elif real > float(hoy_f[4]):
-            badge, tono = "Por encima", "info"
-        else:
-            badge, tono = "En lo previsto", "neutro"
-        if nombre == "ventas_kpi":
-            ventas_kpi = ng.bloque(origen, etiqueta="Ventas del mes" if tipo == "todo" else f"Ventas {tipo} del mes",
-                                   valor=fmt.miles(real), sub=f"Previsto a estas alturas: {p10}–{p90}",
-                                   badge=badge, tono=tono)
-        else:
-            ultimo = filas[-1]
-            serie = {"dias": [f[0] for f in filas], "real": [f[1] for f in filas],
-                     "p10": [float(f[2]) for f in filas], "p50": [float(f[3]) for f in filas],
-                     "p90": [float(f[4]) for f in filas], "hoy": dia.day}
-            ventas_mes = ng.bloque(origen, serie=serie, n=filas[0][5],
-                                   rango=f"Previsión a fin de mes: {math.floor(float(ultimo[2]))}–{math.ceil(float(ultimo[4]))}",
-                                   mes=f"{fmt.MESES[dia.month - 1]} de {dia.year}",
-                                   resumen=(f"Ventas acumuladas: {fmt.miles(real)} a día {dia.day}; "
-                                            f"lo previsto a estas alturas, entre {p10} y {p90}."))
+        ultimo = filas[-1]
+        serie = {"dias": [f[0] for f in filas], "real": [f[1] for f in filas],
+                 "p10": [float(f[2]) for f in filas], "p50": [float(f[3]) for f in filas],
+                 "p90": [float(f[4]) for f in filas], "hoy": dia.day}
+        ventas_mes = ng.bloque(org["ventas_mes"], serie=serie, n=filas[0][5],
+                               rango=f"Previsión a fin de mes: {math.floor(float(ultimo[2]))}–{math.ceil(float(ultimo[4]))}",
+                               mes=f"{fmt.MESES[dia.month - 1]} de {dia.year}",
+                               resumen=(f"Ventas acumuladas: {fmt.miles(real)} a día {dia.day}; "
+                                        f"lo previsto a estas alturas, entre {p10} y {p90}."))
 
     # ---- alertas (motor de alertas o, sin él, las de ejemplo: panel/alertas.py)
     alertas_kpi = ng.bloque(org["alertas_kpi"], hay=False)
@@ -195,7 +183,7 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, h
         "tipos": ng.selector_tipo("/direccion", tipo, "#direccion",
                                   f"&{pr.PARAMETRO}={quote(modelo_vo, safe='')}" if modelo_vo else ""),
         "fecha": fmt.fecha_larga(hoy),
-        "ventas_mes": ventas_mes, "alertas": alertas, "edad": edad, "mercado": mercado(pg, conc, tipo),
+        "ventas_mes": ventas_mes, "salidas": salidas, "alertas": alertas, "edad": edad, "mercado": mercado(pg, conc, tipo),
         "precio": pr.bloque(pg, conc, org["precio"], modelo_vo, f"/direccion?tipo={tipo}", "#direccion"),
         "origenes": org,
     }

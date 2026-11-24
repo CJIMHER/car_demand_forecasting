@@ -523,6 +523,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     _campana_semana(filas, fin_meta)
     _referencias(filas, fin_meta)
     _precio_vo(filas, hoy, conc)
+    _salidas(filas, hoy, conc)
     return filas
 
 
@@ -579,6 +580,38 @@ def _precio_vo(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) -> 
             "zona": None if nivel is None else ("comunidad" if nivel == "comunidad" else "cercana"),
             "n_comparables": n, "p25_cents": p25, "mediana_cents": mediana, "p75_cents": p75,
             "regla": regla, "orden": orden.get(regla, 4), "recomendacion": texto,
+        })
+
+
+# Salidas de ejemplo: (tipo, índice del modelo, días antes de hoy, mes anterior, días publicado, precio frente
+# a la mediana o None sin comparables)
+CASOS_SALIDAS = (
+    ("VO", 0, 2, False, 41, 0.97), ("VO", 1, 5, False, 88, 1.04), ("VO", 0, 9, False, 23, None),
+    ("VO", 2, 20, False, 130, 1.10), ("VO", 3, 0, True, 64, 0.99), ("VO", 0, 6, True, 37, 1.02),
+    ("VN", 0, 1, False, 55, 1.00), ("VN", 1, 12, False, 19, 0.96), ("VN", 0, 25, False, 102, None),
+    ("VN", 2, 3, True, 71, 1.05), ("VN", 0, 15, True, 33, 0.98),
+)
+
+
+def _salidas(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) -> None:
+    """panel_salidas_stock: salidas del mes en curso y del anterior, con provisionales (últimos 14 días)."""
+    inicio = hoy.replace(day=1)
+    anterior = (inicio - UN_DIA).replace(day=1)
+    km = [e for _, e in conc.tramos_km] or [None]
+    for i, (tipo, m, atras, mes_anterior, dias, factor) in enumerate(CASOS_SALIDAS):
+        modelos = list(conc.modelos_vo if tipo == "VO" else conc.modelos_vn)
+        dia = (anterior + timedelta(days=min(atras, 27))) if mes_anterior else max(inicio, hoy - timedelta(days=atras))
+        mediana = 1_650_000 + 150_000 * (i % 4) if tipo == "VO" else 2_900_000 + 200_000 * (i % 3)
+        filas["panel_salidas_stock"].append({
+            "dia": dia, "tipo": tipo, "fuente": "vo" if tipo == "VO" else "vn", "id_anuncio": f"EJ-SAL-{i + 1:03d}",
+            "modelo": modelos[m % len(modelos)], "version": None, "acabado": ACABADOS_EJEMPLO[i % 3],
+            "motor": MOTORES_EJEMPLO[i % 3], "anio": 2021 + i % 4 if tipo == "VO" else None,
+            "km": km[i % len(km)] if tipo == "VO" else None, "color": ("Blanco", "Gris", "Negro", "Azul")[i % 4],
+            "precio_cents": round(mediana * (factor or 1.0), -4), "dias_publicado": dias, "dias_cota": i == 3,
+            "ultimo_dia": dia - UN_DIA, "provisional": (hoy - dia).days < 14,
+            "nivel": None if factor is None else ("segmento" if tipo == "VO" else "sin_antiguedad"),
+            "n_comparables": 2 if factor is None else 6 + i,
+            "mediana_cents": None if factor is None else mediana,
         })
 
 

@@ -286,11 +286,16 @@ def test_cada_bloque_de_ejemplo_lleva_su_etiqueta_y_la_vista_la_banda(pg, datos,
             # Marketing: «Atención frente a sus rivales» en Todo y VN; en VO, en su lugar, el stock de ocasión
             esperados = set(contrato.BLOQUES[vista]) - ({"atencion"} if "VO" in url else {"ocasion"}
                                                         if vista == "marketing" else set())
-            # El precio de nuestros VO sale del precálculo de Mercado, que aquí es real: no mezcla
+            # El precio de nuestros VO y las salidas de nuestro stock salen del precálculo de Mercado, que aquí
+            # es real: no mezclan
             if "precio" in esperados:
                 esperados.discard("precio")
                 origen, trozo = bloques(html)["precio"]
                 assert origen == "real" and ETIQUETA not in trozo and "Precio de nuestros VO" in trozo, url
+            for nombre in {"salidas", "ventas_kpi"} & esperados:
+                esperados.discard(nombre)
+                origen, trozo = b[nombre]
+                assert origen == "real" and ETIQUETA not in trozo and "Salidas" in trozo, (url, nombre)
             assert esperados <= set(b), (url, esperados - set(b))
             if vista == "marketing":
                 assert ("ocasion" in b) == ("VO" in url) and ("atencion" in b) != ("VO" in url), url
@@ -338,14 +343,15 @@ def test_direccion_cifras(pg, panel_url, personas, con_ejemplo):
     # Tramos de días en exposición: el de más de 90, en ámbar
     mas90 = sum(f["dias_exposicion"] > 90 for f in stock_hoy)
     assert re.search(rf'Más de 90</span>.*?relleno viejo.*?<span class="tramo-n">{mas90}</span>', b["edad"][1], re.S)
-    # Ventas: el último real frente a su banda
-    hoy_todo = next(f for f in filas["panel_ventas_mes"] if f["tipo"] == "todo" and f["dia_mes"] == HOY.day)
-    assert f'<span class="kpi-valor">{hoy_todo["ventas_acumuladas"]}</span>' in b["ventas_kpi"][1]
+    # Salidas del mes (estimación de ventas) y, con el modo ejemplo, las ventas frente a su banda
+    del_mes = [f for f in filas["panel_salidas_stock"] if (f["dia"].year, f["dia"].month) == (HOY.year, HOY.month)]
+    assert f'<span class="kpi-valor">{len(del_mes)}</span>' in b["ventas_kpi"][1]
+    assert "Salidas del mes" in b["ventas_kpi"][1] and "estimación de ventas" in b["ventas_kpi"][1]
     assert "Lo normal: 8 de cada 10 meses caen aquí" in b["ventas_mes"][1] and "data-ventas=" in b["ventas_mes"][1]
     # Selector VN: solo stock VN y solo alertas de VN o de los dos
     b = bloques(cl.get("/direccion?tipo=VN").text)
     assert f'<span class="kpi-valor">{n_vn}</span>' in b["stock"][1] and "Stock VN" in b["stock"][1]
-    assert "Ventas VN del mes" in b["ventas_kpi"][1]
+    assert "Salidas VN del mes" in b["ventas_kpi"][1]
     vn = [a for a in alertas if a["tipo"] in (None, "VN")]
     assert f'<span class="kpi-valor">{len(vn)}</span>' in b["alertas_kpi"][1]
 
@@ -669,7 +675,7 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     # 2. El resto de Dirección (con el precio de nuestros VO, que llega del precálculo de Mercado): la vista
     # se abre a dirección, sin banda ni etiquetas
     a_real(pg, "panel_ventas_mes", "panel_alertas", "panel_precio_vo", "panel_campana_semana", "panel_referencia_meta",
-           "panel_trafico_canal_dia")
+           "panel_trafico_canal_dia", "panel_salidas_stock")
     html = dire.get("/direccion").text
     assert _ve(dire, "/direccion") and BANDA not in html and ETIQUETA not in html
     assert 'href="/direccion"' in html
@@ -701,14 +707,16 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
 
 
 def test_sin_filas_dice_sin_datos_todavia_nunca_cero(pg, panel_url, personas, con_ejemplo):
-    for t in ("panel_alertas", "panel_ventas_mes", "panel_atencion_relativa", "panel_campana_resultado"):
+    for t in ("panel_alertas", "panel_ventas_mes", "panel_atencion_relativa", "panel_campana_resultado",
+              "panel_salidas_stock"):
         pg.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(t)))
     cl = dentro(app_con(panel_url), "tecnico")
     b = bloques(cl.get("/direccion").text)
     for nombre in ("alertas_kpi", "alertas", "ventas_kpi", "ventas_mes"):
         origen, trozo = b[nombre]
-        # Las alertas tienen fuente (el motor): «Sin datos todavía»; las ventas del CRM, todavía no
-        esperado = "Sin datos todavía" if nombre.startswith("alertas") else "Pendiente de conectar: ventas del CRM"
+        # Las alertas (el motor) y las salidas (los scrapers) tienen fuente: «Sin datos todavía»; la predicción
+        # de ventas, todavía no
+        esperado = "Pendiente de conectar: predicción de ventas" if nombre == "ventas_mes" else "Sin datos todavía"
         assert origen == "" and esperado in trozo and ETIQUETA not in trozo, nombre
         assert 'class="kpi-valor">0<' not in trozo
     b = bloques(cl.get("/marketing").text)

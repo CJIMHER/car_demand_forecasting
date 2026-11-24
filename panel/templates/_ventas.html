@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas, precio_vo %}
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas, precio_vo, salidas_recientes %}
 {% macro contenido_detalle(dd, suf, h) -%}
       {% set v = dd.v %}
       <div>
@@ -135,6 +135,8 @@
   </div>
 
   {{ precio_vo(d.precio, "#ventas") }}
+
+  {{ salidas_recientes(d.salidas) }}
 
   {{ lista_alertas(d.alertas, "Alertas para ventas", "t-alertas-ventas") }}
 </div>

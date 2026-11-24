@@ -29,6 +29,56 @@
   {% else %}{{ sin_datos() }}{% endif %}
 </section>
 {%- endmacro %}
+{% macro salida(c) -%}
+{{ c.n }}{% if c.prov %} <span class="provisional">{{ c.prov }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro salidas_recientes(b) -%}
+<section aria-labelledby="t-salidas-recientes" class="tarjeta bloque-salidas"{{ attrs("salidas", b) }}>
+  <div class="tarjeta-cabeza">
+    <h2 id="t-salidas-recientes">Salidas de nuestro stock: últimas 4 semanas</h2>
+    {% if b.hay %}<span class="nota">{{ b.desde }}–{{ b.hasta }} · {{ b.recuento }}</span>{% endif %}
+  </div>
+  {{ marca(b) }}
+  {% if b.hay %}
+  {% if b.filas %}
+  <div class="tabla-scroll">
+    <table class="tabla tabla-movil tabla-salidas">
+      <thead>
+        <tr>
+          <th scope="col" class="izq">Coche</th>
+          <th scope="col">Salida</th>
+          <th scope="col">Último precio</th>
+          <th scope="col">Días publicado</th>
+          <th scope="col">Mediana del segmento</th>
+          <th scope="col">Frente a la mediana</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in b.filas %}
+        <tr{% if f.provisional %} class="provisional"{% endif %} data-tipo="{{ f.tipo }}">
+          <th scope="row" class="izq">
+            <span class="vehiculo-nombre">{{ f.nombre }}</span>
+            <span class="vehiculo-detalle">{{ f.tipo }}{% if f.detalle %} · {{ f.detalle }}{% endif %} · {{ f.id }}</span>
+          </th>
+          <td data-etiqueta="Salida">{{ f.fecha }}{% if f.provisional %} · provisional{% endif %}</td>
+          <td data-etiqueta="Último precio">{{ f.precio }}</td>
+          <td data-etiqueta="Días publicado">{{ f.dias }}</td>
+          <td data-etiqueta="Mediana del segmento">{{ f.mediana }}<span class="vehiculo-detalle">{{ f.nivel }}</span></td>
+          <td data-etiqueta="Frente a la mediana">{{ f.diferencia }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="sin-datos">Ninguna salida en estas 4 semanas.</p>
+  {% endif %}
+  <p class="nota">{{ b.nota }} En gris, las provisionales: aún pueden volver a publicarse. La mediana es la de su segmento el último día que se vio publicado.</p>
+  {% else %}{{ sin_datos() }}{% endif %}
+</section>
+{%- endmacro %}
+
 {% macro precio_vo(b, objetivo) -%}
 <section aria-labelledby="t-precio-vo" class="tarjeta bloque-precio-vo"{{ attrs("precio", b) }}>
   <div class="tarjeta-cabeza">

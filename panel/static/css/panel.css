@@ -571,3 +571,9 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .cifras-marketing { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin: 8px 0 12px; }
 .cifras-marketing > div { display: flex; flex-direction: column; gap: 4px; }
 .sin-datos.pendiente { font-style: normal; }
+
+/* Salidas de nuestro stock (estimación de ventas): las provisionales, en gris */
+.bloque-salidas { margin-top: 24px; }
+.tabla-salidas-mes .provisional, .tabla-salidas tr.provisional, .tabla-salidas tr.provisional .vehiculo-nombre { color: var(--gris); }
+.tabla-salidas-mes tr.grupo th, .tabla-salidas-mes tr.grupo td, .tabla-salidas-mes tfoot th, .tabla-salidas-mes tfoot td { font-weight: 600; }
+.tabla-salidas .vehiculo-detalle { display: block; }
