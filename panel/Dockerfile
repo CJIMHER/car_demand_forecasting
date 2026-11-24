@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Solo lo que necesita el panel: su código, la configuración del concesionario y los módulos
 # compartidos de ingesta (provincias y concesionario). El código es de root y de solo lectura.
 COPY config/ /app/config/
-COPY ingesta/__init__.py ingesta/provincias.py ingesta/concesionario.py /app/ingesta/
+COPY ingesta/__init__.py ingesta/provincias.py ingesta/concesionario.py ingesta/campanas.py ingesta/canales.py ingesta/referencias_meta.py /app/ingesta/
 COPY panel/ /app/panel/
 
 USER panel
