@@ -1,5 +1,30 @@
 # Cambios
 
+## 2026-11-24 · Previsión bayesiana de leads, citas y ventas de Meta (rama hito-2-prevision)
+
+- **Modelo** (`analitica/prevision.py`), de fórmula cerrada y con numpy:
+  - leads por semana según el gasto: regresión bayesiana log-log con el mes y el régimen 2026, posterior
+    normal-gamma inversa conjugada;
+  - lead a cita y cita a venta: beta-binomiales;
+  - por tipo, y cada modelo con agrupamiento parcial hacia su tipo.
+- **Previsión** de las 4 semanas siguientes por simulación (`analitica/predictiva.py`), con mediana e
+  intervalo del 80 %. El gasto previsto es la media de las 2 últimas semanas de cada campaña activa.
+- **Validación hacia atrás** de 12 semanas, frente a la media de las últimas 4 semanas: error absoluto medio
+  y cobertura, con el gasto que hubo y con el previsto. Si no mejora en leads con el gasto que hubo, la
+  previsión de ese tipo no se publica en el panel (regla del proyecto) y se dice por qué. Google Trends solo
+  si hay entregas y mejora la validación.
+- **Migración `0022`**: `panel_prevision_modelo` y `panel_prevision_semana` (contrato del panel) y
+  `panel_prevision_validacion`.
+- **Panel**:
+  - Marketing → «Previsión 4 semanas»: por tipo y modelo, escenarios de gasto (−50 %, actual, +50 %, +100 %)
+    recalculados con la posterior guardada, y «para conseguir N citas haría falta X € a la semana».
+  - Dirección → ventas previstas de las campañas de Meta, por VN y VO.
+  - Estado de las fuentes → la validación.
+- **Cada noche**, en la tarea `precalcular` (después de Mercado, antes de las alertas), y con `make
+  prevision`. Parámetros en `config/prevision.yaml`. numpy entra en `requirements.txt`; el panel copia
+  `analitica/predictiva.py` (prueba del Dockerfile ampliada a analitica).
+- Resumen y validación en `docs/hitos/hito_2_prevision_resumen.md`.
+
 ## 2026-11-24 · Salidas de nuestro stock como estimación de ventas (rama hito-1b-salidas-stock)
 
 - **Cálculo** (`analitica/salidas.py`, dentro de `make precalcular`): un anuncio NUESTRO visto el día D tiene

@@ -19,7 +19,7 @@ PYTHON ?= .venv/bin/python
         estado copia restaurar-prueba test hora logs ps psql precalcular panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
         ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas gtrends gtrends-enlaces gtrends-subir \
-        meta-historico walcu-cargar walcu-agregar referencias-meta
+        meta-historico walcu-cargar walcu-agregar referencias-meta prevision
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -82,6 +82,9 @@ panel-logs: ## Registros del panel y de Caddy
 
 precalcular: ## Precálculo del panel; sin argumentos rehace todo el histórico, DIA=AAAA-MM-DD solo ese día
 	$(JOBS) python -m analitica.mercado $${DIA:+--dia $$DIA}
+
+prevision: ## Previsión de leads, citas y ventas de Meta con su validación (también cada noche tras el precálculo)
+	$(JOBS) python -m analitica.prevision
 
 # Datos de ejemplo de Dirección, Ventas y Marketing (docs/contrato_panel.md). Solo con
 # PANEL_PERMITE_EJEMPLO=1 en el .env; solo tocan las filas origen = 'ejemplo' de las tablas del contrato.

@@ -18,10 +18,11 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Solo lo que necesita el panel: su código, la configuración del concesionario y los módulos de
-# ingesta que importa, también dentro de funciones e indirectamente (lo comprueba
+# ingesta y de analitica que importa (de analitica, solo la simulación de la previsión), también dentro de funciones e indirectamente (lo comprueba
 # tests/test_infra_panel.py). El código es de root y de solo lectura.
 COPY config/ /app/config/
 COPY ingesta/__init__.py ingesta/provincias.py ingesta/concesionario.py ingesta/campanas.py ingesta/canales.py ingesta/referencias_meta.py ingesta/db.py /app/ingesta/
+COPY analitica/__init__.py analitica/predictiva.py /app/analitica/
 COPY panel/ /app/panel/
 
 USER panel

@@ -33,6 +33,31 @@ mediano solo con precio). Zonas: la provincia del concesionario, su comunidad y 
 segmentos, además, la mediana de nuestro precio y la de la competencia por separado, con su n: las
 usan los criterios de Meta (regla e y contexto de la d).
 
+## prevision.py y predictiva.py · previsión de leads, citas y ventas de Meta (`make prevision`)
+
+Cada noche, después del precálculo de Mercado (en la tarea `precalcular`, antes de las alertas), o con `make
+prevision`. Lee `panel_campana_semana` (Meta y Walcu por semana, que rehace la descarga de Meta de las 06:00) y
+escribe `panel_prevision_modelo`, `panel_prevision_semana` y `panel_prevision_validacion`.
+
+- **Leads**: regresión bayesiana de log(leads + 1) sobre log(gasto + 1) (rendimientos decrecientes), el mes y
+  el régimen (antes de `regimen_desde`, con nivel y pendiente propios). La posterior es normal-gamma inversa
+  conjugada, de fórmula cerrada. Por tipo; cada modelo parte de la posterior de su tipo, con su incertidumbre
+  multiplicada por `modelo_inflar`.
+- **Lead a cita y cita a venta**: Beta-binomiales. El tipo, con sus semanas completas desde `regimen_desde`;
+  cada modelo, con la media de su tipo valiendo `peso_tipo` leads (o citas).
+- **Previsión** (`predictiva.py`, solo numpy, también la usa el panel): simulación de leads, citas y ventas
+  de cada semana con una semilla fija por grupo. Da la mediana y el intervalo de `intervalo`.
+- **Gasto previsto**: la media de las últimas `semanas_gasto` semanas terminadas de cada campaña activa
+  (estado ACTIVE o, sin estado, con gasto la última semana). Sin gasto, 0.
+- **Validación**: las últimas `validacion.semanas` semanas con datos completos, como orígenes.
+  - En cada origen se entrena con lo que se sabía entonces, sin mirar al futuro: las citas y ventas solo de
+    las semanas ya completas.
+  - Se prevén las semanas siguientes con el gasto que hubo y con el previsto, frente a la media de las últimas
+    `semanas_referencia`.
+  - Si con el gasto que hubo no mejora en leads, el panel no la publica.
+- **Google Trends**: solo con entregas cargadas, y solo si baja el error de los leads; el resumen lo dice.
+- Pruebas: `tests/test_prevision.py`.
+
 ## salidas.py · salidas de nuestro stock publicado (en el mismo precálculo)
 
 `panel_salidas_stock` (contrato del panel, origen `real`): estimación de ventas mientras no lleguen las del

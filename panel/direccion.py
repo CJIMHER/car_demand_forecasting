@@ -29,6 +29,7 @@ from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
 from panel import precio as pr
+from panel import prevision as pv
 from panel import salidas as sal
 
 # Bloques cuya fuente real aún no existe: lo que dicen en vez de datos de ejemplo
@@ -183,7 +184,7 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, h
         "tipos": ng.selector_tipo("/direccion", tipo, "#direccion",
                                   f"&{pr.PARAMETRO}={quote(modelo_vo, safe='')}" if modelo_vo else ""),
         "fecha": fmt.fecha_larga(hoy),
-        "ventas_mes": ventas_mes, "salidas": salidas, "alertas": alertas, "edad": edad, "mercado": mercado(pg, conc, tipo),
+        "ventas_mes": ventas_mes, "salidas": salidas, "prevision": pv.direccion(pg, org["prevision"], tipo), "alertas": alertas, "edad": edad, "mercado": mercado(pg, conc, tipo),
         "precio": pr.bloque(pg, conc, org["precio"], modelo_vo, f"/direccion?tipo={tipo}", "#direccion"),
         "origenes": org,
     }

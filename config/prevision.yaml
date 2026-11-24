@@ -1,0 +1,58 @@
+# Previsión bayesiana de leads, citas y ventas de las campañas de Meta (analitica/prevision.py).
+#
+# Tres piezas: (1) leads por semana según el gasto, regresión bayesiana de log(leads + 1) sobre
+# log(gasto en euros + 1), el mes del año y el régimen (antes / desde regimen_desde), con prior normal-gamma
+# inversa conjugada; (2) lead a cita y (3) cita a venta, beta-binomiales con agrupamiento parcial de cada
+# modelo hacia su tipo. La previsión simula leads, citas y ventas de las próximas semanas.
+#
+# Tras cambiarlo: make prevision.
+
+# Desde este día, la central controla los leads: es el régimen base. Lo anterior solo aporta la
+# estacionalidad del mes (y su nivel y pendiente propios, que no se usan para prever).
+regimen_desde: 2026-01-01
+
+# Semanas que se prevén, empezando por la semana en curso
+semanas: 4
+# Gasto previsto por defecto: la media de las últimas N semanas terminadas de cada campaña activa
+semanas_gasto: 2
+# Intervalo que se enseña (0,80: del percentil 10 al 90)
+intervalo: 0.80
+# Simulaciones de la previsión (y de cada previsión de la validación)
+simulaciones: 2000
+simulaciones_validacion: 1000
+semilla: 1
+# Escenarios de gasto semanal del panel, en % sobre el gasto previsto (0 = el actual)
+escenarios_gasto: [-50, 0, 50, 100]
+# «Para conseguir N citas»: objetivo por defecto, en veces las citas previstas con el gasto actual
+objetivo_citas: 1.5
+# La búsqueda del gasto para N citas llega hasta este múltiplo del gasto previsto (o 1.000 € sin gasto)
+objetivo_gasto_maximo: 20
+
+# Validación hacia atrás: cada una de las últimas N semanas con datos completos es un origen; se entrena
+# hasta él y se prevén las semanas siguientes. Referencia: la media de las últimas semanas_referencia.
+validacion:
+  semanas: 12
+  semanas_referencia: 4
+
+# Priors. Leads: β | σ² ~ N(media, σ²·diag(sd²)); σ² ~ Gamma inversa(a, b).
+priors:
+  leads:
+    intercepto: {media: 0.0, sd: 10.0}
+    gasto: {media: 0.5, sd: 1.0}         # elasticidad de los leads al gasto (log-log): < 1, rendimientos decrecientes
+    mes: {media: 0.0, sd: 0.3}           # efecto de cada mes: encogido hacia 0 si los datos son ruidosos
+    regimen: {media: 0.0, sd: 3.0}       # nivel y pendiente propios de antes de regimen_desde
+    trends: {media: 0.0, sd: 1.0}        # Google Trends, solo si hay entregas y mejora la validación
+    a: 2.0
+    b: 0.5
+  # Cada modelo parte de lo de su tipo, con la incertidumbre del tipo multiplicada por esto
+  modelo_inflar: 4.0
+  # Tasas: el tipo con Beta(a, b) sobre sus datos desde regimen_desde; cada modelo, con la media de su tipo
+  # valiendo lo que estos leads (o citas)
+  tasa_tipo: {a: 1.0, b: 1.0}
+  peso_tipo: 30
+
+# Por debajo de esto, el modelo se marca «pocos datos» en el panel
+pocos_datos:
+  semanas: 12        # semanas con leads de Walcu y gasto
+  leads_citas: 50    # leads de semanas con las citas completas
+  citas_ventas: 20   # citas de semanas con las ventas completas

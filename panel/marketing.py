@@ -649,11 +649,19 @@ def referencias(pg, origen, tipo: str = "todo") -> dict:
                      anio_ref=anios[0], incompletas="; ".join(incompletas))
 
 
+SEMANAS_PREVISION = 4
+
+
 def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, hoy: date,
-          tipo: str = "todo") -> dict:
+          tipo: str = "todo", gasto: int = 0, objetivos: dict | None = None) -> dict:
+    """`gasto`: escenario de gasto de la previsión (% sobre el previsto); `objetivos`: citas objetivo por tipo
+    para «cuánto gasto haría falta»."""
+    from panel import prevision as pp
     org = contrato.origenes(modos, "marketing")
     return {
-        "tipo": tipo, "tipos": ng.selector_tipo("/marketing", tipo, "#marketing", f"&orden={orden}"),
+        "prevision": pp.marketing(pg, org["prevision"], tipo, gasto, objetivos or {}, SEMANAS_PREVISION,
+                                  f"/marketing?tipo={tipo}&orden={orden}", "#marketing"),
+        "tipo": tipo, "orden": orden, "tipos": ng.selector_tipo("/marketing", tipo, "#marketing", f"&orden={orden}"),
         "kpis": kpis(pg, org["kpis"], tipo), "recomendacion": recomendacion(pg, org["recomendacion"], tipo),
         "campanas": campanas(pg, org["campanas"], orden, tipo),
         "atencion": atencion(pg, org["atencion"]) if tipo != "VO" else None,

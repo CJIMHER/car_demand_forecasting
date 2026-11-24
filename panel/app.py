@@ -25,7 +25,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
-from panel import alertas, contrato, direccion, formato, marketing, mercado, permisos, ventas
+from panel import alertas, contrato, direccion, formato, marketing, mercado, permisos, prevision, ventas
 from panel import seguridad as seg
 from panel.estaticos import Estaticos, Huellas
 
@@ -378,17 +378,23 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
                       pg=pg, usuario=u)
 
     @app.get("/marketing")
-    def vista_marketing(request: Request, tipo: str = "todo", orden: str = "venta", pg=Depends(bd)):
+    def vista_marketing(request: Request, tipo: str = "todo", orden: str = "venta", gasto: str = "0",
+                        citas_VN: str = "", citas_VO: str = "", pg=Depends(bd)):
         tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
         orden = orden if orden in ("venta", "gasto") else "venta"
+        escenario = int(gasto) if gasto.lstrip("-").isdigit() and len(gasto) <= 4 else 0
+        objetivos = {t: min(int(v), 100_000) for t, v in (("VN", citas_VN), ("VO", citas_VO))
+                     if v.isdigit() and int(v) > 0}
         return vista_contrato(request, pg, "marketing", "marketing.html", "_marketing.html", lambda: {
-            "d": marketing.datos(pg, app.state.conc, modos_de(request, pg), orden, app.state.hoy(), tipo)})
+            "d": marketing.datos(pg, app.state.conc, modos_de(request, pg), orden, app.state.hoy(), tipo, escenario,
+                                 objetivos)})
 
     @app.get("/estado-fuentes")
     def estado(request: Request, pg=Depends(bd)):
         u = exigir(request, pg, "estado")
         return pintar(request, "estado_fuentes.html", {"e": mercado.estado_fuentes(pg), "vista": "estado",
                                                        "motor": alertas.estado_motor(pg),
-                                                       "trafico": alertas.estado_trafico(pg)}, pg=pg, usuario=u)
+                                                       "trafico": alertas.estado_trafico(pg),
+                                                       "prevision": prevision.validacion(pg)}, pg=pg, usuario=u)
 
     return app

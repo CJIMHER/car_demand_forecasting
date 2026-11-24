@@ -146,7 +146,11 @@ def test_variables_nuevas_en_env_example_sin_valor():
 def test_precalculo_en_tarea_y_cron():
     tarea = (RAIZ / "infra/jobs/tarea.sh").read_text()
     assert "precalcular) python -m analitica.mercado --ultimos 8" in tarea
+    # Después del precálculo, la previsión (antes de las alertas de las 09:15)
+    linea = tarea[tarea.index("precalcular) "):].split(";;")[0]
+    assert linea.index("analitica.mercado") < linea.index("python -m analitica.prevision")
     makefile = (RAIZ / "Makefile").read_text()
+    assert "\nprevision: ##" in makefile and "python -m analitica.prevision" in makefile
     assert "python -m analitica.mercado $${DIA:+--dia $$DIA}" in makefile
 
 
@@ -184,8 +188,8 @@ def _fichero(modulo):
     return ruta if ruta.exists() else None
 
 
-def _ingesta_del_panel():
-    """Módulos de ingesta que el panel importa, directa o indirectamente, con quién los pide."""
+def _ingesta_del_panel(paquete="ingesta"):
+    """Módulos de ingesta (o de analitica) que el panel importa, directa o indirectamente, con quién los pide."""
     pendientes = [(f"panel.{p.stem}", None) for p in sorted((RAIZ / "panel").glob("*.py"))
                   if f"panel.{p.stem}" not in FUERA_DE_LA_IMAGEN]
     vistos = {}
@@ -195,9 +199,9 @@ def _ingesta_del_panel():
             continue
         vistos[modulo] = desde
         for dep in _importados(_fichero(modulo), modulo):
-            if dep.split(".")[0] in ("panel", "ingesta") and _fichero(dep):
+            if dep.split(".")[0] in ("panel", "ingesta", "analitica") and _fichero(dep):
                 pendientes.append((dep, modulo))
-    return {m: d for m, d in vistos.items() if m.startswith("ingesta.")}
+    return {m: d for m, d in vistos.items() if m.startswith(f"{paquete}.")}
 
 
 def test_dockerfile_del_panel_copia_todo_lo_que_importa_de_ingesta():
@@ -211,3 +215,18 @@ def test_dockerfile_del_panel_copia_todo_lo_que_importa_de_ingesta():
     faltan = sorted(f"{m.replace('.', '/')}.py (lo importa {d})" for m, d in necesarios.items()
                     if f"{m.replace('.', '/')}.py" not in copiados)
     assert not faltan, "faltan en el COPY de panel/Dockerfile: " + ", ".join(faltan)
+
+
+def test_dockerfile_del_panel_copia_todo_lo_que_importa_de_analitica():
+    """La previsión se recalcula en el panel (escenarios de gasto): necesita analitica/predictiva.py, y nada más
+    de analitica (el resto lleva el entrenamiento y las tablas de hechos)."""
+    copias = [linea.split()[1:-1] for linea in (RAIZ / "panel/Dockerfile").read_text().splitlines()
+              if linea.startswith("COPY ") and linea.rstrip().endswith("/app/analitica/")]
+    assert len(copias) == 1, "una sola línea COPY analitica/… /app/analitica/"
+    copiados = set(copias[0])
+    necesarios = _ingesta_del_panel("analitica")
+    assert "analitica.predictiva" in necesarios
+    faltan = sorted(f"{m.replace('.', '/')}.py (lo importa {d})" for m, d in necesarios.items()
+                    if f"{m.replace('.', '/')}.py" not in copiados)
+    assert not faltan, "faltan en el COPY de panel/Dockerfile: " + ", ".join(faltan)
+    assert copiados == {"analitica/__init__.py", *(f"{m.replace('.', '/')}.py" for m in necesarios)}

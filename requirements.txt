@@ -15,3 +15,5 @@ argon2-cffi==23.1.0
 argon2-cffi-bindings==21.2.0
 # Conector de GA4 (hito 1b, sesión 3): firma RS256 del JWT de la cuenta de servicio
 cryptography==44.0.0
+# Previsión de leads, citas y ventas (hito 2): álgebra lineal y simulación, sin scipy
+numpy==2.1.3

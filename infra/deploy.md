@@ -517,6 +517,22 @@ umbrales están en `config/concesionario.yaml` (`salidas_stock`); tras cambiarlo
 ventas)»; Ventas → «Salidas de nuestro stock: últimas 4 semanas». Como el precio provisional, si hay datos de
 ejemplo de Ventas cargados, la vista sigue siendo «de ejemplo» (7.7).
 
+### 7.15 Previsión de leads, citas y ventas de Meta
+
+Una vez, en el servidor:
+
+```bash
+make deploy          # migración 0022 (tablas panel_prevision_*), numpy en las imágenes y el panel con los bloques
+make prevision       # entrena, valida y prevé (segundos); después, cada noche tras el precálculo
+```
+
+- Marketing → «Previsión 4 semanas».
+- Dirección → «Ventas previstas de las campañas de Meta».
+- Estado de las fuentes → la validación.
+
+Si un tipo no mejora a la referencia en la validación, el panel no enseña su previsión y dice por qué.
+Parámetros en `config/prevision.yaml`; tras cambiarlos, commit, `make deploy` y `make prevision`.
+
 ## 8. Día a día
 
 ```bash

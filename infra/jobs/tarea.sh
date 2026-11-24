@@ -23,7 +23,10 @@ echo "== $(date -Is) inicio $TAREA"
 case "$TAREA" in
   cargar)    python -m ingesta.scrapers_vw cargar ;;
   comprobar) python -m ingesta.scrapers_vw comprobar ;;
-  precalcular) python -m analitica.mercado --ultimos 8 ;;
+  # Precálculo de Mercado y, después (Meta de las 06:00 ya cruzado con Walcu), la previsión de leads, citas
+  # y ventas, antes de las alertas de las 09:15. Si falla uno, el otro se intenta igual.
+  precalcular) python -m analitica.mercado --ultimos 8; R1=$?; python -m analitica.prevision; R2=$?
+               [ "$R1" -eq 0 ] && [ "$R2" -eq 0 ] ;;
   alertas)   python -m alertas.motor ;;
   meta)      python -m ingesta.meta ;;
   ga4)       python -m ingesta.ga4 ;;

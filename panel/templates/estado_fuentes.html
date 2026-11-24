@@ -218,6 +218,26 @@
     <p class="nota">Reglas en config/canales.yaml: valores de Google Analytics que no son campañas, canales por fuente y medio (en orden; si ninguno casa, la agrupación de canales de Google Analytics y, si tampoco, «Otros») y las palabras de la página de destino que dicen si es de nuevos o de ocasión («Sin tipo de página»: cuentan solo en «Todo» en Marketing). Para sacar una fuente de «Otros», añadirla a su canal y ejecutar make campanas. Las campañas de Google Ads se guardan con su nombre, sin reglas ni criterios.</p>
   </section>
 
+  <section class="tarjeta" aria-labelledby="t-prevision" data-bloque="prevision-validacion">
+    <h2 id="t-prevision">Previsión de leads, citas y ventas: validación hacia atrás</h2>
+    {% if prevision.hay %}
+    <h3 class="h3-tabla">Cálculo del {{ prevision.dia }}</h3>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-validacion">
+        <thead><tr><th scope="col" class="izq">Tipo</th><th scope="col" class="izq">Nivel</th><th scope="col" class="izq">Medida</th><th scope="col" class="izq">Gasto usado</th><th scope="col">Semanas</th><th scope="col">Error medio del modelo</th><th scope="col">Error de la referencia</th><th scope="col">Mejora</th><th scope="col">Cobertura del 80 %</th><th scope="col">Periodo</th></tr></thead>
+        <tbody>
+        {% for f in prevision.filas %}
+          <tr><th scope="row" class="izq">{{ f.tipo }}{% if f.trends %} · Trends{% endif %}</th><td class="izq">{{ f.nivel }}</td><td class="izq">{{ f.medida }}</td><td class="izq">{{ f.variante }}</td><td>{{ f.n }}</td><td>{{ f.mae_modelo }}</td><td>{{ f.mae_referencia }}</td><td{% if f.mejora == "No" %} class="aviso"{% endif %}>{{ f.mejora }}</td><td{% if f.cobertura_fuera %} class="aviso"{% endif %}>{{ f.cobertura }}</td><td>{{ f.periodo }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="nota">Cada una de las últimas semanas con datos completos es un origen: se entrena con lo que se sabía entonces y se prevén las 4 semanas siguientes. Error medio: error absoluto medio por semana. Referencia: la media de las 4 últimas semanas conocidas. Cobertura: cuántas veces lo real cayó en el intervalo del 80 % (debería estar entre el 70 y el 90 %; fuera, en naranja). «Gasto que hubo»: con el gasto real de esas semanas; «Gasto previsto»: con el que se habría previsto (la media de las 2 semanas anteriores). Google Trends: en la última anotación de panel_prevision.</p>
+    {% else %}
+    <p class="sin-datos">Sin datos todavía: aparece tras el primer make prevision con semanas de Meta y Walcu.</p>
+    {% endif %}
+  </section>
+
   <section class="tarjeta" aria-labelledby="t-anotaciones">
     <h2 id="t-anotaciones">Últimas anotaciones por fuente y tipo</h2>
     <div class="tabla-scroll">

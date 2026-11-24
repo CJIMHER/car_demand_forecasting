@@ -675,7 +675,8 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     # 2. El resto de Dirección (con el precio de nuestros VO, que llega del precálculo de Mercado): la vista
     # se abre a dirección, sin banda ni etiquetas
     a_real(pg, "panel_ventas_mes", "panel_alertas", "panel_precio_vo", "panel_campana_semana", "panel_referencia_meta",
-           "panel_trafico_canal_dia", "panel_salidas_stock")
+           "panel_trafico_canal_dia", "panel_salidas_stock", "panel_prevision_semana",
+           "panel_prevision_modelo")
     html = dire.get("/direccion").text
     assert _ve(dire, "/direccion") and BANDA not in html and ETIQUETA not in html
     assert 'href="/direccion"' in html

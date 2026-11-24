@@ -90,6 +90,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Dirección | Campañas de Meta con Walcu, últimas 4 semanas (lo mismo que Marketing) | `panel_campana_semana` y `panel_campana_decision` |
 | Dirección | Referencias por año (2025 frente a 2026) | `panel_referencia_meta` |
 | Dirección | Tráfico de la web por canal (GA4) | `panel_trafico_canal_dia` |
+| Dirección | Ventas previstas de las campañas de Meta, próximas 4 semanas, por VN y VO | `panel_prevision_modelo` y `panel_prevision_semana` |
 | Dirección y Ventas | Precio de nuestros VO | `panel_precio_vo` |
 | Ventas | Resumen y lista de vehículos | `panel_riesgo_vehiculo` |
 | Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
@@ -105,6 +106,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Marketing | Tráfico de la web por canal | `panel_trafico_canal_dia` |
 | Marketing | Campañas de las últimas 4 semanas (Meta y Walcu) | `panel_campana_semana` y la decisión de `panel_campana_decision` |
 | Marketing | Referencias históricas | `panel_referencia_meta` |
+| Marketing | Previsión 4 semanas (escenarios de gasto y «para conseguir N citas», recalculados con la posterior guardada) | `panel_prevision_modelo` |
 
 **Marketing por tipo.** La vista tiene el selector Todo / Nuevos (VN) / Ocasión (VO):
 
@@ -543,6 +545,41 @@ Las de 2025 (`criterios_meta.c.referencia_anio`) son la «media» de las reglas 
   las ventas del CRM».
 - **Cifras de Ventas**: las salidas de las últimas 4 semanas, un coche por fila: fecha (provisional en gris),
   último precio, días publicado, mediana del segmento y la diferencia del precio frente a ella.
+
+### panel_prevision_modelo y panel_prevision_semana · previsión de leads, citas y ventas de Meta
+
+Las escribe `analitica/prevision.py` (`make prevision` y cada noche, tras el precálculo), con origen `real`;
+recalcular un día sustituye sus filas reales. Parámetros en `config/prevision.yaml`.
+
+- **panel_prevision_modelo**. Grano: día × tipo (VN, VO; `modelo` NULL) y × modelo con campaña. Es la
+  posterior de las tres piezas:
+  - leads: regresión de log(leads + 1) sobre log(gasto + 1), mes y régimen. Columnas `columnas`, `media` y
+    `covarianza` (V; la de β es σ²·V) y `a`, `b` (σ² ~ Gamma inversa).
+  - lead a cita: `cita_a`, `cita_b` (Beta); cita a venta: `venta_a`, `venta_b`.
+  - `trends`: el índice de Google Trends usado, o NULL si no se usa.
+  - Para simular igual en el panel: `primera_semana`, `gasto_semanal_cents` (gasto previsto),
+    `regimen_desde`, `simulaciones`, `semilla` e `intervalo`.
+  - Datos: `semanas`, `leads_citas`, `citas_ventas`, `pocos_datos` y `motivo`; `ultima_semana` es la del
+    aviso «Previsión con datos hasta la semana del …».
+  - **Publicación** (regla del proyecto: si no bate a la referencia, no se despliega): `validada` es true si,
+    en la validación, el error de los leads con el gasto que hubo es menor que el de la media de las últimas
+    semanas. `validacion` lleva la cifra o el motivo. `aviso_gasto` avisa si con el gasto previsto no mejora.
+    Sin `validada`, el panel no enseña la cifra: dice por qué.
+- **panel_prevision_semana**. Grano: día × tipo × modelo × semana (NULL: el total) × escenario (% sobre el gasto
+  previsto, de `escenarios_gasto`). Columnas `gasto_cents`, `leads_p10`/`p50`/`p90`, `citas_…`, `ventas_…`
+  (intervalo del 80 %), `modelo_version`, `n` (semanas de entrenamiento) y `pocos_datos`.
+- **Cifras de Marketing**: «Previsión 4 semanas», por tipo y por modelo con campaña activa. Muestra el total
+  de las semanas (mediana e intervalo) con el escenario de gasto elegido (`?gasto=`), recalculado en el panel
+  con la posterior guardada (`analitica/predictiva.py`, misma semilla: el escenario actual da lo mismo que
+  `panel_prevision_semana`). Por tipo, «Para conseguir N citas en 4 semanas haría falta un gasto de X € a la
+  semana (entre A y B)» (`?citas_VN=`, `?citas_VO=`).
+- **Cifras de Dirección**: las ventas de Meta del total de las semanas, escenario actual, por VN y VO
+  (`panel_prevision_semana`), diciendo que no es el total del concesionario.
+
+Fuera del contrato (siempre real, en «Estado de las fuentes»): `panel_prevision_validacion`. Es la validación
+hacia atrás por tipo, nivel (`tipo` o `modelo`), medida y variante (`gasto_real`: con el gasto que hubo;
+`gasto_previsto`: con el que se habría previsto). Lleva `n`, `mae_modelo`, `mae_referencia` (media de las
+últimas semanas), `cobertura` del intervalo, `mejora`, periodo y `trends`.
 
 Fuera del contrato: `panel_walcu_sin_cruce` (lo que no casa entre Meta y Walcu, con el motivo; lo escribe
 `make referencias-meta`).

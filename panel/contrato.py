@@ -30,6 +30,7 @@ TABLAS = (
     "panel_recomendacion_modelo", "panel_atencion_relativa", "panel_semana_campana",
     "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_semana", "panel_referencia_meta",
     "panel_campana_otra_marca", "panel_precio_vo", "panel_salidas_stock",
+    "panel_prevision_modelo", "panel_prevision_semana",
 )
 
 # Tablas del motor de alertas (migración 0009) con el mismo formato (dia, origen, calculado_at). No
@@ -55,6 +56,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "marketing": ("panel_campana_semana", "panel_campana_decision"),   # Meta y Walcu, últimas 4 semanas
         "referencias": ("panel_referencia_meta",),  # 2025 frente a 2026
         "trafico": ("panel_trafico_canal_dia",),    # GA4 por canal
+        "prevision": ("panel_prevision_modelo", "panel_prevision_semana"),   # ventas de Meta, próximas 4 semanas
     },
     "ventas": {
         "resumen": ("panel_riesgo_vehiculo",),
@@ -76,6 +78,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "trafico": ("panel_trafico_canal_dia",),    # tráfico de la web por canal (GA4)
         "mes": ("panel_campana_semana", "panel_campana_decision"),   # últimas 4 semanas: Meta y Walcu por campaña
         "referencias": ("panel_referencia_meta",),  # referencias históricas de coste (por año)
+        "prevision": ("panel_prevision_modelo",),   # previsión 4 semanas, con escenarios de gasto (analitica/prevision.py)
         "alertas": ALERTAS,
     },
 }

@@ -577,3 +577,13 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .tabla-salidas-mes .provisional, .tabla-salidas tr.provisional, .tabla-salidas tr.provisional .vehiculo-nombre { color: var(--gris); }
 .tabla-salidas-mes tr.grupo th, .tabla-salidas-mes tr.grupo td, .tabla-salidas-mes tfoot th, .tabla-salidas-mes tfoot td { font-weight: 600; }
 .tabla-salidas .vehiculo-detalle { display: block; }
+
+/* Previsión de leads, citas y ventas */
+.bloque-prevision { margin-top: 24px; }
+.tabla-prevision td .n { display: block; color: var(--gris); font-size: 13px; }
+.tabla-prevision tr.grupo th, .tabla-prevision tr.grupo td { font-weight: 600; }
+.tabla-prevision tr.fila-inversa td { color: var(--gris); font-size: 14px; padding-top: 0; }
+.chip-pocos { background: var(--aviso-fondo); color: var(--aviso-texto); }
+.form-objetivo { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 12px; }
+.form-objetivo input { width: 7em; }
+.tabla-prevision tr.no-publicada td { color: var(--gris); }

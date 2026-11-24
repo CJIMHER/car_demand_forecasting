@@ -97,6 +97,26 @@
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 
+  <section aria-labelledby="t-dir-prevision" class="tarjeta bloque-prevision"{{ attrs("prevision", d.prevision) }}>
+    <div class="tarjeta-cabeza">
+      <h2 id="t-dir-prevision">Ventas previstas de las campañas de Meta{% if d.prevision.hay %} · próximas {{ d.prevision.n_semanas }} semanas ({{ d.prevision.periodo }}){% endif %}</h2>
+      <a class="boton-enlace" href="/marketing?tipo={{ d.tipo }}#marketing">Ver la previsión en Marketing</a>
+    </div>
+    {{ marca(d.prevision) }}
+    {% if d.prevision.hay %}
+    <div class="cifras-marketing">
+      {% for f in d.prevision.filas %}
+      {% if f.publicada %}
+      <div data-tipo="{{ f.tipo }}"><span class="kpi-etiqueta">{{ f.nombre }}{% if f.pocos %} · pocos datos{% endif %}</span><span class="kpi-valor">{{ f.p50 }}</span><span class="kpi-sub">entre {{ f.intervalo }} · gasto {{ f.gasto }} a la semana</span></div>
+      {% else %}
+      <div data-tipo="{{ f.tipo }}" data-publicada="no"><span class="kpi-etiqueta">{{ f.nombre }}</span><span class="kpi-sub">{{ f.validacion }}</span></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    <p class="nota">{{ d.prevision.nota }} {{ d.prevision.aviso }}. Mediana e intervalo del 80 %, con el gasto actual. «Ventas frente a lo previsto» del total sigue pendiente de la predicción de ventas.</p>
+    {% else %}{{ sin_datos() }}{% endif %}
+  </section>
+
   <div class="dos-columnas">
     <section aria-labelledby="t-edad" class="tarjeta tarjeta-ancha"{{ attrs("edad", d.edad) }}>
       <div class="tarjeta-cabeza">

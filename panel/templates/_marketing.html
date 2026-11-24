@@ -26,6 +26,62 @@
   </div>
   {% if d.kpis.nota %}<p class="nota kpis-nota">{{ d.kpis.nota }}</p>{% endif %}
 
+  <section aria-labelledby="t-prevision" class="tarjeta bloque-prevision"{{ attrs("prevision", d.prevision) }}>
+    <div class="tarjeta-cabeza">
+      <h2 id="t-prevision">Previsión {{ d.prevision.n_semanas or 4 }} semanas{% if d.prevision.hay %} · {{ d.prevision.periodo }}{% endif %}</h2>
+      {% if d.prevision.hay %}{{ segmentos("Gasto semanal", d.prevision.escenarios, "#marketing") }}{% endif %}
+    </div>
+    {{ marca(d.prevision) }}
+    {% if d.prevision.hay %}
+    <p class="aviso-provisional" role="note">{{ d.prevision.aviso }}. {{ d.prevision.nota }}</p>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-movil tabla-prevision">
+        <thead>
+          <tr>
+            <th scope="col" class="izq">Tipo y modelo</th>
+            <th scope="col">Gasto semanal</th>
+            <th scope="col">Leads</th>
+            <th scope="col">Citas</th>
+            <th scope="col">Ventas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in d.prevision.grupos %}
+          {% if not g.publicada %}
+          <tr class="no-publicada{% if g.es_tipo %} grupo{% endif %}" data-tipo="{{ g.tipo }}" data-modelo="{{ g.modelo or '' }}" data-publicada="no">
+            <th scope="row" class="izq">{{ g.nombre }}{% if not g.es_tipo %} <span class="chip chip-tipo">{{ g.tipo }}</span>{% endif %}</th>
+            <td colspan="4" class="izq">{{ g.validacion }}</td>
+          </tr>
+          {% else %}
+          <tr class="{% if g.es_tipo %}grupo{% endif %}{% if g.pocos %} pocos-datos{% endif %}" data-tipo="{{ g.tipo }}" data-modelo="{{ g.modelo or '' }}">
+            <th scope="row" class="izq">{{ g.nombre }}{% if not g.es_tipo %} <span class="chip chip-tipo">{{ g.tipo }}</span>{% endif %}{% if g.pocos %} <span class="chip chip-pocos" title="{{ g.motivo }}">Pocos datos</span>{% endif %}</th>
+            <td data-etiqueta="Gasto semanal">{{ g.gasto }}</td>
+            {% for m in ("leads", "citas", "ventas") %}
+            <td data-etiqueta="{{ m|capitalize }}" class="c-{{ m }}">{{ g[m].p50 }}<span class="n">{{ g[m].intervalo }}</span></td>
+            {% endfor %}
+          </tr>
+          {% if g.inversa %}
+          <tr class="fila-inversa" data-tipo="{{ g.tipo }}"><td colspan="5" class="izq">{{ g.inversa }}</td></tr>
+          {% endif %}
+          {% if g.es_tipo %}
+          <tr class="fila-inversa fila-validacion" data-tipo="{{ g.tipo }}"><td colspan="5" class="izq">{{ g.validacion }}{% if g.aviso_gasto %} <strong>{{ g.aviso_gasto }}</strong>{% endif %}</td></tr>
+          {% endif %}
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <form class="form-objetivo" method="get" action="/marketing#marketing">
+      <input type="hidden" name="tipo" value="{{ d.tipo }}"><input type="hidden" name="orden" value="{{ d.orden or 'venta' }}"><input type="hidden" name="gasto" value="{{ d.prevision.escenario }}">
+      {% for g in d.prevision.grupos if g.es_tipo and g.publicada %}
+      <label>Citas objetivo {{ g.tipo }} <input type="number" name="citas_{{ g.tipo }}" min="1" max="100000" value="{{ g.objetivo }}"></label>
+      {% endfor %}
+      <button type="submit" class="boton-accion secundario">Calcular el gasto</button>
+    </form>
+    <p class="nota">Total de las {{ d.prevision.n_semanas }} semanas: la mediana y, debajo, el intervalo del {{ d.prevision.pct }} % (8 de cada 10 veces cae ahí). Con el gasto semanal del escenario (actual: la media de las 2 últimas semanas de cada campaña activa); sin gasto, 0. Los modelos no suman el tipo: cada uno es su propia previsión, apoyada en la de su tipo cuando tiene pocos datos{% if d.prevision.hay_pocos %} («Pocos datos»: pasa el ratón por encima para ver por qué){% endif %}. La validación está en Estado de las fuentes. Calculado el {{ d.prevision.calculado }}.</p>
+    {% else %}{{ sin_datos() }}{% endif %}
+  </section>
+
   <section aria-labelledby="t-reco" class="seccion"{{ attrs("recomendacion", d.recomendacion) }}>
     <div class="tarjeta-cabeza"><h2 id="t-reco" class="h2-grande">Recomendación por modelo</h2>{{ marca(d.recomendacion) }}</div>
     {% if d.recomendacion.hay %}

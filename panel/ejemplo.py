@@ -524,6 +524,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     _referencias(filas, fin_meta)
     _precio_vo(filas, hoy, conc)
     _salidas(filas, hoy, conc)
+    _prevision(filas, hoy, conc)
     return filas
 
 
@@ -613,6 +614,45 @@ def _salidas(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) -> No
             "n_comparables": 2 if factor is None else 6 + i,
             "mediana_cents": None if factor is None else mediana,
         })
+
+
+# Previsión de ejemplo: (tipo, índice del modelo o None para el tipo, gasto semanal en euros, intercepto,
+# pocos datos)
+CASOS_PREVISION = (("VN", None, 1200, 0.30, False), ("VN", 0, 450, 0.20, False), ("VN", 1, 250, 0.10, True),
+                   ("VO", None, 700, 0.45, False), ("VO", 0, 300, 0.35, False))
+JSONB = ("motivos", "columnas", "media", "covarianza")
+
+
+def _prevision(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) -> None:
+    """panel_prevision_modelo y panel_prevision_semana: posteriores plausibles y su previsión, simulada igual que
+    en el precálculo (analitica/predictiva.py)."""
+    from analitica import predictiva as pd
+    primera = _lunes(hoy)
+    semanas = [primera + timedelta(weeks=j) for j in range(4)]
+    regimen = date(hoy.year, 1, 1)
+    sd = {"intercepto": 0.25, "gasto": 0.05, "regimen": 1.0, "regimen_gasto": 0.2}
+    for tipo, m, gasto, intercepto, pocos in CASOS_PREVISION:
+        modelos = list(conc.modelos_vn if tipo == "VN" else conc.modelos_vo)
+        modelo = None if m is None else modelos[m % len(modelos)]
+        cols = pd.COLUMNAS
+        media = [{"intercepto": intercepto, "gasto": 0.62}.get(c, 0.0) for c in cols]
+        cov = [[(sd.get(c, 0.1) ** 2 if i == j else 0.0) for j in range(len(cols))] for i, c in enumerate(cols)]
+        cita, venta = ((36.0, 84.0), (9.0, 81.0)) if tipo == "VN" else ((40.0, 60.0), (12.0, 88.0))
+        semilla = pd.semilla_grupo(1, tipo, modelo)
+        post = pd.Posterior(cols, tuple(media), tuple(map(tuple, cov)), 30.0, 2.7, cita, venta)
+        n = 8 if pocos else 40
+        filas["panel_prevision_modelo"].append({
+            "dia": hoy, "tipo": tipo, "modelo": modelo, "columnas": list(cols), "media": media, "covarianza": cov,
+            "a": 30.0, "b": 2.7, "cita_a": cita[0], "cita_b": cita[1], "venta_a": venta[0], "venta_b": venta[1],
+            "trends": None, "semanas": n, "leads_citas": 30 if pocos else 900, "citas_ventas": 9 if pocos else 250,
+            "pocos_datos": pocos, "motivo": "8 semanas con leads; 9 citas con las ventas completas" if pocos else None,
+            "ultima_semana": primera - timedelta(weeks=2), "primera_semana": primera,
+            "gasto_semanal_cents": gasto * 100, "regimen_desde": regimen, "simulaciones": 2000, "semilla": semilla,
+            "intervalo": 0.8, "validada": True, "aviso_gasto": None,
+            "validacion": "Validación de ejemplo: error medio de leads 21,4 por semana frente a 33,0 de la referencia."})
+        for f in pd.filas_semana(post, semanas, float(gasto), (-50, 0, 50, 100), regimen, 2000, semilla, 0.8):
+            filas["panel_prevision_semana"].append({"dia": hoy, "tipo": tipo, "modelo": modelo, **f,
+                                                    "modelo_version": "ejemplo", "n": n, "pocos_datos": pocos})
 
 
 def _lunes(d: date) -> date:
@@ -722,7 +762,7 @@ def cargar(pg: psycopg.Connection, hoy: date, conc: Concesionario) -> dict[str, 
             if not filas[t]:
                 continue
             cols = list(filas[t][0])
-            valores = [tuple(Jsonb(f[c]) if c == "motivos" else f[c] for c in cols) + (EJEMPLO,) for f in filas[t]]
+            valores = [tuple(Jsonb(f[c]) if c in JSONB else f[c] for c in cols) + (EJEMPLO,) for f in filas[t]]
             with pg.cursor() as cur:
                 cur.executemany(f"INSERT INTO {t} ({', '.join(cols)}, origen) VALUES "
                                 f"({', '.join(['%s'] * (len(cols) + 1))})", valores)

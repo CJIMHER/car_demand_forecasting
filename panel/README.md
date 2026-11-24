@@ -21,6 +21,7 @@ stock como estimación de ventas, precio provisional, Meta con Walcu, referencia
 | `contrato.py` | Qué tablas lee cada bloque y de qué origen (real o ejemplo; un bloque nunca los mezcla) |
 | `direccion.py`, `ventas.py`, `marketing.py`, `negocio.py` | Consultas de las tres vistas sobre las tablas del contrato |
 | `precio.py` | Bloque «Precio de nuestros VO» de Ventas y Dirección (`panel_precio_vo`), con el filtro por modelo |
+| `prevision.py` | Previsión de Meta: «Previsión 4 semanas» de Marketing (escenarios de gasto y gasto para N citas, recalculados con `analitica/predictiva.py`), resumen de Dirección y validación en Estado de las fuentes |
 | `salidas.py` | Salidas de nuestro stock (`panel_salidas_stock`): tarjeta y bloque por mes de Dirección, últimas 4 semanas en Ventas |
 | `alertas.py` | Alertas de las vistas: las del motor (tabla `alertas`) o, sin él, las de ejemplo; y el motor, las campañas sin regla y el tráfico de GA4 por canal en «Estado de las fuentes» |
 | `ejemplo.py` | Datos de ejemplo deterministas y coherentes entre vistas (`make ejemplo-cargar` / `ejemplo-borrar`) |
