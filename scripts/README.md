@@ -4,13 +4,15 @@ Herramientas que se ejecutan en el Mac, no en el servidor.
 
 ## walcu_agregar.py
 
-Agrega la exportación de leads de Walcu (`.xlsx` o `.csv`, tal como la saca el CRM) por mes, origen,
-campaña y tipo, y escribe el CSV que carga `make walcu-cargar` en el servidor.
+Agrega la exportación de leads de Walcu (`.xlsx` o `.csv`, tal como la saca el CRM) por semana (el lunes
+de la semana ISO de la fecha del lead), origen, campaña y tipo, y escribe el CSV que carga
+`make walcu-cargar` en el servidor. Las citas y las ventas de un lead cuentan en la semana del lead
+(cohorte), aunque lleguen después: reexportar y recargar semanas ya cargadas las actualiza.
 
-    make walcu-agregar ENTRADA=~/Descargas/leads.xlsx SALIDA=~/Descargas/walcu_agregado.csv
-    scp ~/Descargas/walcu_agregado.csv cdf@<ip>:/opt/cdf/entrada/
+    make walcu-agregar ENTRADA=~/Descargas/leads.xlsx SALIDA=~/Descargas/walcu_semanal.csv
+    scp -i ~/.ssh/cdf_hetzner ~/Descargas/walcu_semanal.csv cdf@<ip>:/opt/cdf/entrada/
     # en el servidor
-    make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_agregado.csv
+    make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_semanal.csv
 
 - Lee solo las columnas de `config/walcu_export.yaml` (Origen, Detalle campaña, Tipo de vehículo
   solicitado, Fecha Lead, Id negociación creada, Resultado última actividad, Estado, Motivo fracaso,

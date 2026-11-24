@@ -1,5 +1,6 @@
-"""Histórico de Meta, carga agregada de Walcu, cruce por nombre, referencias de coste y reglas con y sin
-Walcu (hito 1b, walcu-meta-hist). Sin red: Meta responde con respuestas simuladas.
+"""Histórico de Meta, carga semanal agregada de Walcu, cruce por nombre, referencias de coste, cohortes y
+reglas con y sin Walcu (hito 1b, walcu-meta-hist y walcu-semanal). Sin red: Meta responde con respuestas
+simuladas. Las cargas de Walcu se hacen «el» CARGA (cx.ahora fijo), que decide qué semanas están completas.
 """
 
 from __future__ import annotations
@@ -8,7 +9,7 @@ import csv
 import io
 import json
 import zipfile
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,15 @@ from ingesta.concesionario import cargar as cargar_concesionario
 from test_conectores import ENTORNO_META, Bucket, Red, Respuesta, _fila_meta, http
 
 HOY = date(2026, 11, 20)
+CARGA = datetime(2026, 11, 20, 9, 0, tzinfo=timezone.utc)      # día de las cargas de Walcu de las pruebas
 CABECERA = ",".join(walcu.COLUMNAS)
+
+
+@pytest.fixture(autouse=True)
+def reloj(monkeypatch):
+    """Cargas de Walcu siempre el 20-11-2026 (cada llamada, un microsegundo después: run_id distintos)."""
+    n = iter(range(10**6))
+    monkeypatch.setattr(cx, "ahora", lambda: CARGA + timedelta(microseconds=next(n)))
 
 
 def csv_walcu(*filas: str, cabecera: str = CABECERA) -> bytes:
@@ -31,10 +40,10 @@ def csv_walcu(*filas: str, cabecera: str = CABECERA) -> bytes:
 
 
 FILAS_BUENAS = (
-    "2025-03,Facebook,VW [VN][2025] T-Roc marzo,VN,20,14,4,2,4,1,2",
-    "2025-03,Facebook,VW [VN][2025] T-Roc marzo,VO,5,5,0,0,1,1,0",
-    "2025-03,AiVORA,(sin campaña),VN,30,30,0,0,10,5,0",
-    "2026-11,Facebook,\"Sin título 22/1/25, 15:18\",VN,3,1,1,1,0,0,0",
+    "2025-03-10,Facebook,VW [VN][2025] T-Roc marzo,VN,20,14,4,2,4,1,2",
+    "2025-03-10,Facebook,VW [VN][2025] T-Roc marzo,VO,5,5,0,0,1,1,0",
+    "2025-03-10,AiVORA,(sin campaña),VN,30,30,0,0,10,5,0",
+    "2026-11-09,Facebook,\"Sin título 22/1/25, 15:18\",VN,3,1,1,1,0,0,0",
 )
 
 
@@ -43,21 +52,21 @@ FILAS_BUENAS = (
 def test_valida_y_carga_un_fichero_correcto(pg):
     bucket = Bucket()
     r = walcu.cargar_con(pg, csv_walcu(*FILAS_BUENAS), "/Users/alguien/Descargas/walcu.csv", HOY, subir=bucket)
-    assert r["filas"] == 4 and r["desde"] == "2025-03" and r["hasta"] == "2026-11"
-    filas = pg.execute("SELECT fichero_origen, mes, origen, campana, tipo, leads, citas, ventas FROM walcu_campana_mes "
-                       "ORDER BY mes, origen, tipo").fetchall()
+    assert r["filas"] == 4 and r["semanas"] == 2 and r["desde"] == "2025-03-10" and r["hasta"] == "2026-11-09"
+    filas = pg.execute("SELECT fichero_origen, semana, origen, campana, tipo, leads, citas, ventas "
+                       "FROM walcu_campana_semana ORDER BY semana, origen, tipo").fetchall()
     assert len(filas) == 4 and {f[0] for f in filas} == {"walcu.csv"}           # sin la ruta del Mac
-    assert filas[0][1] == date(2025, 3, 1)
-    assert bucket.subidas[0][0] == f"walcu/agregado/{HOY}"                         # al bucket antes de escribir
+    assert filas[0][1] == date(2025, 3, 10)
+    assert bucket.subidas[0][0] == f"walcu/semanal/{HOY}"                          # al bucket antes de escribir
 
 
 def test_rechaza_un_fichero_con_un_correo_y_no_carga_nada(pg):
-    contenido = csv_walcu(FILAS_BUENAS[0], "2025-04,Facebook,Promo ana.perez@correo.es,VN,1,1,0,0,0,0,0")
+    contenido = csv_walcu(FILAS_BUENAS[0], "2025-04-07,Facebook,Promo ana.perez@correo.es,VN,1,1,0,0,0,0,0")
     with pytest.raises(walcu.ErrorWalcu) as exc:
         walcu.cargar_con(pg, contenido, "walcu.csv", HOY, subir=Bucket())
     texto = str(exc.value)
     assert "fila 3, columna campana: parece un correo (@)" in texto and "ana.perez" not in texto
-    assert pg.execute("SELECT count(*) FROM walcu_campana_mes").fetchone()[0] == 0
+    assert pg.execute("SELECT count(*) FROM walcu_campana_semana").fetchone()[0] == 0
 
 
 def test_rechaza_una_columna_de_mas_y_no_carga_nada(pg):
@@ -65,7 +74,7 @@ def test_rechaza_una_columna_de_mas_y_no_carga_nada(pg):
     with pytest.raises(walcu.ErrorWalcu) as exc:
         walcu.cargar_con(pg, contenido, "walcu.csv", HOY, subir=Bucket())
     assert "columnas que no están en la lista cerrada: «telefono»" in str(exc.value)
-    assert pg.execute("SELECT count(*) FROM walcu_campana_mes").fetchone()[0] == 0
+    assert pg.execute("SELECT count(*) FROM walcu_campana_semana").fetchone()[0] == 0
 
 
 @pytest.mark.parametrize("campana, que", [
@@ -74,15 +83,17 @@ def test_rechaza_una_columna_de_mas_y_no_carga_nada(pg):
 ])
 def test_rechaza_telefonos_dni_y_nie(campana, que):
     with pytest.raises(walcu.ErrorWalcu) as exc:
-        walcu.validar(csv_walcu(f"2025-04,Facebook,{campana},VN,1,1,0,0,0,0,0"))
+        walcu.validar(csv_walcu(f"2025-04-07,Facebook,{campana},VN,1,1,0,0,0,0,0"))
     assert que in str(exc.value) and campana.split()[-1] not in str(exc.value)
 
 
 @pytest.mark.parametrize("fila, motivo", [
-    ("2025-13,Facebook,X,VN,1,1,0,0,0,0,0", "columna mes: no es AAAA-MM"),
-    ("2025-04,Facebook,X,KM0,1,1,0,0,0,0,0", "columna tipo: debe ser VN o VO"),
-    ("2025-04,Facebook,X,VN,-1,1,0,0,0,0,0", "columna leads: no es un entero no negativo"),
-    ("2025-04,Facebook,,VN,1,1,0,0,0,0,0", "columna campana: vacía"),
+    ("2025-04,Facebook,X,VN,1,1,0,0,0,0,0", "columna semana: no es AAAA-MM-DD"),
+    ("2025-02-30,Facebook,X,VN,1,1,0,0,0,0,0", "columna semana: no es una fecha válida"),
+    ("2025-04-08,Facebook,X,VN,1,1,0,0,0,0,0", "columna semana: no es lunes"),
+    ("2025-04-07,Facebook,X,KM0,1,1,0,0,0,0,0", "columna tipo: debe ser VN o VO"),
+    ("2025-04-07,Facebook,X,VN,-1,1,0,0,0,0,0", "columna leads: no es un entero no negativo"),
+    ("2025-04-07,Facebook,,VN,1,1,0,0,0,0,0", "columna campana: vacía"),
 ])
 def test_rechaza_formatos(fila, motivo):
     with pytest.raises(walcu.ErrorWalcu) as exc:
@@ -92,27 +103,75 @@ def test_rechaza_formatos(fila, motivo):
 
 def test_falta_una_columna_o_se_repite_una_clave():
     with pytest.raises(walcu.ErrorWalcu, match="faltan columnas: num_inexistente"):
-        walcu.validar(csv_walcu("2025-04,Facebook,X,VN,1,1,0,0,0,0", cabecera=CABECERA.rsplit(",", 1)[0]))
-    with pytest.raises(walcu.ErrorWalcu, match="repite mes, origen, campaña y tipo de la fila 2"):
+        walcu.validar(csv_walcu("2025-04-07,Facebook,X,VN,1,1,0,0,0,0", cabecera=CABECERA.rsplit(",", 1)[0]))
+    with pytest.raises(walcu.ErrorWalcu, match="repite semana, origen, campaña y tipo de la fila 2"):
         walcu.validar(csv_walcu(FILAS_BUENAS[0], FILAS_BUENAS[0]))
 
 
+def test_un_lunes_que_no_es_de_su_semana_no_existe_y_el_mes_ya_no_vale():
+    # La cabecera mensual de antes no vale: «mes» no está en la lista cerrada
+    with pytest.raises(walcu.ErrorWalcu, match="columnas que no están en la lista cerrada: «mes»"):
+        walcu.validar(csv_walcu("2025-04,Facebook,X,VN,1,1,0,0,0,0,0", cabecera=CABECERA.replace("semana", "mes")))
+    # 30-12-2024 es lunes (semana 1 de 2025): vale
+    assert walcu.validar(csv_walcu("2024-12-30,Facebook,X,VN,1,1,0,0,0,0,0")).filas[0]["semana"] == date(2024, 12, 30)
+
+
+def test_un_domingo_rechaza_el_fichero_entero(pg):
+    with pytest.raises(walcu.ErrorWalcu, match="fila 3, columna semana: no es lunes"):
+        walcu.cargar_con(pg, csv_walcu(FILAS_BUENAS[0], "2025-03-16,Facebook,X,VN,1,1,0,0,0,0,0"), "w.csv", HOY,
+                         subir=Bucket())
+    assert pg.execute("SELECT count(*) FROM walcu_campana_semana").fetchone()[0] == 0
+
+
 def test_zonas_que_no_suman_es_aviso_no_rechazo():
-    v = walcu.validar(csv_walcu("2025-04,Facebook,X,VN,22,17,0,1,1,0,2"))
+    v = walcu.validar(csv_walcu("2025-04-07,Facebook,X,VN,22,17,0,1,1,0,2"))
     assert v.avisos == ["1 filas en que leads_cercana + leads_fuera + leads_sin_zona no suma leads"]
 
 
-def test_el_mismo_fichero_no_se_carga_dos_veces_y_recargar_un_mes_lo_sustituye(pg):
+@pytest.mark.parametrize("fila", ["2025-04-07,Facebook,X,VN,3,3,0,0,4,0,0", "2025-04-07,Facebook,X,VN,3,3,0,0,1,2,0"])
+def test_ventas_citas_leads_fuera_de_orden_es_aviso_no_rechazo(fila):
+    assert walcu.validar(csv_walcu(fila)).avisos == ["1 filas en que no se cumple ventas ≤ citas ≤ leads"]
+
+
+def test_el_mismo_fichero_no_se_carga_dos_veces_y_recargar_una_semana_la_sustituye(pg):
     walcu.cargar_con(pg, csv_walcu(*FILAS_BUENAS), "a.csv", HOY, subir=Bucket())
     assert "ya_cargado" in walcu.cargar_con(pg, csv_walcu(*FILAS_BUENAS), "a.csv", HOY, subir=Bucket())
-    assert pg.execute("SELECT count(*) FROM walcu_campana_mes").fetchone()[0] == 4
-    # Nueva carga de marzo de 2025 con otras cifras: sustituye a marzo; noviembre sigue
-    walcu.cargar_con(pg, csv_walcu("2025-03,Facebook,VW [VN][2025] T-Roc marzo,VN,25,20,4,1,5,2,0"), "b.csv", HOY,
+    assert pg.execute("SELECT count(*) FROM walcu_campana_semana").fetchone()[0] == 4
+    # Nueva carga de la semana del 10-03-2025 con otras cifras: la sustituye entera; la de noviembre sigue
+    walcu.cargar_con(pg, csv_walcu("2025-03-10,Facebook,VW [VN][2025] T-Roc marzo,VN,25,20,4,1,5,2,0"), "b.csv", HOY,
                      subir=Bucket())
-    vig = pg.execute("SELECT mes, campana, tipo, leads FROM walcu_campana_mes_vigente ORDER BY mes, tipo").fetchall()
-    assert vig == [(date(2025, 3, 1), "VW [VN][2025] T-Roc marzo", "VN", 25),
-                   (date(2026, 11, 1), "Sin título 22/1/25, 15:18", "VN", 3)]
-    assert pg.execute("SELECT count(*) FROM walcu_campana_mes").fetchone()[0] == 5   # nada se borra
+    vig = pg.execute("SELECT semana, campana, tipo, leads FROM walcu_campana_semana_vigente ORDER BY semana, tipo"
+                     ).fetchall()
+    assert vig == [(date(2025, 3, 10), "VW [VN][2025] T-Roc marzo", "VN", 25),
+                   (date(2026, 11, 9), "Sin título 22/1/25, 15:18", "VN", 3)]
+    assert pg.execute("SELECT count(*) FROM walcu_campana_semana").fetchone()[0] == 5   # nada se borra
+
+
+def test_la_tabla_semanal_es_de_solo_anadir_y_la_mensual_ya_no_existe(pg):
+    walcu.cargar_con(pg, csv_walcu(*FILAS_BUENAS), "a.csv", HOY, subir=Bucket())
+    with pytest.raises(Exception, match="solo"):
+        pg.execute("DELETE FROM walcu_campana_semana")
+    assert pg.execute("SELECT to_regclass('walcu_campana_mes'), to_regclass('panel_campana_mes')").fetchone() \
+        == (None, None)
+
+
+@pytest.mark.parametrize("domingo_mas, citas, ventas", [(13, False, False), (14, True, False), (59, True, False),
+                                                         (60, True, True)])
+def test_semanas_completas_desde_su_domingo(domingo_mas, citas, ventas):
+    c = ref.cargar()
+    assert (c.dias_cita, c.dias_venta) == (14, 60)                 # config/campanas_walcu.yaml
+    semana = date(2026, 9, 7)
+    assert c.completas(semana, semana + timedelta(days=6 + domingo_mas)) == (citas, ventas)
+
+
+def test_cohorte_mal_configurada_es_un_error(tmp_path):
+    f = tmp_path / "campanas_walcu.yaml"
+    f.write_text("origenes_meta: [Facebook]\ncohorte: {lead_a_cita_dias: 70, cita_a_venta_dias: 60}\n", encoding="utf-8")
+    with pytest.raises(ref.ErrorCruce, match="lead_a_cita_dias"):
+        ref.cargar(f)
+    f.write_text("origenes_meta: [Facebook]\n", encoding="utf-8")
+    with pytest.raises(ref.ErrorCruce, match="cohorte"):
+        ref.cargar(f)
 
 
 # ================================================================== normalización de nombres
@@ -138,13 +197,15 @@ def test_la_normalizacion_no_quita_palabras_que_solo_terminan_igual():
 
 def test_equivalencias_de_config(tmp_path):
     f = tmp_path / "campanas_walcu.yaml"
-    f.write_text("origenes_meta: [Facebook]\nsufijos: [copy]\n"
+    f.write_text("origenes_meta: [Facebook]\nsufijos: [copy]\n" + COHORTE +
                  "equivalencias: {'Leads Taigo': 'VW [VN][2026] Taigo noviembre', 'Otra': 'id:999'}\n", encoding="utf-8")
     c = ref.cargar(f)
     assert c.equivalencias == {"leads taigo": "vw [vn][2026] taigo noviembre", "otra": "id:999"}
 
 
 # ================================================================== cruce y referencias
+
+COHORTE = "cohorte: {lead_a_cita_dias: 14, cita_a_venta_dias: 60}\n"
 
 def _meta(pg, dia, cid, nombre, gasto_euros, leads=3, impresiones=1000, clics=20):
     fila = meta.leer_fila(_fila_meta(str(dia), campana=cid, nombre=nombre, gasto=str(gasto_euros)), "campana", "1234")
@@ -157,20 +218,25 @@ def _walcu(pg, *filas, nombre="w.csv"):
     walcu.cargar_con(pg, csv_walcu(*filas), nombre, HOY, subir=Bucket())
 
 
+ESCENARIO = (
+    "2025-03-10,Facebook,VW [VN][2025] T-Roc marzo,VN,20,14,4,2,4,1,2",
+    "2025-03-10,Facebook,VW [2025] Black Friday,VN,15,10,5,0,3,1,0",
+    "2025-03-10,Facebook,VW [2025] Black Friday,VO,5,5,0,0,2,1,0",
+    "2025-03-10,Facebook,Leads sin campaña de Meta,VN,7,7,0,0,0,0,0",
+    "2025-03-10,AiVORA,(sin campaña),VN,100,100,0,0,50,20,0",
+    # Semana del 9-11-2026, cargada el 20-11: su domingo tenía 5 días, citas y ventas incompletas
+    "2026-11-09,Facebook,VW [VO][2026] Golf noviembre-copy,VO,10,8,2,0,2,1,1",
+)
+
+
 def _escenario(pg):
-    # 2025: una de VN (T-Roc) y una de ambos (Black Friday) cuyo gasto se reparte por sus leads de Walcu
+    # 2025 (semana del 10 de marzo): una de VN (T-Roc) y una de ambos (Black Friday) cuyo gasto se reparte
     _meta(pg, date(2025, 3, 10), "1", "VW [VN][2025] T-Roc marzo", 300, leads=30)
     _meta(pg, date(2025, 3, 11), "2", "VW [2025] Black Friday", 200, leads=20)
     _meta(pg, date(2025, 3, 12), "3", "Campaña sin leads en Walcu", 50, leads=1)
     # 2026: la de VO, con «-copy» en Walcu
     _meta(pg, date(2026, 11, 10), "4", "VW [VO][2026] Golf noviembre", 400, leads=40)
-    _walcu(pg,
-           "2025-03,Facebook,VW [VN][2025] T-Roc marzo,VN,20,14,4,2,4,1,2",
-           "2025-03,Facebook,VW [2025] Black Friday,VN,15,10,5,0,3,1,0",
-           "2025-03,Facebook,VW [2025] Black Friday,VO,5,5,0,0,2,1,0",
-           "2025-03,Facebook,Leads sin campaña de Meta,VN,7,7,0,0,0,0,0",
-           "2025-03,AiVORA,(sin campaña),VN,100,100,0,0,50,20,0",
-           "2026-11,Facebook,VW [VO][2026] Golf noviembre-copy,VO,10,8,2,0,2,1,1")
+    _walcu(pg, *ESCENARIO)
 
 
 def test_cruce_y_referencias_por_anio_y_tipo(pg):
@@ -184,30 +250,55 @@ def test_cruce_y_referencias_por_anio_y_tipo(pg):
     assert r[(2025, "todo")]["gasto_cents"] == 55_000 and r[(2025, "todo")]["leads"] == 47
     assert r[(2025, "todo")]["leads_meta"] == 51
     assert r[(2026, "VO")]["gasto_cents"] == 40_000 and r[(2026, "VO")]["citas"] == 2
+    # 2026: la semana del 9-11 aún no tiene las citas ni las ventas completas: sin tasas ni costes de cita y venta
+    assert (r[(2026, "VO")]["semanas"], r[(2026, "VO")]["semanas_citas"], r[(2026, "VO")]["semanas_ventas"]) == (1, 0, 0)
+    m26 = ref.metricas(r[(2026, "VO")])
+    assert m26["coste_lead"] == pytest.approx(40) and m26["coste_cita"] is None and m26["lead_cita"] is None
+    assert m26["cita_venta"] is None and m26["coste_venta"] is None
+    assert (r[(2025, "VN")]["semanas"], r[(2025, "VN")]["desde_semana"]) == (1, date(2025, 3, 10))
     m = ref.metricas(r[(2025, "VN")])
     assert m["coste_cita"] == pytest.approx(450 / 7) and m["coste_venta"] == pytest.approx(225)
     assert m["lead_cita"] == pytest.approx(7 / 42 * 100) and m["cita_venta"] == pytest.approx(2 / 7 * 100)
     assert m["fuera_zona"] == pytest.approx(9 / 40 * 100) and m["inexistente"] == pytest.approx(2 / 42 * 100)
-    # Panel por campaña y mes: el «-copy» casa; la de Walcu sin campaña de Meta va con campana_id NULL
-    golf = pg.execute("SELECT cruce, leads, citas, ventas, gasto_cents FROM panel_campana_mes WHERE campana_id = '4'"
-                      ).fetchone()
-    assert golf == ("nombre", 10, 2, 1, 40_000)
-    assert pg.execute("SELECT leads FROM panel_campana_mes WHERE campana_id IS NULL AND titulo = 'Leads sin campaña de Meta'"
-                      ).fetchone() == (7,)
-    assert pg.execute("SELECT leads, cruce FROM panel_campana_mes WHERE campana_id = '3'").fetchone() == (None, None)
+    # Panel por campaña y semana: el «-copy» casa; la de Walcu sin campaña de Meta va con campana_id NULL
+    golf = pg.execute("SELECT semana, cruce, leads, citas, ventas, gasto_cents, citas_completas, ventas_completas "
+                      "FROM panel_campana_semana WHERE campana_id = '4'").fetchone()
+    assert golf == (date(2026, 11, 9), "nombre", 10, 2, 1, 40_000, False, False)
+    assert pg.execute("SELECT citas_completas, ventas_completas FROM panel_campana_semana WHERE campana_id = '1'"
+                      ).fetchone() == (True, True)
+    assert pg.execute("SELECT leads FROM panel_campana_semana WHERE campana_id IS NULL "
+                      "AND titulo = 'Leads sin campaña de Meta'").fetchone() == (7,)
+    assert pg.execute("SELECT leads, cruce FROM panel_campana_semana WHERE campana_id = '3'").fetchone() == (None, None)
     informe = dict(pg.execute("SELECT campana, motivo FROM panel_walcu_sin_cruce").fetchall())
     assert set(informe) == {"Leads sin campaña de Meta", "Campaña sin leads en Walcu"}
     texto = ref.informe(pg)
     assert "Coste por cita" in texto and "Diferencia" in texto and "Sin cruce entre Meta y Walcu: 2" in texto
+    assert "2026: 1 semanas; 0 con las citas completas y 0 con las ventas completas." in texto
+    assert "semanas del 10-03-2025 al 10-03-2025" in texto
+
+
+def test_el_anio_de_una_semana_es_el_iso_y_la_semana_en_curso_no_entra_en_las_referencias(pg):
+    # 29-12-2025 (lunes) es la semana 1 de 2026; la del 16-11-2026 no había acabado al cargarse (20-11)
+    _meta(pg, date(2025, 12, 30), "5", "VW [VN][2026] Golf enero", 100, leads=5)
+    _meta(pg, date(2026, 11, 17), "6", "VW [VN][2026] Golf noviembre", 70, leads=5)
+    _walcu(pg, "2025-12-29,Facebook,VW [VN][2026] Golf enero,VN,10,10,0,0,3,1,0",
+           "2026-11-16,Facebook,VW [VN][2026] Golf noviembre,VN,4,4,0,0,1,0,0")
+    r = ref.leer_referencias(pg)
+    assert set(r) == {(2026, "VN"), (2026, "todo")}
+    assert (r[(2026, "VN")]["gasto_cents"], r[(2026, "VN")]["leads"], r[(2026, "VN")]["semanas"]) == (10_000, 10, 1)
+    assert (r[(2026, "VN")]["citas_citas"], r[(2026, "VN")]["ventas_ventas"]) == (3, 1)        # completas
+    # En el panel por semana sí están las dos
+    assert pg.execute("SELECT count(DISTINCT semana) FROM panel_campana_semana WHERE walcu").fetchone()[0] == 2
 
 
 def test_equivalencia_resuelve_lo_que_no_casa(pg, tmp_path, monkeypatch):
     f = tmp_path / "campanas_walcu.yaml"
-    f.write_text("origenes_meta: [Facebook]\nsufijos: [copy, copia, ok]\n"
+    f.write_text("origenes_meta: [Facebook]\nsufijos: [copy, copia, ok]\n" + COHORTE +
                  "equivalencias: {'Leads sin campaña de Meta': 'Campaña sin leads en Walcu'}\n", encoding="utf-8")
     monkeypatch.setenv("CDF_CAMPANAS_WALCU", str(f))
     _escenario(pg)
-    assert pg.execute("SELECT cruce, leads FROM panel_campana_mes WHERE campana_id = '3'").fetchone() == ("equivalencia", 7)
+    assert pg.execute("SELECT cruce, leads FROM panel_campana_semana WHERE campana_id = '3'").fetchone() \
+        == ("equivalencia", 7)
     assert pg.execute("SELECT count(*) FROM panel_walcu_sin_cruce").fetchone()[0] == 0
 
 
@@ -219,59 +310,91 @@ def conc():
 
 
 def _campana_real(pg, cid, titulo, gasto_dia, dias, *, leads_meta=5, impresiones=10_000, clics=500, ambito="VN"):
-    inicio = HOY.replace(day=HOY.day - dias + 1)
+    inicio = HOY - timedelta(days=dias - 1)
     for i in range(dias):
-        _meta(pg, inicio.replace(day=inicio.day + i), cid, titulo, gasto_dia, leads=leads_meta,
+        _meta(pg, inicio + timedelta(days=i), cid, titulo, gasto_dia, leads=leads_meta,
               impresiones=impresiones, clics=clics)
     cmp.actualizar(pg)          # panel_campana_dia y el cruce, como tras la descarga de Meta
 
 
+GOLF = "VW [VN][2026] Golf noviembre"
+# Carga semanal del 20-11-2026: semanas del 26-10 al 16-11 (todas «con carga»: AiVORA en cada una). La del 26-10
+# (domingo 1-11, 19 días) tiene las citas completas; ninguna, las ventas (60 días).
+SEMANAS_NOV = ("2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16")
+
+
+def _walcu_nov(pg, *golf: str, nombre="nov.csv"):
+    _walcu(pg, *ESCENARIO[-1:], *golf, *(f"{s},AiVORA,(sin campaña),VN,5,5,0,0,1,0,0" for s in SEMANAS_NOV), nombre=nombre)
+
+
 def test_reglas_sin_walcu_dicen_sin_datos_de_walcu(pg, conc):
-    _campana_real(pg, "9", "VW [VN][2026] Golf noviembre", 100, 5)
+    _campana_real(pg, "9", GOLF, 100, 5)
     cmp.actualizar(pg)
     _, js = cr.juzgar(pg, HOY, "real", conc, motor.cargar_criterios(), {})
     j = js[0]
     assert j.fuente_leads == cr.META
     for k in ("a", "d", "subir"):
         assert j.reglas[k].estado == "sin_dato" and "sin datos de Walcu: no se aplica" in j.reglas[k].cifras_texto
-    assert "no hay carga de Walcu de noviembre de 2026" in j.reglas["a"].cifras_texto
+    assert "no hay ninguna carga de Walcu" in j.reglas["a"].cifras_texto
     # c con los leads de Meta: 500 € / 25 leads = 20 € > 10 €: revisar, sin coste por cita
     assert j.reglas["c"].decision == "revisar" and "25 leads según Meta" in j.reglas["c"].cifras_texto
     assert "Sin datos de Walcu" in j.reglas["c"].revisar
 
 
-def test_reglas_con_walcu_del_mes_y_coste_por_cita_frente_a_2025(pg, conc):
+def test_carga_de_walcu_antigua_no_cuenta(pg, conc):
+    _escenario(pg)                                  # última semana cargada: la del 9-11; hoy, semana del 16-11
+    _campana_real(pg, "9", GOLF, 100, 5)
+    _meta(pg, HOY + timedelta(days=7), "9", GOLF, 100)
+    cmp.actualizar(pg)
+    _, js = cr.juzgar(pg, HOY + timedelta(days=7), "real", conc, motor.cargar_criterios(), {})
+    j = next(x for x in js if x.campana_id == "9")
+    assert j.fuente_leads == cr.META and "la última carga de Walcu es de la semana del" in j.reglas["a"].cifras_texto
+
+
+def test_reglas_con_walcu_semanal_y_coste_por_cita_de_las_semanas_completas(pg, conc):
     crit = motor.cargar_criterios()
-    # Referencia de 2025 (VN): 450 € / 7 citas = 64,29 € por cita
-    _escenario(pg)
-    # Campaña de noviembre de 2026: 5 días a 100 € = 500 €; en Walcu 20 leads (25 € por lead > 10 €) y 8 citas
-    _campana_real(pg, "9", "VW [VN][2026] Golf noviembre", 100, 5)
-    _walcu(pg, "2026-11,Facebook,VW [VN][2026] Golf noviembre,VN,20,10,8,2,8,1,0",
-           "2026-11,Facebook,VW [VO][2026] Golf noviembre-copy,VO,10,8,2,0,2,1,1", nombre="nov.csv")
+    _escenario(pg)                                  # referencia de 2025 (VN): 450 € / 7 citas = 64,29 € por cita
+    # 26 días (26-10 a 20-11) a 50 € = 1.300 €; en Walcu, 20 leads en la semana del 26-10 (8 citas, 1 venta) y 10
+    # en la del 9-11 (5 citas, aún incompletas)
+    _campana_real(pg, "9", GOLF, 50, 26)
+    _walcu_nov(pg, f"2026-10-26,Facebook,{GOLF},VN,20,10,8,2,8,1,0", f"2026-11-09,Facebook,{GOLF},VN,10,10,0,0,5,0,0")
     _, js = cr.juzgar(pg, HOY, "real", conc, crit, {})
     j = next(x for x in js if x.campana_id == "9")
-    assert j.fuente_leads == cr.WALCU_MES and (j.leads, j.citas, j.ventas) == (20, 8, 1)
-    # a: fuera de zona 8 de 18 con código postal = 44,44 % > 35 %
-    assert j.reglas["a"].activa and "fuera de zona: 8 de 18 leads con código postal = 44,44 % (umbral 35 %)" \
-        in j.reglas["a"].cifras_texto
-    # c: coste por cita 62,50 € ≤ 64,29 € de 2025 (VN): continuar
+    assert j.fuente_leads == cr.WALCU_SEMANA and (j.leads, j.citas, j.ventas) == (30, 8, 0)
+    assert (j.leads_cita, j.gasto_cita, j.cohorte.semanas, j.cohorte.semanas_citas) == (20, 35_000, 4, 1)
+    # a: lead a cita con las semanas completas (8 de 20) y fuera de zona con todos (8 de 28 = 28,57 %)
+    a = j.reglas["a"].cifras_texto
+    assert "lead a cita: 8 de 20 = 40 % (umbral 5 %) (semanas con las citas completas, de 14 días o más: 1 de 4)" in a
+    assert "fuera de zona: 8 de 28 leads con código postal" in a
+    # c: 1.300 € / 30 leads = 43,33 € > 10 €; coste por cita de la semana completa: 350 € / 8 = 43,75 € ≤ 64,29 €
     c = j.reglas["c"]
-    assert c.decision == "continuar" and "frente a la referencia de 2025 (VN) de 64,29 €" in c.cifras_texto
-    assert "leads según Meta" not in c.cifras_texto
-    # d: 1 de 8 citas = 12,5 % < 33 % con coste por lead (25 €) por encima de 2025 (450/42 = 10,71 €): no salta
-    assert j.reglas["d"].estado == "no" and "por encima de la referencia de 2025 (VN)" in j.reglas["d"].cifras_texto
-    # f compara días: con la carga mensual usa los leads de Meta por día
+    assert "coste por lead: 1300 € / 30 leads = 43,33 €" in c.cifras_texto.replace(".", "")
+    assert c.decision == "continuar" and "coste por cita: 43,75 € (semanas con las citas completas" in c.cifras_texto
+    assert "frente a la referencia de 2025 (VN) de 64,29 €" in c.cifras_texto
+    # d: ninguna semana con 60 días: no se aplica
+    assert j.reglas["d"].estado == "sin_dato" and \
+        j.reglas["d"].cifras_texto == "ventas aún incompletas: ninguna semana de leads con 60 días o más"
     assert j.reglas["f"].cifras.get("fuente_leads", "meta") == "meta"
 
 
 def test_regla_c_parar_si_el_coste_por_cita_supera_la_referencia(pg, conc):
     _escenario(pg)
-    _campana_real(pg, "9", "VW [VN][2026] Golf noviembre", 100, 5)
-    _walcu(pg, "2026-11,Facebook,VW [VN][2026] Golf noviembre,VN,20,20,0,0,7,1,0", nombre="nov.csv")
+    _campana_real(pg, "9", GOLF, 100, 26)          # semana del 26-10: 700 € / 8 citas = 87,50 € > 64,29 €
+    _walcu_nov(pg, f"2026-10-26,Facebook,{GOLF},VN,20,20,0,0,8,1,0")
     _, js = cr.juzgar(pg, HOY, "real", conc, motor.cargar_criterios(), {})
     c = next(x for x in js if x.campana_id == "9").reglas["c"]
-    assert c.decision == "parar" and "coste por cita: 71,43 € frente a la referencia de 2025 (VN) de 64,29 €" \
-        in c.cifras_texto
+    assert c.decision == "parar" and "coste por cita: 87,50 €" in c.cifras_texto
+
+
+def test_sin_semanas_con_las_citas_completas_no_se_para_ni_se_continua(pg, conc):
+    _escenario(pg)
+    _campana_real(pg, "9", GOLF, 100, 5)           # 16 a 20-11: solo la semana del 16-11, recién cargada
+    _walcu_nov(pg, f"2026-11-16,Facebook,{GOLF},VN,20,20,0,0,2,0,0")
+    _, js = cr.juzgar(pg, HOY, "real", conc, motor.cargar_criterios(), {})
+    j = next(x for x in js if x.campana_id == "9")
+    assert j.reglas["c"].decision == "revisar" and "Citas aún incompletas" in j.reglas["c"].revisar
+    assert "citas aún incompletas: ninguna semana de leads con 14 días o más" in j.reglas["a"].cifras_texto
+    assert j.reglas["subir"].estado == "no"
 
 
 def test_regla_d_dice_que_es_el_optimo(pg):
@@ -282,7 +405,8 @@ def test_regla_d_dice_que_es_el_optimo(pg):
 
 def test_campana_sin_cruce_con_walcu_usa_los_leads_de_meta(pg, conc):
     _escenario(pg)
-    _campana_real(pg, "9", "VW [VN][2026] Golf noviembre", 100, 5)
+    _campana_real(pg, "9", GOLF, 100, 5)
+    _walcu_nov(pg)
     _, js = cr.juzgar(pg, HOY, "real", conc, motor.cargar_criterios(), {})
     j = next(x for x in js if x.campana_id == "9")
     assert j.fuente_leads == cr.META and "la campaña no casa con ningún lead de Walcu" in j.reglas["a"].cifras_texto
@@ -407,7 +531,7 @@ def _exportacion(tmp_path, conc, formato="csv"):
 
 
 def _filas(texto):
-    return {(f["mes"], f["origen"], f["campana"], f["tipo"]): f for f in csv.DictReader(io.StringIO(texto))}
+    return {(f["semana"], f["origen"], f["campana"], f["tipo"]): f for f in csv.DictReader(io.StringIO(texto))}
 
 
 PERSONALES = ("Ana", "Pérez", "Sara", "612345678", "699111222", "correo", "Comercial", "Excluido", "N-1")
@@ -451,14 +575,14 @@ def test_script_agrega_sin_datos_personales(tmp_path, conc, capsys, wa, formato)
         assert personal not in texto and personal not in registro, personal
     filas = _filas(texto)
     assert list(csv.reader(io.StringIO(texto)))[0] == list(walcu.COLUMNAS)
-    golf = filas[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
+    golf = filas[("2026-11-02", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
     # Sin excluidos: 4 leads (Ana, Luis, Pepe, Sara); citas: Ana y Sara (Pepe, presupuesto por teléfono, no)
     assert (golf["leads"], golf["leads_cercana"], golf["leads_fuera"], golf["citas"], golf["ventas"],
             golf["num_inexistente"]) == ("4", "3", "1", "2", "2", "1")
     assert "de comerciales excluidos (no cuentan): 0" in registro
     assert "no cuenta como cita por su última actividad: 1" in registro
-    assert filas[("2026-10", "AiVORA", "(sin campaña)", "VO")]["leads_sin_zona"] == "1"
-    raro = filas[("2026-10", "otros", "(campaña omitida)", "VO")]
+    assert filas[("2026-10-26", "AiVORA", "(sin campaña)", "VO")]["leads_sin_zona"] == "1"
+    raro = filas[("2026-10-26", "otros", "(campaña omitida)", "VO")]
     assert raro["leads_fuera"] == "1"                       # «1234» → 01234: provincia 01, fuera de la zona
     walcu.validar(salida.read_bytes())                      # lo que escribe lo acepta el servidor
 
@@ -471,7 +595,7 @@ def test_script_descarta_los_leads_de_comerciales_excluidos(tmp_path, conc, caps
     salida = tmp_path / "walcu.csv"
     assert wa.main([str(_exportacion(tmp_path, conc, formato)), str(salida), "--excluidos", str(excluidos)]) == 0
     texto, registro = salida.read_text(encoding="utf-8"), capsys.readouterr().out
-    golf = _filas(texto)[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
+    golf = _filas(texto)[("2026-11-02", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
     assert (golf["leads"], golf["citas"], golf["ventas"]) == ("3", "1", "1")      # sin el lead de Sara
     assert "de comerciales excluidos (no cuentan): 1" in registro
     for personal in PERSONALES + ("Otro Que No Está",):     # ni los nombres del fichero de excluidos
@@ -542,19 +666,19 @@ def _agregar(wa, conc, *leads):
 ])
 def test_venta_es_un_estado_que_contiene_vendido(wa, conc, estado, venta):
     _, filas = _agregar(wa, conc, _lead(estado=estado))
-    assert filas[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]["ventas"] == str(venta)
+    assert filas[("2026-11-09", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]["ventas"] == str(venta)
 
 
 @pytest.mark.parametrize("motivo, n", [("Número inexistente", 1), ("NUMERO INEXISTENTE", 1), ("No contesta", 0)])
 def test_numero_inexistente(wa, conc, motivo, n):
     _, filas = _agregar(wa, conc, _lead(motivo=motivo, negociacion=""))
-    assert filas[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]["num_inexistente"] == str(n)
+    assert filas[("2026-11-09", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]["num_inexistente"] == str(n)
 
 
 @pytest.mark.parametrize("tipo, esperado", [("Nuevo", "VN"), ("VO", "VO"), ("Km0", "VO"), ("", "VN")])
 def test_tipo_de_vehiculo_solicitado(wa, conc, tipo, esperado):
     ag, filas = _agregar(wa, conc, _lead(tipo=tipo))
-    assert list(filas) == [("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", esperado)]
+    assert list(filas) == [("2026-11-09", "Facebook", "VW [VN][2026] Golf noviembre", esperado)]
     assert ag.cuentas["tipo_por_defecto"] == (1 if tipo == "" else 0)
 
 
@@ -628,20 +752,16 @@ def test_script_excluye_otras_marcas_cuenta_y_avisa(tmp_path, conc, capsys, wa):
     assert not any(n in texto for n in OTRAS)
     assert f"de campañas de otras marcas (no cuentan): {len(OTRAS)}" in registro
     assert f"Aviso: {len(OTRAS)} leads de campañas de otras marcas excluidos" in registro
-    golf = _filas(texto)[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
+    golf = _filas(texto)[("2026-11-02", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
     assert golf["leads"] == "4"                              # las nuestras no se tocan
 
 
 def test_referencias_excluyen_otras_marcas_y_lo_cuentan(pg):
     _escenario(pg)
     _meta(pg, date(2025, 3, 15), "70", "SK [VN] [2025] Gama ahorro", 999, leads=50)
-    _walcu(pg, "2025-03,Facebook,SK [VN] [2025] Gama ahorro,VN,60,60,0,0,9,3,0",
-           "2025-03,Facebook,AU [VO][2025] Boutique ocasion,VO,8,8,0,0,1,0,0",
-           "2025-03,Facebook,VW [VN][2025] T-Roc marzo,VN,20,14,4,2,4,1,2",
-           "2025-03,Facebook,VW [2025] Black Friday,VN,15,10,5,0,3,1,0",
-           "2025-03,Facebook,VW [2025] Black Friday,VO,5,5,0,0,2,1,0",
-           "2025-03,Facebook,Leads sin campaña de Meta,VN,7,7,0,0,0,0,0",
-           "2026-11,Facebook,VW [VO][2026] Golf noviembre-copy,VO,10,8,2,0,2,1,1", nombre="con_otras.csv")
+    _walcu(pg, "2025-03-10,Facebook,SK [VN] [2025] Gama ahorro,VN,60,60,0,0,9,3,0",
+           "2025-03-10,Facebook,AU [VO][2025] Boutique ocasion,VO,8,8,0,0,1,0,0",
+           *(f for f in ESCENARIO if "AiVORA" not in f), nombre="con_otras.csv")
     resumen = ref.actualizar(pg)
     assert resumen["otras_marcas"] == {"meta_campanas": 1, "meta_gasto_cents": 99_900, "walcu_filas": 2,
                                        "walcu_leads": 68}
@@ -649,7 +769,7 @@ def test_referencias_excluyen_otras_marcas_y_lo_cuentan(pg):
     # Las mismas cifras que sin las otras marcas
     assert r[(2025, "todo")]["gasto_cents"] == 55_000 and r[(2025, "todo")]["leads"] == 47
     assert r[(2025, "VN")]["citas"] == 7
-    assert not pg.execute("SELECT count(*) FROM panel_campana_mes WHERE titulo LIKE 'SK %' OR titulo LIKE 'AU %'"
+    assert not pg.execute("SELECT count(*) FROM panel_campana_semana WHERE titulo LIKE 'SK %' OR titulo LIKE 'AU %'"
                           ).fetchone()[0]
     assert not pg.execute("SELECT count(*) FROM panel_walcu_sin_cruce WHERE campana LIKE 'SK %' OR campana LIKE 'AU %'"
                           ).fetchone()[0]
@@ -707,19 +827,28 @@ def test_los_ficheros_de_excluidos_no_se_versionan():
 
 # ================================================================== panel
 
-def test_marketing_ultimo_mes_y_referencias(pg, panel_url, conc):
+def test_marketing_ultimas_4_semanas_marca_las_incompletas_y_referencias(pg, panel_url, conc):
     from test_contrato_panel import ROLES, CLAVE, app_con, dentro
     from panel import usuarios
     for rol in ROLES:
         usuarios.alta(pg, rol, f"Persona {rol}", rol, CLAVE)
     pg.execute("UPDATE panel_usuarios SET cambiar_clave = false")
     _escenario(pg)
-    _campana_real(pg, "9", "VW [VN][2026] Golf noviembre", 100, 5)
-    _walcu(pg, "2026-11,Facebook,VW [VN][2026] Golf noviembre,VN,20,10,8,2,8,1,0", nombre="nov.csv")
+    _campana_real(pg, "9", GOLF, 50, 26)
+    _walcu_nov(pg, f"2026-10-26,Facebook,{GOLF},VN,20,10,8,2,8,1,0", f"2026-11-09,Facebook,{GOLF},VN,10,10,0,0,5,0,0")
     motor.evaluar(pg, HOY, conc)
     html = dentro(app_con(panel_url), "marketing").get("/marketing").text
-    assert "Campañas del último mes: noviembre de 2026" in html and "Referencias históricas" in html
+    # Hoy, 20-11 (viernes): las 4 semanas completas son del 19-10 al 15-11
+    assert "Campañas de las últimas 4 semanas: 19/10 – 15/11" in html
     bloque = html.split('id="t-mes"')[1].split("</section>")[0]
-    assert "VW [VN][2026] Golf noviembre" in bloque and "62,50 €" in bloque and "500 €" in bloque
+    # Golf: 21 días de las 4 semanas (26-10 a 15-11) a 50 € = 1.050 €; leads 30, citas 13; € / cita solo con la
+    # semana del 26-10 (350 € / 8 = 43,75 €); € / venta sin semanas completas: «—»
+    assert GOLF in bloque and "1.050 €" in bloque and "43,75 €" in bloque and "35 €" in bloque
+    filas_sem = bloque.split("tabla-semanas-walcu")[1].split("</table>")[0]
+    assert filas_sem.count('class="incompleta"') == 3          # 26-10: ventas; 2-11 y 9-11: citas y ventas
+    assert "Sin carga de Walcu" in filas_sem                     # la del 19-10
+    assert "Ventas incompletas" in filas_sem and "Citas y ventas incompletas" in filas_sem
+    assert "Cohorte: las citas y las ventas cuentan en la semana del lead" in bloque
     refs = html.split('id="t-referencias"')[1].split("</section>")[0]
     assert "Coste por cita" in refs and "Diferencia" in refs and "Número inexistente" in refs
+    assert "2025 (1 semanas)" in refs and "con las citas completas" in refs

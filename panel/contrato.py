@@ -24,7 +24,7 @@ TABLAS = (
     "panel_stock_vehiculo", "panel_ventas_mes", "panel_alertas", "panel_riesgo_vehiculo",
     "panel_curva_grupo", "panel_leads_dia", "panel_campana_dia", "panel_campana_salud",
     "panel_recomendacion_modelo", "panel_atencion_relativa", "panel_semana_campana",
-    "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_mes", "panel_referencia_meta",
+    "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_semana", "panel_referencia_meta",
     "panel_campana_otra_marca",
 )
 
@@ -63,7 +63,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "semanas": ("panel_semana_campana",),
         "pasadas": ("panel_campana_resultado",),
         "trafico": ("panel_trafico_canal_dia",),    # tráfico de la web por canal (GA4)
-        "mes": ("panel_campana_mes", "panel_campana_decision"),   # último mes: Meta y Walcu por campaña
+        "mes": ("panel_campana_semana", "panel_campana_decision"),   # últimas 4 semanas: Meta y Walcu por campaña
         "referencias": ("panel_referencia_meta",),  # referencias históricas de coste (por año)
         "alertas": ALERTAS,
     },

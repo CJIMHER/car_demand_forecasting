@@ -1,4 +1,4 @@
-"""Agrega la exportación de leads de Walcu por mes, origen, campaña y tipo (en el Mac).
+"""Agrega la exportación de leads de Walcu por semana, origen, campaña y tipo (en el Mac).
 
 Uso:
   .venv/bin/python scripts/walcu_agregar.py ENTRADA.xlsx|ENTRADA.csv SALIDA.csv [--excluidos FICHERO]
@@ -6,7 +6,10 @@ Uso:
 
 Lee la exportación tal como la saca el CRM y escribe el CSV que carga  make walcu-cargar  en el servidor,
 con exactamente estas columnas:
-  mes, origen, campana, tipo, leads, leads_cercana, leads_fuera, leads_sin_zona, citas, ventas, num_inexistente
+  semana, origen, campana, tipo, leads, leads_cercana, leads_fuera, leads_sin_zona, citas, ventas, num_inexistente
+
+semana: el lunes (AAAA-MM-DD) de la semana ISO de la fecha del lead. Las citas y las ventas del lead cuentan
+en la semana del lead (cohorte), aunque lleguen después.
 
 Solo se leen las columnas de config/walcu_export.yaml (Origen, Detalle campaña, Tipo de vehículo solicitado,
 Fecha Lead, Id negociación creada, Resultado última actividad, Estado, Motivo fracaso y, solo para la zona,
@@ -250,7 +253,7 @@ class Agregador:
         if cita and plegar(lead["resultado_actividad"]) in self.no_cita:
             cita = False
             self.cuentas["no_cita"] += 1
-        a = self.filas[(f"{d:%Y-%m}", origen, campana, tipo)]
+        a = self.filas[((d - timedelta(days=d.weekday())).isoformat(), origen, campana, tipo)]
         a["leads"] += 1
         a[f"leads_{zona(lead['codigo_postal'], self.cercanas)}"] += 1
         a["citas"] += cita
@@ -265,8 +268,8 @@ class Agregador:
         salida = io.StringIO()
         w = csv.writer(salida, lineterminator="\n")
         w.writerow(walcu.COLUMNAS)
-        for (mes, origen, campana, tipo), a in sorted(self.filas.items()):
-            w.writerow([mes, origen, campana, tipo] + [a[c] for c in walcu.NUMEROS])
+        for (semana, origen, campana, tipo), a in sorted(self.filas.items()):
+            w.writerow([semana, origen, campana, tipo] + [a[c] for c in walcu.NUMEROS])
         return salida.getvalue().encode("utf-8")
 
     def registro(self) -> str:

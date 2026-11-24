@@ -297,6 +297,8 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .campana-nombre { display: block; font-weight: 600; color: var(--tinta); }
 .campana-nota { display: block; font-size: 12px; font-weight: 400; color: var(--gris); }
 .tabla tbody tr.aviso { background: #FFF8EA; }
+.tabla tbody tr.incompleta td, .tabla tbody tr.incompleta th { color: var(--gris, #6B6B6B); font-style: italic; }
+.tabla caption { text-align: left; font-weight: 600; padding: 0.5rem 0; }
 .fuerte { font-weight: 600; }
 .tabla td.c-salud { white-space: nowrap; }
 /* Diagnóstico de una campaña que no va bien: línea a todo el ancho bajo su fila */

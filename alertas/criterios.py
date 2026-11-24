@@ -12,13 +12,17 @@ Las comparaciones con los umbrales se hacen con fracciones exactas: 4,99 % salta
 Datos: Meta (panel_campana_dia: gasto, impresiones y clics) y Walcu, de una de estas dos formas:
 - diaria (panel_leads_dia: leads, citas, ventas y leads con código postal dentro y fuera de la zona
   cercana), cuando la haya: manda;
-- mensual (panel_campana_mes, de la carga agregada de Walcu, make walcu-cargar): para cada campaña, si hay
-  carga de Walcu del mes de su último día y la campaña casa con sus leads (ingesta/referencias_meta.py),
-  sus leads, citas y ventas de Walcu de los meses de su vida.
+- semanal (panel_campana_semana, de la carga agregada de Walcu, make walcu-cargar): para cada campaña, si
+  hay carga de Walcu de la semana de su último día o de la anterior y la campaña casa con sus leads
+  (ingesta/referencias_meta.py), sus leads de Walcu y su gasto de las semanas de su vida con carga. Cohorte
+  (las citas y ventas van a la semana del lead y llegan después): lead a cita y coste por cita, solo con las
+  semanas con las citas completas (cohorte.lead_a_cita_dias de config/campanas_walcu.yaml, 14 días); tasa
+  de venta y coste por venta, con las de ventas completas (cita_a_venta_dias, 60 días). Sin ninguna
+  semana completa, esa parte de la regla dice que las citas (o las ventas) aún están incompletas.
 Sin ninguna, se usan los leads que cuenta Meta (panel_campana_dia.leads_meta) y cada cifra lo dice
 («leads según Meta»): se aplican b, c (sin coste por cita: «revisar») y f; a, d y subir presupuesto, que
 necesitan citas y ventas, dicen «sin datos de Walcu» y no se aplican. La regla f compara días: con la carga
-mensual usa los leads de Meta por día.
+semanal usa los leads de Meta por día.
 «En la media» (reglas c y d): coste por cita (y por lead en la d) como mucho el de la referencia del año
 criterios_meta.c.referencia_anio (2025) del mismo tipo, VN o VO (panel_referencia_meta; las de ambos, la de
 todo). Sin referencia, la media de las demás campañas de los últimos media_dias días con su tolerancia. La regla e y el contexto
@@ -67,8 +71,8 @@ def euros(cents: F | int) -> str:
 
 
 # De dónde salen los leads: Walcu (panel_leads_dia) o, mientras no hay, Meta (panel_campana_dia.leads_meta)
-# WALCU_MES: carga mensual agregada de Walcu (panel_campana_mes) de la campaña
-WALCU, WALCU_MES, META = "walcu", "walcu_mes", "meta"
+# WALCU_SEMANA: carga semanal agregada de Walcu (panel_campana_semana) de la campaña
+WALCU, WALCU_SEMANA, META = "walcu", "walcu_semana", "meta"
 TABLA_LEADS = {WALCU: ("panel_leads_dia", "leads"), META: ("panel_campana_dia", "leads_meta")}
 FALTA_WALCU = "sin datos de Walcu: no se aplica"
 
@@ -104,9 +108,10 @@ class Juicio:
     ventas: int
     gasto_cents: int
     sin_mercado: bool = False   # modelo fuera del catálogo de turismos que capturamos (config/campanas.yaml)
-    fuente_leads: str = WALCU   # walcu, walcu_mes o meta (leads según Meta, sin citas ni ventas)
+    fuente_leads: str = WALCU   # walcu, walcu_semana o meta (leads según Meta, sin citas ni ventas)
     leads_meta: int = 0         # los que cuenta Meta, para lo que se compara por día o con años anteriores
     sin_walcu: str = ""         # por qué no hay datos de Walcu de esta campaña
+    cohorte: "Semanal | None" = None   # con la carga semanal: sumas de las semanas completas
     decision: str = "sin_juzgar"
     reglas: dict[str, Resultado] = field(default_factory=dict)
 
@@ -122,6 +127,47 @@ class Juicio:
     def fuente_diaria(self) -> str:
         """De dónde salen los leads por día (regla f y comparación con años anteriores de la b)."""
         return WALCU if self.fuente_leads == WALCU else META
+
+    @property
+    def leads_cita(self) -> int:
+        """Leads con que se calcula lead a cita (con la carga semanal, los de las semanas con citas completas)."""
+        return self.cohorte.leads_citas if self.cohorte else self.leads
+
+    @property
+    def gasto_cita(self) -> int:
+        return self.cohorte.gasto_citas if self.cohorte else self.gasto_cents
+
+    @property
+    def citas_venta(self) -> int:
+        """Citas con que se calcula la tasa de venta (con la carga semanal, las de semanas con ventas completas)."""
+        return self.cohorte.citas_ventas if self.cohorte else self.citas
+
+    @property
+    def gasto_venta(self) -> int:
+        return self.cohorte.gasto_ventas if self.cohorte else self.gasto_cents
+
+    def nota_citas(self) -> str:
+        c = self.cohorte
+        if not c or c.semanas_citas == c.semanas:
+            return ""
+        return f" (semanas con las citas completas, de {c.dias_cita} días o más: {c.semanas_citas} de {c.semanas})"
+
+    def nota_ventas(self) -> str:
+        c = self.cohorte
+        if not c or c.semanas_ventas == c.semanas:
+            return ""
+        return f" (semanas con las ventas completas, de {c.dias_venta} días o más: {c.semanas_ventas} de {c.semanas})"
+
+    def citas_incompletas(self) -> str:
+        """Texto si con la carga semanal ninguna semana tiene aún las citas completas; si no, vacío."""
+        c = self.cohorte
+        return (f"citas aún incompletas: ninguna semana de leads con {c.dias_cita} días o más"
+                if c and not c.semanas_citas else "")
+
+    def ventas_incompletas(self) -> str:
+        c = self.cohorte
+        return (f"ventas aún incompletas: ninguna semana de leads con {c.dias_venta} días o más"
+                if c and not c.semanas_ventas else "")
 
     def falta_walcu(self, que: str) -> str:
         return f"{que} ({FALTA_WALCU}{'; ' + self.sin_walcu if self.sin_walcu else ''})"
@@ -251,22 +297,63 @@ def referencias(pg, origen: str, anio: int) -> dict[str, tuple[F | None, F | Non
                                          "WHERE origen = %s AND dia = %s AND anio = %s", (origen, dia, anio))}
 
 
-def walcu_mes(pg, origen: str, cid: str, inicio: date, dia: date) -> tuple[tuple[int, ...] | None, str]:
-    """(leads, citas, ventas, cercana, fuera) de Walcu de la campaña en los meses de su vida, o (None, motivo)."""
-    mes = dia.replace(day=1)
-    hay = pg.execute("SELECT EXISTS (SELECT 1 FROM panel_campana_mes WHERE origen = %s AND mes = %s AND walcu)",
-                     (origen, mes)).fetchone()[0]
-    if not hay:
-        return None, f"no hay carga de Walcu de {fmt.MESES[mes.month - 1]} de {mes.year}"
-    fila = pg.execute(
-        """SELECT count(*) FILTER (WHERE mes = %s AND cruce IS NOT NULL), coalesce(sum(leads), 0),
-                  coalesce(sum(citas), 0), coalesce(sum(ventas), 0), coalesce(sum(leads_cercana), 0),
-                  coalesce(sum(leads_fuera), 0)
-           FROM panel_campana_mes WHERE origen = %s AND campana_id = %s AND mes BETWEEN %s AND %s""",
-        (mes, origen, cid, inicio.replace(day=1), mes)).fetchone()
-    if not fila[0]:
+@dataclass
+class Semanal:
+    """Walcu y gasto de una campaña en las semanas de su vida con carga de Walcu, y las sumas de cohorte."""
+    semanas: int
+    gasto: int
+    leads: int
+    cercana: int
+    fuera: int
+    semanas_citas: int          # semanas con las citas completas
+    gasto_citas: int
+    leads_citas: int
+    citas: int
+    semanas_ventas: int         # semanas con las ventas completas
+    gasto_ventas: int
+    citas_ventas: int
+    ventas: int
+    dias_cita: int = 14
+    dias_venta: int = 60
+
+
+def _plazos() -> tuple[int, int]:
+    """Días de cohorte para citas y ventas (config/campanas_walcu.yaml)."""
+    from ingesta import referencias_meta as ref
+    try:
+        c = ref.cargar()
+        return c.dias_cita, c.dias_venta
+    except (OSError, ref.ErrorCruce):
+        return 14, 60
+
+
+def walcu_semana(pg, origen: str, cid: str, inicio: date, dia: date) -> tuple[Semanal | None, str]:
+    """Walcu de la campaña en las semanas de su vida con carga (panel_campana_semana), o (None, motivo)."""
+    semana = dia - timedelta(days=dia.weekday())
+    ultima = pg.execute("SELECT max(semana) FROM panel_campana_semana WHERE origen = %s AND walcu",
+                        (origen,)).fetchone()[0]
+    if ultima is None:
+        return None, "no hay ninguna carga de Walcu"
+    if ultima < semana - timedelta(days=7):
+        return None, f"la última carga de Walcu es de la semana del {fmt.fecha_corta(ultima)}"
+    f = [int(x) for x in pg.execute(
+        """SELECT count(*) FILTER (WHERE cruce IS NOT NULL), count(*),
+                  coalesce(sum(gasto_cents), 0), coalesce(sum(leads), 0), coalesce(sum(leads_cercana), 0),
+                  coalesce(sum(leads_fuera), 0),
+                  count(*) FILTER (WHERE citas_completas),
+                  coalesce(sum(gasto_cents) FILTER (WHERE citas_completas), 0),
+                  coalesce(sum(leads) FILTER (WHERE citas_completas), 0),
+                  coalesce(sum(citas) FILTER (WHERE citas_completas), 0),
+                  count(*) FILTER (WHERE ventas_completas),
+                  coalesce(sum(gasto_cents) FILTER (WHERE ventas_completas), 0),
+                  coalesce(sum(citas) FILTER (WHERE ventas_completas), 0),
+                  coalesce(sum(ventas) FILTER (WHERE ventas_completas), 0)
+           FROM panel_campana_semana
+           WHERE origen = %s AND campana_id = %s AND walcu AND semana BETWEEN %s AND %s""",
+        (origen, cid, inicio - timedelta(days=inicio.weekday()), semana)).fetchone()]
+    if not f[0]:
         return None, "la campaña no casa con ningún lead de Walcu (make referencias-meta)"
-    return tuple(int(x) for x in fila[1:]), ""
+    return Semanal(*f[1:], *_plazos()), ""
 
 
 def _media(medias: dict, sin: str, i: int) -> F | None:
@@ -297,15 +384,16 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
             "SELECT sum(gasto_cents), sum(impresiones), sum(clics) FROM panel_campana_dia WHERE origen = %s AND campana_id = %s "
             "AND dia BETWEEN %s AND %s", (origen, cid, inicio, dia)).fetchone())
         leads_meta = sum(_leads_por_dia(pg, origen, META, [cid], inicio, dia).values())
-        fuente_c, sin_walcu = fuente, ""
+        fuente_c, sin_walcu, semanal = fuente, "", None
         if fuente == META:
-            mensual, sin_walcu = walcu_mes(pg, origen, cid, inicio, dia)
-            if mensual is None:
+            semanal, sin_walcu = walcu_semana(pg, origen, cid, inicio, dia)
+            if semanal is None:
                 leads, citas, ventas, zona, fuera, con_cp_filas = leads_meta, 0, 0, 0, 0, 0
             else:
-                fuente_c = WALCU_MES
-                leads, citas, ventas, zona, fuera = mensual
-                con_cp_filas = 1
+                fuente_c = WALCU_SEMANA
+                gasto = semanal.gasto           # el de las semanas con carga de Walcu, como los leads
+                leads, citas, ventas = semanal.leads, semanal.citas, semanal.ventas
+                zona, fuera, con_cp_filas = semanal.cercana, semanal.fuera, 1
         else:
             leads, citas, ventas, zona, fuera, con_cp_filas = (int(x) for x in pg.execute(
                 """SELECT coalesce(sum(leads), 0), coalesce(sum(citas), 0), coalesce(sum(ventas), 0),
@@ -314,7 +402,7 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
                 (origen, cid, inicio, dia)).fetchone())
         j = Juicio(cid, titulo, modelo, ambito, (dia - inicio).days, leads, citas, ventas, gasto,
                    sin_mercado=bool(sin_merc and modelo), fuente_leads=fuente_c, leads_meta=leads_meta,
-                   sin_walcu=sin_walcu)
+                   sin_walcu=sin_walcu, cohorte=semanal)
         juicios.append(j)
         if j.dias_vida < int(crit["dias_vida_minimos"]):
             continue
@@ -330,14 +418,15 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
             limite = tolerancia
             media = {"texto": "su media", "tolerancia_pct": crit["media_tolerancia_pct"]}
         cpl = F(gasto, leads) if leads else None
-        cpc = F(gasto, citas) if citas else None
+        cpc = F(j.gasto_cita, citas) if citas else None
         cpl_media = cpl is not None and media_cpl is not None and cpl <= media_cpl * limite
         cpc_media = cpc is not None and media_cpc is not None and cpc <= media_cpc * limite
         r = j.reglas
         if j.de_meta:   # sin citas ni ventas: a y d no se aplican
             r["a"] = Resultado("a", "sin_dato", j.falta_walcu("sin citas"))
         else:
-            r["a"] = _a(crit["a"], leads, citas, zona + fuera if con_cp_filas else None, fuera)
+            r["a"] = _a(crit["a"], j.leads_cita, citas, zona + fuera if con_cp_filas else None, fuera,
+                        j.nota_citas(), j.citas_incompletas())
         r["b"] = _b(pg, origen, crit["b"], j, dia, impresiones, clics)
         r["c"] = _c(crit["c"], j, gasto, cpc, media_cpc, media)
         if j.de_meta:
@@ -362,13 +451,16 @@ def juzgar(pg: psycopg.Connection, hoy: date, origen: str, conc, crit: dict,
     return dia, juicios
 
 
-def _a(c: dict, leads: int, citas: int, con_cp: int | None, fuera: int) -> Resultado:
+def _a(c: dict, leads: int, citas: int, con_cp: int | None, fuera: int, nota: str = "",
+       incompletas: str = "") -> Resultado:
+    """Lead a cita (con `leads`: con la carga semanal, los de las semanas con las citas completas) y fuera
+    de zona (con todos los leads con código postal)."""
     partes, activa, sin_volumen, revisar, cifras = [], False, False, [c["revisar"]], {}
     umbral = _f(c["lead_cita_minima_pct"]) / CIEN
     n_min = int(c["n_minimo_leads"])
     if leads:
         tasa = F(citas, leads)
-        texto = f"lead a cita: {citas} de {leads} = {pct(tasa)} (umbral {num(umbral * CIEN)} %)"
+        texto = f"lead a cita: {citas} de {leads} = {pct(tasa)} (umbral {num(umbral * CIEN)} %){nota}"
         cifras.update(citas=citas, leads=leads, lead_cita_pct=float(tasa * CIEN), umbral_pct=float(umbral * CIEN),
                       n_minimo_leads=n_min)
         if leads < n_min:
@@ -387,8 +479,12 @@ def _a(c: dict, leads: int, citas: int, con_cp: int | None, fuera: int) -> Resul
         if con_cp >= int(c["n_minimo_leads_con_cp"]) and tasa_f > umbral_f:
             activa = True
             revisar.append(c["revisar_fuera_zona"])
+    if incompletas:
+        partes.insert(0, incompletas)
     if not partes:
         return Resultado("a", "sin_dato", "sin leads todavía")
+    if incompletas and not activa and not con_cp:
+        return Resultado("a", "sin_dato", "; ".join(partes), cifras=cifras)
     estado = "activa" if activa else ("sin_volumen" if sin_volumen else "no")
     return Resultado("a", estado, "; ".join(partes), " ".join(revisar), "revisar" if activa else None, cifras)
 
@@ -471,12 +567,15 @@ def _c(c: dict, j: Juicio, gasto: int, cpc: F | None, media_cpc: F | None, media
         return Resultado("c", "no", texto, cifras=cifras)
     if j.de_meta:   # sin citas no hay coste por cita: ni continuar ni parar
         return Resultado("c", "activa", texto, c["sin_coste_cita"], "revisar", cifras)
+    if j.citas_incompletas():   # carga semanal sin ninguna semana con las citas completas: tampoco
+        return Resultado("c", "activa", texto + "; " + j.citas_incompletas(), c["citas_incompletas"], "revisar",
+                         cifras)
     if media_cpc is None:
         return Resultado("c", "activa", texto + "; sin media de coste por cita", c["sin_media"], "revisar", cifras)
     limite = media_cpc * (1 + _f(media["tolerancia_pct"]) / CIEN)
     hasta = f" (hasta {euros(limite)})" if limite != media_cpc else ""
-    texto += (f"; coste por cita: {euros(cpc) if cpc is not None else 'sin citas'} frente a {media['texto']} de "
-              f"{euros(media_cpc)}{hasta}")
+    texto += (f"; coste por cita: {euros(cpc) if cpc is not None else 'sin citas'}{j.nota_citas()} frente a "
+              f"{media['texto']} de {euros(media_cpc)}{hasta}")
     cifras.update(coste_cita_cents=None if cpc is None else float(cpc), media_coste_cita_cents=float(media_cpc),
                   media=media["texto"])
     if cpc is not None and cpc <= limite:
@@ -486,17 +585,21 @@ def _c(c: dict, j: Juicio, gasto: int, cpc: F | None, media_cpc: F | None, media
 
 def _d(c: dict, j: Juicio, cpl_media: bool, cpc_media: bool, media_cpl, media_cpc,
        modelos_e: dict[tuple[str, str], Modelo], media: str = "su media") -> Resultado:
-    if not j.citas:
+    if j.ventas_incompletas():
+        return Resultado("d", "sin_dato", j.ventas_incompletas())
+    citas = j.citas_venta
+    if not citas:
         return Resultado("d", "sin_dato", "sin citas todavía")
     umbral = _f(c["tasa_venta_minima_pct"]) / CIEN
     n_min = int(c["n_minimo_citas"])
-    tasa = F(j.ventas, j.citas)
-    texto = f"tasa de venta: {j.ventas} de {j.citas} citas = {pct(tasa)} (umbral {num(umbral * CIEN)} %)"
-    cifras = {"ventas": j.ventas, "citas": j.citas, "tasa_venta_pct": float(tasa * CIEN),
+    tasa = F(j.ventas, citas)
+    texto = (f"tasa de venta: {j.ventas} de {citas} citas = {pct(tasa)} (umbral {num(umbral * CIEN)} %)"
+             f"{j.nota_ventas()}")
+    cifras = {"ventas": j.ventas, "citas": citas, "tasa_venta_pct": float(tasa * CIEN),
               "umbral_pct": float(umbral * CIEN), "n_minimo_citas": n_min}
-    if j.citas < n_min:
+    if citas < n_min:
         return Resultado("d", "sin_volumen" if tasa < umbral else "no",
-                         texto + f"; sin volumen: {j.citas} citas, mínimo {n_min}", cifras=cifras)
+                         texto + f"; sin volumen: {citas} citas, mínimo {n_min}", cifras=cifras)
     if tasa >= umbral:
         return Resultado("d", "no", texto, cifras=cifras)
     if media_cpl is None or media_cpc is None:
@@ -550,22 +653,22 @@ def _fatiga(pg, origen: str, c: dict, j: Juicio, dia: date) -> Resultado:
 
 def _subir(crit: dict, j: Juicio, cpl: F | None, cpc: F | None, r: dict[str, Resultado]) -> Resultado:
     s, a, d = crit["subir"], crit["a"], crit["d"]
-    cpv = F(j.gasto_cents, j.ventas) if j.ventas else None
-    lead_cita = F(j.citas, j.leads) if j.leads else None
-    venta = F(j.ventas, j.citas) if j.citas else None
+    cpv = F(j.gasto_venta, j.ventas) if j.ventas else None
+    lead_cita = F(j.citas, j.leads_cita) if j.leads_cita else None
+    venta = F(j.ventas, j.citas_venta) if j.citas_venta else None
     pruebas = [
         ("coste por lead", cpl is not None and cpl < _f(s["coste_lead_maximo"]) * CIEN,
          f"coste por lead {euros(cpl) if cpl is not None else '—'} (< {num(_f(s['coste_lead_maximo']))} €)"),
         ("coste por cita", cpc is not None and cpc < _f(s["coste_cita_maximo"]) * CIEN,
          f"por cita {euros(cpc) if cpc is not None else '—'} (< {num(_f(s['coste_cita_maximo']))} €)"),
-        ("lead a cita", lead_cita is not None and j.leads >= int(a["n_minimo_leads"])
+        ("lead a cita", lead_cita is not None and j.leads_cita >= int(a["n_minimo_leads"])
          and lead_cita > _f(s["lead_cita_minima_pct"]) / CIEN,
          f"lead a cita {pct(lead_cita) if lead_cita is not None else '—'} (> {num(_f(s['lead_cita_minima_pct']))} %; "
-         f"n = {j.leads} leads)"),
-        ("tasa de venta", venta is not None and j.citas >= int(d["n_minimo_citas"])
+         f"n = {j.leads_cita} leads)"),
+        ("tasa de venta", venta is not None and j.citas_venta >= int(d["n_minimo_citas"])
          and venta > _f(s["tasa_venta_minima_pct"]) / CIEN,
          f"tasa de venta {pct(venta) if venta is not None else '—'} (> {num(_f(s['tasa_venta_minima_pct']))} %; "
-         f"n = {j.citas} citas)"),
+         f"n = {j.citas_venta} citas)"),
         ("coste por venta", cpv is not None and cpv < _f(s["coste_venta_maximo"]) * CIEN,
          f"coste por venta {euros(cpv) if cpv is not None else '—'} (< {num(_f(s['coste_venta_maximo']))} €)"),
     ]

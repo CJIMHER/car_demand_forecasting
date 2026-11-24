@@ -519,17 +519,29 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
                                                   "titulo": "Otra marca del grupo · Oferta", "gasto_cents": 2500,
                                                   "impresiones": 4000, "clics": 40})
 
-    # ---- Meta y Walcu por campaña y mes, y referencias por año (sin azar: salen de las filas de arriba)
-    _campana_mes(filas, fin_meta)
+    # ---- Meta y Walcu por campaña y semana, y referencias por año (sin azar: salen de las filas de arriba)
+    _campana_semana(filas, fin_meta)
     _referencias(filas, fin_meta)
     return filas
 
 
-def _campana_mes(filas: dict[str, list[dict]], fin_meta: date) -> None:
-    """panel_campana_mes: las campañas de panel_campana_dia por mes, con los leads de panel_leads_dia."""
+def _lunes(d: date) -> date:
+    return d - timedelta(days=d.weekday())
+
+
+def _completas(semana: date, cargada: date) -> tuple[bool, bool]:
+    """Citas y ventas completas con los plazos por defecto (14 y 60 días desde el domingo)."""
+    antiguedad = (cargada - (semana + timedelta(days=6))).days
+    return antiguedad >= 14, antiguedad >= 60
+
+
+def _campana_semana(filas: dict[str, list[dict]], fin_meta: date) -> None:
+    """panel_campana_semana: las campañas de panel_campana_dia por semana, con los leads de panel_leads_dia.
+    Walcu «cargado» el día siguiente a fin_meta."""
+    cargada = fin_meta + UN_DIA
     meta: dict[tuple[date, str], dict] = {}
     for f in filas["panel_campana_dia"]:
-        m = meta.setdefault((f["dia"].replace(day=1), f["campana_id"]), {
+        m = meta.setdefault((_lunes(f["dia"]), f["campana_id"]), {
             "titulo": f["titulo"], "ambito": f["ambito"], "tipo_campana": f["tipo_campana"], "modelo": f["modelo"],
             "gasto_cents": 0, "impresiones": 0, "clics": 0})
         m["gasto_cents"] += f["gasto_cents"]
@@ -539,49 +551,65 @@ def _campana_mes(filas: dict[str, list[dict]], fin_meta: date) -> None:
     for f in filas["panel_leads_dia"]:
         if f["campana_id"] is None:
             continue
-        w = walcu[(f["dia"].replace(day=1), f["campana_id"])]
+        w = walcu[(_lunes(f["dia"]), f["campana_id"])]
         for k in ("leads", "citas", "ventas"):
             w[k] += f[k]
             w[f"{k}_{f['tipo'].lower()}"] += f[k]
-    for (mes, cid), m in sorted(meta.items()):
-        w = walcu.get((mes, cid), defaultdict(int))
+    for (semana, cid), m in sorted(meta.items()):
+        w = walcu.get((semana, cid), defaultdict(int))
         leads = w["leads"]
         fuera, sin_zona = round(leads * 0.2), round(leads * 0.1)
-        filas["panel_campana_mes"].append({
-            "dia": fin_meta, "mes": mes, "campana_id": cid, **m, "leads_meta": round(leads * 1.1), "walcu": True,
-            "cruce": "nombre", "leads": leads, "citas": w["citas"], "ventas": w["ventas"],
+        c_ok, v_ok = _completas(semana, cargada)
+        filas["panel_campana_semana"].append({
+            "dia": fin_meta, "semana": semana, "campana_id": cid, **m, "leads_meta": round(leads * 1.1),
+            "walcu": True, "cruce": "nombre", "citas_completas": c_ok, "ventas_completas": v_ok,
+            "leads": leads, "citas": w["citas"], "ventas": w["ventas"],
             **{f"{k}_{t}": w[f"{k}_{t}"] for k in ("leads", "citas", "ventas") for t in ("vn", "vo")},
             "leads_cercana": leads - fuera - sin_zona, "leads_fuera": fuera, "leads_sin_zona": sin_zona,
             "num_inexistente": round(leads * 0.08)})
-    mes = fin_meta.replace(day=1)
-    filas["panel_campana_mes"].append({
-        "dia": fin_meta, "mes": mes, "campana_id": None, "titulo": "(sin campaña)", "ambito": None,
+    semana = _lunes(fin_meta) - timedelta(days=7)
+    c_ok, v_ok = _completas(semana, cargada)
+    filas["panel_campana_semana"].append({
+        "dia": fin_meta, "semana": semana, "campana_id": None, "titulo": "(sin campaña)", "ambito": None,
         "tipo_campana": None, "modelo": None, "gasto_cents": 0, "impresiones": 0, "clics": 0, "leads_meta": None,
-        "walcu": True, "cruce": "nombre", "leads": 4, "citas": 0, "ventas": 0, "leads_vn": 3, "leads_vo": 1,
+        "walcu": True, "cruce": "nombre", "citas_completas": c_ok, "ventas_completas": v_ok,
+        "leads": 4, "citas": 0, "ventas": 0, "leads_vn": 3, "leads_vo": 1,
         "citas_vn": 0, "citas_vo": 0, "ventas_vn": 0, "ventas_vo": 0, "leads_cercana": 3, "leads_fuera": 1,
         "leads_sin_zona": 0, "num_inexistente": 0})
 
 
 def _referencias(filas: dict[str, list[dict]], fin_meta: date) -> None:
-    """panel_referencia_meta: el año anterior completo y el actual hasta el mes de fin_meta."""
-    anio = fin_meta.year
-    #           tipo: gasto (€), leads Meta, leads, citas, ventas, inexistentes (por mes del año anterior)
-    base = {"VN": (1_900, 230, 190, 18, 6, 15), "VO": (800, 70, 60, 14, 5, 1)}
-    for a, meses, factor in ((anio - 1, 12, 1.0), (anio, fin_meta.month, 1.15)):
+    """panel_referencia_meta: el año ISO anterior completo y el actual hasta la última semana terminada."""
+    anio, semana_actual, _ = fin_meta.isocalendar()
+    #           tipo: gasto (€), leads Meta, leads, citas, ventas, inexistentes (por semana del año anterior)
+    base = {"VN": (440, 53, 44, 4.2, 1.4, 3.5), "VO": (185, 16, 14, 3.2, 1.2, 0.2)}
+    for a, semanas, factor in ((anio - 1, 52, 1.0), (anio, max(semana_actual - 1, 1), 1.15)):
+        lunes1 = date.fromisocalendar(a, 1, 1)
+        # Del año en curso, las 2 últimas semanas sin citas completas y las 9 últimas sin ventas completas
+        s_citas = semanas if a < anio else max(semanas - 2, 0)
+        s_ventas = semanas if a < anio else max(semanas - 9, 0)
         total = defaultdict(int)
         for tipo, (g, lm, l, c, v, inex) in base.items():
-            x = {"gasto_cents": round(g * meses * factor * 100), "leads_meta": round(lm * meses * factor),
-                 "leads": round(l * meses * factor), "citas": round(c * meses * (2 - factor)),
-                 "ventas": round(v * meses * (2 - factor)), "num_inexistente": round(inex * meses * factor)}
+            x = {"gasto_cents": round(g * semanas * factor * 100), "leads_meta": round(lm * semanas * factor),
+                 "leads": round(l * semanas * factor), "citas": round(c * semanas * (2 - factor)),
+                 "ventas": round(v * semanas * (2 - factor)), "num_inexistente": round(inex * semanas * factor)}
             x["leads_fuera"] = round(x["leads"] * (0.22 if tipo == "VN" else 0.12))
             x["leads_sin_zona"] = round(x["leads"] * 0.1)
             x["leads_cercana"] = x["leads"] - x["leads_fuera"] - x["leads_sin_zona"]
+            x.update(semanas_citas=s_citas, gasto_citas_cents=round(g * s_citas * factor * 100),
+                     leads_citas=round(l * s_citas * factor), citas_citas=round(c * s_citas * (2 - factor)),
+                     semanas_ventas=s_ventas, gasto_ventas_cents=round(g * s_ventas * factor * 100),
+                     citas_ventas=round(c * s_ventas * (2 - factor)), ventas_ventas=round(v * s_ventas * (2 - factor)))
             for k, n in x.items():
-                total[k] += n
-            filas["panel_referencia_meta"].append({"dia": fin_meta, "anio": a, "tipo": tipo, "desde_mes": date(a, 1, 1),
-                                                   "hasta_mes": date(a, meses, 1), "meses": meses, **x})
-        filas["panel_referencia_meta"].append({"dia": fin_meta, "anio": a, "tipo": "todo", "desde_mes": date(a, 1, 1),
-                                               "hasta_mes": date(a, meses, 1), "meses": meses, **total})
+                if not k.startswith("semanas"):
+                    total[k] += n
+            filas["panel_referencia_meta"].append({
+                "dia": fin_meta, "anio": a, "tipo": tipo, "desde_semana": lunes1,
+                "hasta_semana": lunes1 + timedelta(days=7 * (semanas - 1)), "semanas": semanas, **x})
+        filas["panel_referencia_meta"].append({
+            "dia": fin_meta, "anio": a, "tipo": "todo", "desde_semana": lunes1,
+            "hasta_semana": lunes1 + timedelta(days=7 * (semanas - 1)), "semanas": semanas,
+            "semanas_citas": s_citas, "semanas_ventas": s_ventas, **total})
 
 
 # --------------------------------------------------------------------------- escritura

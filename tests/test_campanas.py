@@ -346,7 +346,7 @@ def test_reglas_b_y_c_con_los_leads_de_meta_semana_real(pg):
     assert reglas_tcross["b"]["estado"] == "no" and reglas_tcross["c"]["estado"] == "no"
     assert "6,33 €" in reglas_tcross["c"]["texto"] and "39 leads según Meta" in reglas_tcross["c"]["texto"]
     assert {reglas_tcross[k]["estado"] for k in ("a", "d", "subir")} == {"sin_dato"}
-    assert "sin datos de Walcu: no se aplica; no hay carga de Walcu de noviembre de 2026" in reglas_tcross["a"]["texto"]
+    assert "sin datos de Walcu: no se aplica; no hay ninguna carga de Walcu" in reglas_tcross["a"]["texto"]
 
 
 def test_regla_f_con_los_leads_de_meta(pg):

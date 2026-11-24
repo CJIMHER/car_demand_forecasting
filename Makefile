@@ -139,7 +139,7 @@ walcu-cargar: ## Carga el CSV agregado de Walcu: make walcu-cargar FICHERO=/ruta
 	$(JOBS) python -m ingesta.walcu cargar --nombre "$(notdir $(FICHERO))" < "$(FICHERO)"
 
 walcu-agregar: ## (Mac) Agrega la exportación de leads de Walcu: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu.csv [EXCLUIDOS=…]
-	@test -n "$(ENTRADA)" -a -n "$(SALIDA)" || { echo "Uso: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu_agregado.csv"; exit 1; }
+	@test -n "$(ENTRADA)" -a -n "$(SALIDA)" || { echo "Uso: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu_semanal.csv"; exit 1; }
 	$(PYTHON) scripts/walcu_agregar.py "$(ENTRADA)" "$(SALIDA)" $(if $(EXCLUIDOS),--excluidos "$(EXCLUIDOS)")
 
 referencias-meta: ## Cruce Meta–Walcu y referencias de coste por año y tipo (tabla e informe de lo que no casa)

@@ -59,12 +59,15 @@ presupuesto) y la recomendación por modelo (`panel_recomendacion_modelo`).
 - Subir presupuesto: todo a la vez (coste por lead < 10 €, por cita < 100 €, lead → cita > 5 %, tasa de venta > 33 %, por venta < 400 €, la regla e) y ninguna regla de revisión activa.
 
 **Walcu y leads según Meta.** Campaña a campaña: con `panel_leads_dia` (Walcu diario), manda; si no, la
-carga mensual (`panel_campana_mes`, de `make walcu-cargar`) si hay carga del mes del último día y la campaña
-casa con sus leads. Sin ninguna, b, c y f se aplican con los leads que cuenta Meta
-(`panel_campana_dia.leads_meta`) y cada cifra lo dice («14 leads según Meta»); la regla c propone «revisar»
-(«Sin datos de Walcu: falta el coste por cita…»), y a, d y subir presupuesto se evalúan pero no se aplican
-(«sin datos de Walcu: no se aplica» y el motivo). La f compara días: con la carga mensual usa los leads de
-Meta por día. Las alertas van al rol marketing; sin `TELEGRAM_CHAT_MARKETING`, al chat del técnico
+carga semanal (`panel_campana_semana`, de `make walcu-cargar`) si hay carga de la semana del último día o
+de la anterior y la campaña casa con sus leads. Sin ninguna, b, c y f se aplican con los leads que cuenta
+Meta (`panel_campana_dia.leads_meta`) y cada cifra lo dice («14 leads según Meta»); la regla c propone
+«revisar» («Sin datos de Walcu: falta el coste por cita…»), y a, d y subir presupuesto se evalúan pero no
+se aplican («sin datos de Walcu: no se aplica» y el motivo). Cohorte: lead a cita y coste por cita solo con
+las semanas con las citas completas (14 días desde su domingo al cargarse), y tasa y coste por venta con
+las de ventas completas (60 días), de `config/campanas_walcu.yaml`; sin ninguna, «citas aún incompletas»
+(la c revisa, ni continúa ni para) o «ventas aún incompletas» (la d no se aplica). La f compara días: con
+la carga semanal usa los leads de Meta por día. Las alertas van al rol marketing; sin `TELEGRAM_CHAT_MARKETING`, al chat del técnico
 con «[Para marketing]» delante.
 
 Con poco volumen se muestra la cifra y la regla no salta. La comparación con la referencia por días

@@ -85,7 +85,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Marketing | Cuándo lanzar una campaña general | `panel_semana_campana` |
 | Marketing | Qué dieron las campañas pasadas | `panel_campana_resultado` |
 | Marketing | Tráfico de la web por canal | `panel_trafico_canal_dia` |
-| Marketing | Campañas del último mes (Meta y Walcu) | `panel_campana_mes` y la decisión de `panel_campana_decision` |
+| Marketing | Campañas de las últimas 4 semanas (Meta y Walcu) | `panel_campana_semana` y la decisión de `panel_campana_decision` |
 | Marketing | Referencias históricas | `panel_referencia_meta` |
 
 **Marketing por tipo.** La vista tiene el selector Todo / Nuevos (VN) / Ocasión (VO):
@@ -415,41 +415,53 @@ Es una comparación con un modelo, no un experimento.
 
 **Cifras de Marketing:** 28 días que acaban en el último `dia` con datos, frente a los 28 anteriores.
 
-### panel_campana_mes · Meta y Walcu por campaña y mes
+### panel_campana_semana · Meta y Walcu por campaña y semana
 
-- **Grano**: mes × campaña de Meta (o campaña de Walcu sin campaña de Meta: `campana_id` vacío).
-- **Fuente**: `campanas_meta_dia_vigente` (nivel campaña) y `walcu_campana_mes_vigente` (origen Facebook;
-  AiVORA fuera), unidas por el nombre normalizado (`config/campanas_walcu.yaml`), sin las campañas de otras
-  marcas (`propio.prefijos_excluidos` y `propio.palabras_excluidas` de `config/concesionario.yaml`). Las rehace
-  `ingesta/referencias_meta.py` tras cada descarga de Meta y GA4, tras cada carga de Walcu y con
-  `make referencias-meta`. `dia`: el último día con datos de Meta.
+- **Grano**: semana (lunes de la semana ISO) × campaña de Meta (o campaña de Walcu sin campaña de Meta:
+  `campana_id` vacío).
+- **Fuente**: `campanas_meta_dia_vigente` (nivel campaña, sumado de lunes a domingo) y
+  `walcu_campana_semana_vigente` (origen Facebook; AiVORA fuera), unidas por el nombre normalizado
+  (`config/campanas_walcu.yaml`), sin las campañas de otras marcas (`propio.prefijos_excluidos` y
+  `propio.palabras_excluidas` de `config/concesionario.yaml`). Las rehace `ingesta/referencias_meta.py` tras
+  cada descarga de Meta y GA4, tras cada carga de Walcu y con `make referencias-meta`. `dia`: el último día
+  con datos de Meta.
+- **Cohorte**: las citas y las ventas de Walcu cuentan en la semana del lead y llegan después. Una semana
+  tiene las citas completas si, el día en que se cargó, su domingo tenía al menos `cohorte.lead_a_cita_dias`
+  (14) y las ventas, `cohorte.cita_a_venta_dias` (60) (`config/campanas_walcu.yaml`).
 
 | Columna | Unidad | Significado |
 | --- | --- | --- |
-| `mes` | fecha (día 1) | Mes |
+| `semana` | fecha (lunes) | Semana ISO |
 | `campana_id`, `titulo`, `ambito`, `tipo_campana`, `modelo` | texto | Campaña de Meta y su clasificación (`config/campanas.yaml`); `ambito` vacío: sin regla |
-| `gasto_cents`, `impresiones`, `clics`, `leads_meta` | número | De Meta en el mes |
-| `walcu` | sí/no | Hay carga de Walcu de ese mes |
-| `cruce` | nombre / equivalencia / vacío | Cómo casa con Walcu. Vacío: ningún lead de Walcu con ese nombre (sus cifras de Walcu quedan vacías, nunca cero). Una campaña que casa en algún mes tiene 0 en los meses con carga sin leads |
-| `leads`, `citas`, `ventas` y sus `_vn`, `_vo` | número | De Walcu. Cita: el lead tiene negociación; venta: negociación cerrada como vendida |
+| `gasto_cents`, `impresiones`, `clics`, `leads_meta` | número | De Meta en la semana |
+| `walcu` | sí/no | Hay carga de Walcu de esa semana |
+| `citas_completas`, `ventas_completas` | sí/no | Cohorte cumplida para citas y para ventas; vacías sin carga de Walcu |
+| `cruce` | nombre / equivalencia / vacío | Cómo casa con Walcu. Vacío: ningún lead de Walcu con ese nombre (sus cifras de Walcu quedan vacías, nunca cero). Una campaña que casa en alguna semana tiene 0 en las semanas con carga sin leads |
+| `leads`, `citas`, `ventas` y sus `_vn`, `_vo` | número | De Walcu, por semana del lead. Cita: el lead tiene negociación; venta: negociación cerrada como vendida |
 | `leads_cercana`, `leads_fuera`, `leads_sin_zona`, `num_inexistente` | número | Zona por código postal (zona cercana del concesionario) y números inexistentes |
 
-**Cifras de Marketing («Campañas del último mes»):** el último mes con gasto; coste por lead, por cita y
-por venta = gasto / leads, citas o ventas de Walcu de la campaña. En VN o VO, las de ambos con sus leads,
-citas y ventas de ese tipo y sin costes (su gasto no se reparte).
+**Cifras de Marketing («Campañas de las últimas 4 semanas»):** las 4 últimas semanas terminadas el último
+`dia` con datos de Meta. Coste por lead = gasto / leads de Walcu de las 4 semanas; coste por cita, solo con
+las semanas con las citas completas, y por venta, con las de ventas completas («—» si no hay ninguna). Debajo,
+una fila por semana con sus leads, citas y ventas y su estado: completa, ventas incompletas, citas y ventas
+incompletas o sin carga de Walcu. En VN o VO, las de ambos con sus leads, citas y ventas de ese tipo y sin
+costes (su gasto no se reparte).
 
 ### panel_referencia_meta · referencias de coste por año
 
-- **Grano**: año × tipo (VN, VO, todo). Solo los meses con datos de Meta y carga de Walcu a la vez.
-- **Fuente**: la misma que `panel_campana_mes`. Leads de Walcu: todos los de Facebook de ese tipo (casen o
+- **Grano**: año ISO × tipo (VN, VO, todo). Solo las semanas con datos de Meta y carga de Walcu a la vez, ya
+  terminadas el día en que se cargaron.
+- **Fuente**: la misma que `panel_campana_semana`. Leads de Walcu: todos los de Facebook de ese tipo (casen o
   no con una campaña). Gasto: el de las campañas de VN o de VO va a su tipo; el de las de ambos o sin regla
   se reparte en proporción a sus leads de Walcu de cada tipo y, si no tienen, solo cuenta en «todo».
 
 | Columna | Unidad | Significado |
 | --- | --- | --- |
-| `anio`, `tipo`, `desde_mes`, `hasta_mes`, `meses` | | Año, tipo y meses que cubre |
+| `anio`, `tipo`, `desde_semana`, `hasta_semana`, `semanas` | | Año ISO, tipo y semanas que cubre |
 | `gasto_cents`, `leads_meta`, `leads`, `citas`, `ventas` | número | Sumas del año |
 | `leads_cercana`, `leads_fuera`, `leads_sin_zona`, `num_inexistente` | número | Para % fuera de zona (fuera / con código postal) y % de número inexistente (/ leads) |
+| `semanas_citas`, `gasto_citas_cents`, `leads_citas`, `citas_citas` | número | Solo las semanas con las citas completas: lead a cita y coste por cita |
+| `semanas_ventas`, `gasto_ventas_cents`, `citas_ventas`, `ventas_ventas` | número | Solo las semanas con las ventas completas: cita a venta y coste por venta |
 
 Las de 2025 (`criterios_meta.c.referencia_anio`) son la «media» de las reglas c y d.
 

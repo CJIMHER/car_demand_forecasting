@@ -1,5 +1,28 @@
 # Cambios
 
+## 2026-11-24 · Walcu por semanas, con cohortes de citas y ventas (rama hito-1b-walcu-semanal)
+
+- **Migración `0019`**: `walcu_campana_semana` (solo añadir; clave semana, origen, campaña y tipo; `semana`,
+  el lunes de la semana ISO del lead) sustituye a `walcu_campana_mes`, que se borra (estaba vacía); la vista
+  `_vigente` da la última carga de cada semana. `panel_campana_semana` sustituye a `panel_campana_mes`, con
+  `citas_completas` y `ventas_completas`. `panel_referencia_meta` pasa a semanas y añade las sumas de las
+  semanas con citas completas y con ventas completas. `panel_walcu_sin_cruce`, con primera y última semana.
+  El `downgrade` recrea las mensuales, vacías.
+- **`make walcu-cargar`**: columna `semana` en AAAA-MM-DD; si no es lunes, se rechaza el fichero entero.
+  Recargar una semana la sustituye. Avisos nuevos (no rechazan): ventas ≤ citas ≤ leads y zonas que no suman
+  los leads. Bucket: `walcu/semanal/<día>/`.
+- **`scripts/walcu_agregar.py`**: agrega por semana del lead (lunes ISO); lo demás, igual.
+- **Cohorte** (`config/campanas_walcu.yaml`, `cohorte`): citas y ventas van a la semana del lead. Lead a cita y
+  coste por cita solo con las semanas cuyo domingo tenía al menos 14 días al cargarse; cita a venta y coste
+  por venta, 60 días. En las referencias, en las reglas (a, c, d, subir; versión `reglas-2026-11-24b`) y en
+  Marketing. Sin ninguna semana completa: «citas aún incompletas» (la c propone revisar) o «ventas aún
+  incompletas» (la d no se aplica).
+- **Marketing**: «Campañas del último mes» pasa a «Campañas de las últimas 4 semanas» (completas), con una
+  tabla por semana del lead que marca las incompletas y las que no tienen carga de Walcu. «Referencias
+  históricas»: por año ISO, sumando semanas.
+- El histórico semanal (`~/cdf_walcu/walcu_semanal_historico.csv`, 1.373 filas, 100 semanas) valida sin
+  avisos. `walcu_agregado_historico.csv` (mensual) ya no se usa: se rechaza por la columna `mes`.
+
 ## 2026-11-24 · Arreglo: campañas sin regla repetidas rompían Meta y GA4 (rama hito-1b-arreglo-sin-regla)
 
 - **`panel_campanas_sin_regla`**: `make ga4` y `make meta-historico` fallaban al final con `UniqueViolation`

@@ -252,7 +252,7 @@
 
   <section aria-labelledby="t-mes" class="tarjeta seccion"{{ attrs("mes", d.mes) }}>
     <div class="tarjeta-cabeza">
-      <h2 id="t-mes">Campañas del último mes{% if d.mes.hay %}: {{ d.mes.mes }}{% endif %}</h2>
+      <h2 id="t-mes">Campañas de las últimas 4 semanas{% if d.mes.hay %}: {{ d.mes.mes }}{% endif %}</h2>
       {{ marca(d.mes) }}
     </div>
     {% if d.mes.hay %}
@@ -291,7 +291,7 @@
             <td data-etiqueta="Decisión" class="izq">{{ c.decision_texto }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="10" class="izq">Ninguna campaña{% if d.tipo != "todo" %} de {{ d.tipo }}{% endif %} con gasto este mes.</td></tr>
+          <tr><td colspan="10" class="izq">Ninguna campaña{% if d.tipo != "todo" %} de {{ d.tipo }}{% endif %} con gasto en estas semanas.</td></tr>
           {% endfor %}
         </tbody>
         <tfoot>
@@ -310,7 +310,33 @@
         </tfoot>
       </table>
     </div>
-    {% if not d.mes.walcu %}<p class="nota motivo">Sin carga de Walcu de {{ d.mes.mes }}: leads, citas y ventas sin datos; las reglas que las necesitan no se aplican.</p>{% endif %}
+    <div class="tabla-scroll">
+      <table class="tabla tabla-movil tabla-semanas-walcu">
+        <caption class="izq">Por semana del lead{% if d.tipo != "todo" %} · {{ d.tipo }}{% endif %}</caption>
+        <thead>
+          <tr>
+            <th scope="col" class="izq">Semana</th>
+            <th scope="col">Leads</th>
+            <th scope="col">Citas</th>
+            <th scope="col">Ventas</th>
+            <th scope="col" class="izq">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in d.mes.semanas %}
+          <tr{% if s.incompleta %} class="incompleta"{% endif %}>
+            <th scope="row" class="izq">{{ s.semana }}</th>
+            <td data-etiqueta="Leads">{{ s.leads }}</td>
+            <td data-etiqueta="Citas">{{ s.citas }}</td>
+            <td data-etiqueta="Ventas">{{ s.ventas }}</td>
+            <td data-etiqueta="Estado" class="izq">{{ s.estado }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="nota">Cohorte: las citas y las ventas cuentan en la semana del lead y llegan después. Una semana tiene las citas completas cuando su último día tenía {{ d.mes.dias_cita }} días al cargar Walcu, y las ventas, con {{ d.mes.dias_venta }}; hasta entonces todavía pueden crecer. € / cita solo usa las semanas con las citas completas y € / venta, las de ventas completas («—» si no hay ninguna).</p>
+    {% if not d.mes.walcu %}<p class="nota motivo">Sin carga de Walcu de estas semanas: leads, citas y ventas sin datos; las reglas que las necesitan no se aplican.</p>{% elif d.mes.sin_carga %}<p class="nota motivo">Sin carga de Walcu de la semana {{ d.mes.sin_carga }}.</p>{% endif %}
     {% if d.mes.sin_cruce %}<p class="nota">Además, {{ d.mes.sin_cruce }} leads de Facebook en Walcu sin campaña de Meta con la que casar (no cuentan en el total).</p>{% endif %}
     <p class="nota">Leads, citas y ventas: de Walcu (origen Facebook), unidos a la campaña de Meta por su nombre. «—»: la campaña no casa con ningún lead de Walcu. Cita: el lead tiene negociación; venta: negociación cerrada como vendida. La decisión es la de los criterios de Meta.</p>
     {% else %}{{ sin_datos() }}{% endif %}
@@ -322,7 +348,7 @@
       {{ marca(d.referencias) }}
     </div>
     {% if d.referencias.hay %}
-    <p class="nota">Campañas de Meta con los leads de Walcu de origen Facebook, por año{% if d.tipo != "todo" %} · {{ d.tipo }}{% endif %} · solo los meses con datos de Meta y de Walcu</p>
+    <p class="nota">Campañas de Meta con los leads de Walcu de origen Facebook, por año (semanas ISO){% if d.tipo != "todo" %} · {{ d.tipo }}{% endif %} · solo las semanas terminadas con datos de Meta y de Walcu</p>
     <div class="tabla-scroll">
       <table class="tabla tabla-movil tabla-referencias">
         <thead>
@@ -343,7 +369,7 @@
         </tbody>
       </table>
     </div>
-    <p class="nota">Las de {{ d.referencias.anio_ref }} son la media de las reglas c y d: un coste por cita (y por lead) como mucho el de {{ d.referencias.anio_ref }} del mismo tipo está «en la media». Los totales de un año incompleto no se comparan con los de uno completo; los costes y las tasas, sí. Las citas y ventas del último mes todavía pueden crecer.{% if d.tipo != "todo" %} El gasto de las campañas de VN y VO se reparte por sus leads de Walcu de cada tipo.{% endif %}</p>
+    <p class="nota">Las de {{ d.referencias.anio_ref }} son la media de las reglas c y d: un coste por cita (y por lead) como mucho el de {{ d.referencias.anio_ref }} del mismo tipo está «en la media». Los totales de un año incompleto no se comparan con los de uno completo; los costes y las tasas, sí. Lead a cita y coste por cita solo usan las semanas con las citas completas; cita a venta y coste por venta, las de ventas completas{% if d.referencias.incompletas %} ({{ d.referencias.incompletas }}){% endif %}.{% if d.tipo != "todo" %} El gasto de las campañas de VN y VO se reparte por sus leads de Walcu de cada tipo.{% endif %}</p>
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 

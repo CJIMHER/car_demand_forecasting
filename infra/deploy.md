@@ -441,32 +441,48 @@ Cada mes (el técnico recibe «Toca descargar Google Trends» si la última desc
 4. En el servidor, la carga es automática a las 07:00; para verla ya: `make gtrends`. Repetirla no
    duplica. Marketing → «Atención frente a sus rivales» pasa a real, con la fecha de la descarga.
 
-### 7.12 Histórico de Meta, Walcu agregado y referencias de coste
+### 7.12 Histórico de Meta, Walcu agregado por semanas y referencias de coste
 
 Una vez, en el servidor:
 
 ```bash
-make deploy                                  # migraciones 0017 y 0018
+make deploy                                  # migraciones 0017, 0018 y 0019 (Walcu por semanas)
 make meta-historico DESDE=2025-01-01         # hasta ayer; por meses, con archivadas y borradas. Se puede relanzar
 ```
 
 Si se corta (límite de la API, red), relanzar la misma orden: no duplica filas. `make estado` muestra la
 anotación de `meta` con los tramos.
 
+La 0019 borra `walcu_campana_mes` (vacía: la carga mensual no llegó a usarse) y la sustituye por
+`walcu_campana_semana`; `panel_campana_mes` pasa a `panel_campana_semana`. Su `downgrade` recrea las
+mensuales, vacías. Después, la carga del histórico semanal (una vez, desde el Mac):
+
+```bash
+scp -i ~/.ssh/cdf_hetzner ~/cdf_walcu/walcu_semanal_historico.csv cdf@<ip>:/opt/cdf/entrada/
+# en el servidor
+make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_semanal_historico.csv     # 1.373 filas, 100 semanas
+```
+
+`walcu_agregado_historico.csv` (mensual) ya no se carga: `make walcu-cargar` lo rechaza (columna «mes»).
+
 Cada semana:
 
 1. En el Mac: exportar los leads de Walcu (xlsx o csv) y
-   `make walcu-agregar ENTRADA=~/Descargas/leads.xlsx SALIDA=~/Descargas/walcu_agregado.csv`. Descarta los
+   `make walcu-agregar ENTRADA=~/Descargas/leads.xlsx SALIDA=~/Descargas/walcu_semanal.csv`. Agrega por
+   semana del lead (lunes de la semana ISO). Exportar al menos los últimos 60 días: las citas y las ventas
+   de un lead cuentan en la semana del lead y llegan después; recargar una semana la sustituye. Descarta los
    leads de los comerciales de `~/cdf_walcu/comerciales_excluidos.txt` (solo en el Mac; nunca en el
    repositorio ni en el servidor). La primera vez, revisar los estados, tipos y motivos que escribe y
    ajustar `config/walcu_export.yaml`.
-2. Copiar el CSV al servidor: `scp -i ~/.ssh/cdf_hetzner ~/Descargas/walcu_agregado.csv cdf@<ip>:/opt/cdf/entrada/`.
-3. En el servidor: `make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_agregado.csv`. Si el fichero trae otra
-   columna o algo con aspecto de correo, teléfono o DNI, lo rechaza entero y no carga nada.
+2. Copiar el CSV al servidor: `scp -i ~/.ssh/cdf_hetzner ~/Descargas/walcu_semanal.csv cdf@<ip>:/opt/cdf/entrada/`.
+3. En el servidor: `make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_semanal.csv`. Si el fichero trae otra
+   columna, una semana que no es lunes o algo con aspecto de correo, teléfono o DNI, lo rechaza entero y no
+   carga nada. Si no se cumple ventas ≤ citas ≤ leads o las zonas no suman los leads, avisa y carga.
 4. `make referencias-meta`: tabla por año y tipo y lo que no casa entre Meta y Walcu. Para lo que no casa,
    equivalencias en `config/campanas_walcu.yaml` (commit, `make deploy`) y otra vez `make referencias-meta`.
 5. `SIN_TELEGRAM=1 make alertas` para ver las alertas recalculadas sin enviarlas (o esperar al cron de las
-   09:15). Marketing → «Campañas del último mes» y «Referencias históricas».
+   09:15). Marketing → «Campañas de las últimas 4 semanas» (con las semanas incompletas marcadas) y
+   «Referencias históricas».
 
 ## 8. Día a día
 

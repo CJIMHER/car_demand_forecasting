@@ -23,3 +23,11 @@ excluidos: [AiVORA]
 sufijos: [copy, copia, ok]
 
 equivalencias: {}
+
+# Cohorte: las citas y las ventas se atribuyen a la semana del lead, y llegan días (citas) o semanas
+# (ventas) después. Una semana cuenta para las tasas y costes de cita (lead a cita, coste por cita) si, al
+# cargarla, su último día tenía al menos lead_a_cita_dias; para los de venta (cita a venta, coste por
+# venta), cita_a_venta_dias. Las demás salen marcadas en el panel como incompletas.
+cohorte:
+  lead_a_cita_dias: 14
+  cita_a_venta_dias: 60

@@ -9,7 +9,7 @@ Usa esta skill cuando haya que decidir si lanzar una campaña, juzgar cómo va u
 Por campaña y día:
 
 - **Meta**: gasto, impresiones o visualizaciones, clics, frecuencia, leads, texto del anuncio (copy) y respuestas del formulario de lead, incluido el código postal.
-- **CRM (Walcu)**: leads, citas y ventas de la campaña, y el motivo de descarte que anota el comercial en cada lead. Hoy llegan agregados por mes, origen, campaña y tipo (`make walcu-cargar`, una vez por semana) y se unen a la campaña de Meta por su nombre normalizado (`config/campanas_walcu.yaml`). Cita = el lead tiene negociación creada; venta = negociación cerrada como vendida. Solo cuentan los de origen Facebook: AiVORA son llamadas a clientes del grupo, no campañas de Facebook.
+- **CRM (Walcu)**: leads, citas y ventas de la campaña, y el motivo de descarte que anota el comercial en cada lead. Hoy llegan agregados por semana del lead (lunes de la semana ISO), origen, campaña y tipo (`make walcu-cargar`, una vez por semana) y se unen a la campaña de Meta por su nombre normalizado (`config/campanas_walcu.yaml`). Cita = el lead tiene negociación creada; venta = negociación cerrada como vendida. Solo cuentan los de origen Facebook: AiVORA son llamadas a clientes del grupo, no campañas de Facebook.
 - **Stock propio** del modelo: unidades y precio, por versión y acabado.
 - **Mercado** (web de stock de la marca): unidades y precio mediano de otros concesionarios para el mismo modelo, versión y acabado, en la zona cercana.
 
@@ -17,7 +17,7 @@ Nunca uses ni guardes datos personales de los leads. El código postal sirve sol
 
 Si falta un dato, dilo y no lo supongas. Una regla sin su dato no se aplica.
 
-**Con y sin Walcu.** Las reglas a, c (la parte del coste por cita), d y subir presupuesto usan las citas y ventas de Walcu cuando hay carga de Walcu del mes y la campaña casa con sus leads. Si no, dicen **«sin datos de Walcu»** y no se aplican: no se inventan citas ni ventas. Las reglas b, c (coste por lead) y f usan los leads de Walcu si los hay; si no, los que cuenta Meta, diciéndolo en cada cifra («leads según Meta»). En la regla c sin Walcu, sin coste por cita, la decisión es **revisar**: falta el coste por cita para decidir entre continuar y parar. La regla f compara días: mientras Walcu llegue por meses, usa los leads de Meta por día.
+**Con y sin Walcu.** Las reglas a, c (la parte del coste por cita), d y subir presupuesto usan las citas y ventas de Walcu cuando hay carga de Walcu de la semana del último día (o de la anterior) y la campaña casa con sus leads. **Cohorte**: las citas y ventas cuentan en la semana del lead y llegan después; lead a cita y coste por cita solo usan las semanas con al menos 14 días desde su domingo al cargarse, y tasa y coste por venta, las de al menos 60 días (`config/campanas_walcu.yaml`, `cohorte`). Sin ninguna semana completa, la regla dice «citas aún incompletas» (la c propone revisar, ni continuar ni parar) o «ventas aún incompletas» (la d no se aplica). Si no, dicen **«sin datos de Walcu»** y no se aplican: no se inventan citas ni ventas. Las reglas b, c (coste por lead) y f usan los leads de Walcu si los hay; si no, los que cuenta Meta, diciéndolo en cada cifra («leads según Meta»). En la regla c sin Walcu, sin coste por cita, la decisión es **revisar**: falta el coste por cita para decidir entre continuar y parar. La regla f compara días: mientras Walcu llegue por semanas, usa los leads de Meta por día.
 
 ## Definiciones
 

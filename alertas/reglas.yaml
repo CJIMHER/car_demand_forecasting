@@ -19,7 +19,7 @@
 #   texto       el motivo en una frase, con huecos {así} para las cifras (formato español)
 #
 # Los umbrales son una propuesta inicial (docs/diseno.md, Señales y alertas): se calibran en el piloto.
-version: reglas-2026-11-24
+version: reglas-2026-11-24b      # b: Walcu por semanas y cohortes de citas y ventas
 
 reglas:
   # ------------------------------------------------------------------ con datos reales desde ya
@@ -145,8 +145,9 @@ reglas:
   # (docs/criterios_marketing_meta.md). Umbrales, volúmenes y textos en «criterios_meta», más abajo;
   # son los mismos para las alertas, la decisión de cada campaña y la recomendación por modelo.
   # Todas se activan con solo panel_campana_dia real. Walcu, campaña a campaña: la carga diaria
-  # (panel_leads_dia) si la hay; si no, la mensual (make walcu-cargar → panel_campana_mes) si hay carga
-  # del mes y la campaña casa con sus leads. a, c (coste por cita), d y subir necesitan citas y ventas:
+  # (panel_leads_dia) si la hay; si no, la semanal (make walcu-cargar → panel_campana_semana) si hay carga
+  # de la semana de su último día o de la anterior y la campaña casa con sus leads; las tasas y costes de
+  # cita y de venta, solo con las semanas con las citas (14 días) o las ventas (60 días) completas. a, c (coste por cita), d y subir necesitan citas y ventas:
   # sin Walcu dicen «sin datos de Walcu» y no se aplican. b, c (coste por lead) y f usan los leads de
   # Walcu o, si no, los de Meta («leads según Meta»). La comparación con la referencia por días de vida
   # (panel_campana_salud) es solo detalle explicativo.
@@ -265,6 +266,8 @@ criterios_meta:
     sin_media: "Sin media de coste por cita para decidir: revisar audiencias y creatividad."
     # Con leads según Meta (sin datos de Walcu) no hay citas: la decisión es revisar
     sin_coste_cita: "Sin datos de Walcu: falta el coste por cita para decidir entre continuar y parar."
+    # Con la carga semanal de Walcu y ninguna semana con las citas completas (cohorte): tampoco se decide
+    citas_incompletas: "Citas aún incompletas: falta el coste por cita para decidir entre continuar y parar."
   d:
     tasa_venta_minima_pct: 33     # el óptimo: revisar si ventas/citas < 33 % con coste por lead y por cita en la media
     n_minimo_citas: 6
