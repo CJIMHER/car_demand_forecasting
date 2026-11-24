@@ -17,10 +17,11 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Solo lo que necesita el panel: su código, la configuración del concesionario y los módulos
-# compartidos de ingesta (provincias y concesionario). El código es de root y de solo lectura.
+# Solo lo que necesita el panel: su código, la configuración del concesionario y los módulos de
+# ingesta que importa, también dentro de funciones e indirectamente (lo comprueba
+# tests/test_infra_panel.py). El código es de root y de solo lectura.
 COPY config/ /app/config/
-COPY ingesta/__init__.py ingesta/provincias.py ingesta/concesionario.py ingesta/campanas.py ingesta/canales.py ingesta/referencias_meta.py /app/ingesta/
+COPY ingesta/__init__.py ingesta/provincias.py ingesta/concesionario.py ingesta/campanas.py ingesta/canales.py ingesta/referencias_meta.py ingesta/db.py /app/ingesta/
 COPY panel/ /app/panel/
 
 USER panel

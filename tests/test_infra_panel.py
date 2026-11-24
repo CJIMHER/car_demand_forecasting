@@ -1,5 +1,6 @@
 """Despliegue del panel (sin Docker): compose, imagen, Caddy, cron, Makefile y .env.example."""
 
+import ast
 import os
 import re
 import shutil
@@ -154,3 +155,58 @@ def test_recursos_de_terceros_en_el_repositorio_con_licencia(ruta):
     assert (RAIZ / ruta / "LICENSE").stat().st_size > 500 or (RAIZ / ruta / "LICENSE").read_text().strip()
     versiones = (RAIZ / "panel/static/VERSIONES.md").read_text()
     assert ruta.split("/")[-1] in versiones
+
+
+# panel/dev.py es solo para el Mac (make panel-dev: pgserver, scrapers y analítica sintéticos); se copia
+# con panel/ pero nunca se ejecuta en la imagen.
+FUERA_DE_LA_IMAGEN = {"panel.dev"}
+
+
+def _importados(ruta, modulo):
+    """Todos los módulos que importa un fichero, también dentro de funciones y los relativos."""
+    paquete = modulo.rsplit(".", 1)[0]
+    salida = set()
+    for nodo in ast.walk(ast.parse(ruta.read_text())):
+        if isinstance(nodo, ast.Import):
+            salida |= {a.name for a in nodo.names}
+        elif isinstance(nodo, ast.ImportFrom):
+            base = nodo.module or ""
+            if nodo.level:
+                base = paquete + (f".{base}" if base else "")
+            salida.add(base)
+            salida |= {f"{base}.{a.name}" for a in nodo.names}   # from ingesta import canales
+    return salida
+
+
+def _fichero(modulo):
+    ruta = RAIZ / (modulo.replace(".", "/") + ".py")
+    return ruta if ruta.exists() else None
+
+
+def _ingesta_del_panel():
+    """Módulos de ingesta que el panel importa, directa o indirectamente, con quién los pide."""
+    pendientes = [(f"panel.{p.stem}", None) for p in sorted((RAIZ / "panel").glob("*.py"))
+                  if f"panel.{p.stem}" not in FUERA_DE_LA_IMAGEN]
+    vistos = {}
+    while pendientes:
+        modulo, desde = pendientes.pop()
+        if modulo in vistos:
+            continue
+        vistos[modulo] = desde
+        for dep in _importados(_fichero(modulo), modulo):
+            if dep.split(".")[0] in ("panel", "ingesta") and _fichero(dep):
+                pendientes.append((dep, modulo))
+    return {m: d for m, d in vistos.items() if m.startswith("ingesta.")}
+
+
+def test_dockerfile_del_panel_copia_todo_lo_que_importa_de_ingesta():
+    copias = [linea.split()[1:-1] for linea in (RAIZ / "panel/Dockerfile").read_text().splitlines()
+              if linea.startswith("COPY ") and linea.rstrip().endswith("/app/ingesta/")]
+    assert len(copias) == 1, "una sola línea COPY ingesta/… /app/ingesta/"
+    copiados = set(copias[0])
+    assert "ingesta/__init__.py" in copiados
+    necesarios = _ingesta_del_panel()
+    assert "ingesta.concesionario" in necesarios   # la búsqueda encuentra algo
+    faltan = sorted(f"{m.replace('.', '/')}.py (lo importa {d})" for m, d in necesarios.items()
+                    if f"{m.replace('.', '/')}.py" not in copiados)
+    assert not faltan, "faltan en el COPY de panel/Dockerfile: " + ", ".join(faltan)

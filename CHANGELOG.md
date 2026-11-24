@@ -1,5 +1,15 @@
 # Cambios
 
+## 2026-11-24 · Imagen del panel: prueba de los imports de ingesta (rama hito-1b-walcu-semanal)
+
+- Rama rebasada sobre `origin/main` con `4fe3eab` (COPY de `campanas`, `canales` y `referencias_meta` en
+  `panel/Dockerfile`) y `a3c100e` (campañas sin regla sin duplicados; la descarga no se deshace).
+- **Prueba nueva** (`tests/test_infra_panel.py`): recorre con `ast` los imports del panel, también los que
+  van dentro de funciones y los indirectos, y falla si un módulo de `ingesta` no está en la línea
+  `COPY ingesta/… /app/ingesta/`. Fuera queda `panel/dev.py`, que solo corre en el Mac.
+- **`panel/Dockerfile`**: añade `ingesta/db.py`, que faltaba (lo importan dentro de funciones
+  `ingesta/campanas.py`, `ingesta/referencias_meta.py` y `panel/ejemplo.py`).
+
 ## 2026-11-24 · Walcu por semanas, con cohortes de citas y ventas (rama hito-1b-walcu-semanal)
 
 - **Migración `0019`**: `walcu_campana_semana` (solo añadir; clave semana, origen, campaña y tipo; `semana`,
