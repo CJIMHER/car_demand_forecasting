@@ -165,7 +165,10 @@ de GA4 ((direct), (not set), (cross-network)…) no son campañas. Con `config/c
 fuentes y medios que caen en «otros» (`panel_trafico_otros`) y las campañas de Google Ads, con su nombre
 y sin reglas (`panel_campanas_google_ads`). GA4 da además el ID de campaña y su agrupación de canales
 por defecto (`campana_id`, `canal_ga4`), respaldo de las reglas. Una campaña de GA4 que se une a una de Meta por
-`utm_campaign` se clasifica como ella. Pruebas: `tests/test_campanas.py`.
+`utm_campaign` se clasifica como ella. En `panel_campanas_sin_regla` hay una fila por fuente y campaña: si
+GA4 trae la misma campaña con otro ID, fuente o medio, se juntan (días extremos y sesiones sumadas). La
+descarga de Meta o GA4 se confirma antes de rehacer estas tablas: si rehacerlas falla, la descarga queda
+«ok» con `aviso_campanas` en su detalle y un aviso en el log. Pruebas: `tests/test_campanas.py`.
 
     make meta      make ga4      (lo mismo que el cron; DESDE/HASTA a mano: python -m ingesta.meta --desde … --hasta …)
 

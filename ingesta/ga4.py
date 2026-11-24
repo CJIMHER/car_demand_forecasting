@@ -204,7 +204,7 @@ def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], 
     with pg.transaction():
         nuevas, iguales = cx.insertar_versionado(pg, "ga4_trafico_dia", "ga4_trafico_dia_vigente", CLAVE, VALORES,
                                                  filas, {"descargado_at": momento, "run_id": run_id, "origen": ORIGEN})
-    campanas = cmp.actualizar(pg)
+    campanas = cmp.actualizar_sin_romper(pg)          # la descarga ya está confirmada
     return {"desde": str(desde), "hasta": str(hasta), "paginas": len(brutos), "filas": len(filas),
             "filas_nuevas": nuevas, "filas_iguales": iguales, "brutos": ruta_bucket, **campanas}
 

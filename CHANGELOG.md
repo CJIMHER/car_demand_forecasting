@@ -1,5 +1,18 @@
 # Cambios
 
+## 2026-11-24 · Arreglo: campañas sin regla repetidas rompían Meta y GA4 (rama hito-1b-arreglo-sin-regla)
+
+- **`panel_campanas_sin_regla`**: `make ga4` y `make meta-historico` fallaban al final con `UniqueViolation`
+  en `(fuente, campana)` cuando GA4 traía la misma campaña en varias filas (con y sin ID, otro origen o
+  medio). Ahora se junta una fila por `(fuente, campana)` antes de insertar (primer y último día de todas,
+  gasto y sesiones sumados, el motivo de la primera) y el `INSERT` lleva `ON CONFLICT … DO UPDATE` con la
+  misma suma, para que no pueda volver a romper.
+- **La descarga no se deshace por la clasificación** (`campanas.actualizar_sin_romper`): Meta (diaria e
+  histórico) y GA4 confirman sus filas antes; si rehacer las campañas falla, la descarga se anota `ok` con
+  `aviso_campanas` en el detalle y un aviso en el log, y el proceso sale con 0.
+- Pruebas: dos filas de GA4 con el identificador `52581469922844` (reproduce el error de producción), la
+  función de juntar, y un fallo forzado de la clasificación tras descargar Meta y GA4.
+
 ## 2026-11-24 · Histórico de Meta, Walcu agregado y referencias de coste (rama hito-1b-walcu-meta-hist)
 
 - **`make meta-historico DESDE=2025-01-01 [HASTA=…]`** (`ingesta/meta.py --historico`): insights por campaña

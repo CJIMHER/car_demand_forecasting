@@ -369,3 +369,30 @@ def test_cuando_entran_los_leads_de_walcu_mandan_los_de_walcu(pg):
     assert j.fuente_leads == "walcu" and j.leads == 40
     assert "según Meta" not in j.reglas["c"].cifras_texto and "/ 40 leads = 6,11 €" in j.reglas["c"].cifras_texto
     assert j.reglas["a"].estado != "sin_dato"
+
+
+def test_una_campana_de_ga4_repetida_sale_una_vez_con_sus_sesiones_sumadas(pg):
+    """Caso de producción: la misma campaña de GA4 llega en dos filas (con y sin ID de campaña, otro medio y
+    otro día). Antes rompía la clave (fuente, campana) de panel_campanas_sin_regla."""
+    pg.execute("""INSERT INTO ga4_trafico_dia (descargado_at, run_id, origen, propiedad_id, dia, fuente, medio, campana,
+                  pagina_destino, sesiones, sesiones_interaccion, eventos_clave, campana_id, canal_ga4, huella) VALUES
+                  (now(), 'r', 'p', '1', %s, 'facebook', 'paid', '52581469922844', '/', 5, 4, 0, NULL, NULL, 'a'),
+                  (now(), 'r', 'p', '1', %s, 'facebook', 'cpc', '52581469922844', '/', 7, 6, 0, '52581469922844',
+                   'Paid Social', 'b')""", (HOY - timedelta(days=3), HOY))
+    assert cmp.actualizar(pg)["campanas_sin_regla"] == 1
+    assert pg.execute("SELECT fuente, campana, primer_dia, ultimo_dia, gasto_cents, sesiones "
+                      "FROM panel_campanas_sin_regla").fetchall() == [
+        ("ga4", "52581469922844", HOY - timedelta(days=3), HOY, None, 12)]
+    # Y otra vez: se rehace entera, sin chocar con lo que ya había
+    assert cmp.actualizar(pg)["campanas_sin_regla"] == 1
+
+
+def test_sin_regla_unica_junta_por_fuente_y_campana():
+    from datetime import date as d
+    filas = [("ga4", "x", d(2026, 1, 5), d(2026, 1, 6), None, 3, "m1"),
+             ("meta", "x", d(2026, 1, 1), d(2026, 1, 2), 100, None, "m"),
+             ("ga4", "x", d(2026, 1, 1), d(2026, 1, 9), None, 4, "m2"),
+             ("meta", "x", d(2026, 1, 3), d(2026, 1, 4), 50, None, "m")]
+    assert sorted(cmp._sin_regla_unica(filas)) == [
+        ("ga4", "x", d(2026, 1, 1), d(2026, 1, 9), None, 7, "m1"),
+        ("meta", "x", d(2026, 1, 1), d(2026, 1, 4), 150, None, "m")]

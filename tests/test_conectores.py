@@ -284,6 +284,34 @@ def test_ga4_correccion_sin_duplicar(pg, monkeypatch, tmp_path):
     assert pg.execute("SELECT count(*) FROM ga4_trafico_dia").fetchone() == (2,)
 
 
+def test_ga4_un_fallo_al_rehacer_las_campanas_no_deshace_la_descarga(pg, monkeypatch, tmp_path, caplog):
+    """La descarga se confirma antes de clasificar: si rehacer las campañas falla, queda como aviso."""
+    def falla(*a, **k):
+        raise RuntimeError("UniqueViolation de prueba")
+
+    monkeypatch.setattr(cmp, "actualizar", falla)
+    monkeypatch.setattr(cx, "_urlopen", Red(_respuestas_ga4()))
+    assert ga4.ejecutar(entorno=_credenciales(tmp_path), desde=DESDE, hasta=HASTA, subir=Bucket(),
+                        dormir=lambda s: None, firmar=lambda cuenta, ahora: "jwt") == 0
+    assert pg.execute("SELECT count(*) FROM ga4_trafico_dia").fetchone() == (2,)
+    estado, detalle = pg.execute("SELECT estado, detalle FROM fuentes_estado").fetchone()
+    assert estado == "ok" and detalle["filas_nuevas"] == 2
+    assert detalle["aviso_campanas"] == "RuntimeError: UniqueViolation de prueba"
+    assert "no se han podido rehacer las campañas" in caplog.text
+
+
+def test_meta_un_fallo_al_rehacer_las_campanas_no_deshace_la_descarga(pg, monkeypatch):
+    def falla(*a, **k):
+        raise RuntimeError("fallo de prueba")
+
+    monkeypatch.setattr(cmp, "actualizar", falla)
+    monkeypatch.setattr(cx, "_urlopen", Red(_respuestas_meta()))
+    assert meta.ejecutar(entorno=ENTORNO_META, desde=DESDE, hasta=HASTA, subir=Bucket(), dormir=lambda s: None) == 0
+    assert pg.execute("SELECT count(*) FROM campanas_meta_dia").fetchone() == (4,)
+    estado, detalle = pg.execute("SELECT estado, detalle FROM fuentes_estado").fetchone()
+    assert estado == "ok" and detalle["aviso_campanas"] == "RuntimeError: fallo de prueba"
+
+
 def test_jwt_de_la_cuenta_de_servicio_firmado_con_rs256():
     pytest.importorskip("cryptography")
     from cryptography.hazmat.primitives import hashes, serialization

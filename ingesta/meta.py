@@ -282,7 +282,7 @@ def ejecutar_historico_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[s
         resumen["tramos"].append({"mes": f"{ini:%Y-%m}", "paginas": len(brutos), "filas": len(filas),
                                   "filas_nuevas": nuevas, "filas_iguales": iguales})
         LOG.info("Meta %s: %s filas (%s nuevas)", f"{ini:%Y-%m}", len(filas), nuevas)
-    resumen.update(cmp.actualizar(pg, config))
+    resumen.update(cmp.actualizar_sin_romper(pg, config))      # los tramos ya están confirmados
     return resumen
 
 
@@ -301,7 +301,7 @@ def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], 
         nuevas, iguales = cx.insertar_versionado(
             pg, "campanas_meta_dia", "campanas_meta_dia_vigente", CLAVE, VALORES, filas,
             {"descargado_at": momento, "run_id": run_id, "origen": f"meta_marketing_api {config.meta_version}"})
-    campanas = cmp.actualizar(pg, config)
+    campanas = cmp.actualizar_sin_romper(pg, config)  # la descarga ya está confirmada
     return {"desde": str(desde), "hasta": str(hasta), "paginas": len(brutos), "filas": len(filas),
             "filas_nuevas": nuevas, "filas_iguales": iguales, "brutos": ruta, **campanas}
 

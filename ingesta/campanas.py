@@ -202,6 +202,34 @@ def _ampliar(acum: dict, clave, dia, *valores) -> None:
         a[i] += v
 
 
+def _sumar(a, b):
+    return None if a is None and b is None else (a or 0) + (b or 0)
+
+
+def _sin_regla_unica(filas: list[tuple]) -> list[tuple]:
+    """Una fila por (fuente, campana): GA4 puede traer la misma campaña con distinto ID, origen o medio (o
+    nombres que se normalizan igual) y Meta, dos campañas con el mismo nombre. Se juntan: primer y último día
+    de todas y gasto y sesiones sumados; el motivo, el de la primera."""
+    juntas: dict[tuple, tuple] = {}
+    for f in filas:
+        clave = f[:2]
+        j = juntas.get(clave)
+        juntas[clave] = f if j is None else (*clave, min(j[2], f[2]), max(j[3], f[3]), _sumar(j[4], f[4]),
+                                              _sumar(j[5], f[5]), j[6])
+    return list(juntas.values())
+
+
+def actualizar_sin_romper(pg: psycopg.Connection, campanas: Campanas | None = None) -> dict:
+    """Lo que usan las descargas de Meta y GA4, ya confirmadas: si rehacer las tablas del panel falla, queda
+    como aviso en el resumen de la descarga y en el log, no como fallo de la descarga."""
+    try:
+        return actualizar(pg, campanas)
+    except Exception as exc:
+        aviso = f"{type(exc).__name__}: {exc}"[:500]
+        LOG.warning("La descarga está guardada, pero no se han podido rehacer las campañas: %s", aviso)
+        return {"aviso_campanas": aviso}
+
+
 def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales=None, conc=None) -> dict:
     """Rehace panel_campana_dia (real), panel_campanas_sin_regla y las tablas de tráfico de GA4.
     Devuelve cuántas campañas de Meta se han clasificado y cuántas (Meta y GA4) han quedado sin regla."""
@@ -269,6 +297,7 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales
             or campanas.clasificar(camp)
         if not c.ok:
             sin_regla.append(("ga4", camp, p, u, None, s, c.motivo))
+    sin_regla = _sin_regla_unica(sin_regla)
     with pg.transaction():
         pg.execute("DELETE FROM panel_campana_dia WHERE origen = 'real'")
         pg.execute("DELETE FROM panel_campana_otra_marca WHERE origen = 'real'")
@@ -283,8 +312,14 @@ def actualizar(pg: psycopg.Connection, campanas: Campanas | None = None, canales
                    VALUES ('real', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", panel)
             cur.executemany("INSERT INTO panel_campana_otra_marca (origen, dia, campana_id, titulo, gasto_cents, "
                             "impresiones, clics) VALUES ('real', %s, %s, %s, %s, %s, %s)", otras)
-            cur.executemany("INSERT INTO panel_campanas_sin_regla (fuente, campana, primer_dia, ultimo_dia, "
-                            "gasto_cents, sesiones, motivo) VALUES (%s, %s, %s, %s, %s, %s, %s)", sin_regla)
+            cur.executemany(
+                """INSERT INTO panel_campanas_sin_regla (fuente, campana, primer_dia, ultimo_dia, gasto_cents,
+                   sesiones, motivo) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (fuente, campana) DO UPDATE SET
+                       primer_dia = least(panel_campanas_sin_regla.primer_dia, excluded.primer_dia),
+                       ultimo_dia = greatest(panel_campanas_sin_regla.ultimo_dia, excluded.ultimo_dia),
+                       gasto_cents = panel_campanas_sin_regla.gasto_cents + excluded.gasto_cents,
+                       sesiones = panel_campanas_sin_regla.sesiones + excluded.sesiones""", sin_regla)
             cur.executemany("INSERT INTO panel_trafico_canal_dia (origen, dia, canal, tipo, sesiones, "
                             "sesiones_interaccion, eventos_clave) VALUES ('real', %s, %s, %s, %s, %s, %s)",
                             [(*k, *v) for k, v in trafico.items()])
