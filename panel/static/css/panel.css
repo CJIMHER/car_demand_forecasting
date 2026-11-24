@@ -554,3 +554,11 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
   .matriz td[data-etiqueta]::before { content: attr(data-etiqueta); display: block; font-size: 11px; font-weight: 500; color: var(--gris); }
   .tabla-cobertura { min-width: 0; }
 }
+
+/* Precio de nuestros VO (Ventas y Dirección) */
+.bloque-precio-vo { margin-top: 24px; }
+.aviso-provisional { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--aviso-fondo); color: var(--aviso-texto); font-size: 14px; }
+.tabla-precio-vo .n { display: block; }
+.tabla-precio-vo tr.precio-bajar .c-recomendacion { color: #9A3412; font-weight: 600; }
+.tabla-precio-vo tr.precio-revisar .c-recomendacion { color: var(--marron); font-weight: 600; }
+.tabla-precio-vo tr.precio-barato .c-recomendacion { color: var(--azul-oscuro); }

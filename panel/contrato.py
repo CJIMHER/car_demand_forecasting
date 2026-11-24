@@ -25,7 +25,7 @@ TABLAS = (
     "panel_curva_grupo", "panel_leads_dia", "panel_campana_dia", "panel_campana_salud",
     "panel_recomendacion_modelo", "panel_atencion_relativa", "panel_semana_campana",
     "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_semana", "panel_referencia_meta",
-    "panel_campana_otra_marca",
+    "panel_campana_otra_marca", "panel_precio_vo",
 )
 
 # Tablas del motor de alertas (migración 0009) con el mismo formato (dia, origen, calculado_at). No
@@ -46,12 +46,14 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "ventas_mes": ("panel_ventas_mes",),
         "alertas": ALERTAS,
         "edad": ("panel_stock_vehiculo",),
+        "precio": ("panel_precio_vo",),             # precio provisional de nuestros VO (el mismo de Ventas)
     },
     "ventas": {
         "resumen": ("panel_riesgo_vehiculo",),
         "lista": ("panel_riesgo_vehiculo",),
         "detalle": ("panel_riesgo_vehiculo", "panel_curva_grupo"),
         "alertas": ALERTAS,
+        "precio": ("panel_precio_vo",),             # precio provisional de nuestros VO (analitica/precio.py)
     },
     "marketing": {
         "kpis": ("panel_campana_dia", "panel_leads_dia"),

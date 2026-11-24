@@ -5,7 +5,8 @@ tablas derivadas panel_mercado_dia, panel_mercado_modelo, panel_mercado_concesio
 panel_mercado_capturas, panel_mercado_competidor (analitica/competidores.py, para la alerta de
 presión de un competidor) y, para el detalle de cada modelo, panel_mercado_segmento y
 panel_mercado_sin_clasificar (analitica/segmentos.py); para la cobertura del color,
-panel_mercado_color_fuente y panel_mercado_color_sin_familia. El color de cada anuncio sale de
+panel_mercado_color_fuente y panel_mercado_color_sin_familia; y el precio provisional de nuestros VO,
+panel_precio_vo (analitica/precio.py, tabla del contrato del panel con origen 'real'). El color de cada anuncio sale de
 color_anuncio (ingesta/colores.py), unido por fuente + id_anuncio: vale el último color con estado ok
 o listing_color sabido hasta ese día (fetched_at), y un VIN de la ficha distinto del del anuncio lo
 anula. El panel solo lee estas tablas: nunca
@@ -58,7 +59,7 @@ from datetime import date, timedelta
 import psycopg
 from psycopg.types.json import Jsonb
 
-from analitica import colores, competidores, segmentos, versiones
+from analitica import colores, competidores, precio, segmentos, versiones
 from ingesta import aviso_copia, telegram
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
 from ingesta.db import conectar
@@ -401,6 +402,7 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
     conc = conc or cargar_concesionario()
     catalogo = versiones.cargar(conc.marca)
     paleta = colores.cargar()
+    reglas_precio = precio.cargar_reglas()
     h = Hechos(pg, conc)
     hasta = hasta or hoy_madrid()
     todos = set().union(*h.completos.values())
@@ -409,7 +411,9 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                 "filas_concesionario": 0, "filas_segmento": 0}
     desde = max(desde or min(todos), min(todos))
     resumen = {"desde": str(desde), "hasta": str(hasta), "dias": 0, "filas_dia": 0, "filas_modelo": 0,
-               "filas_concesionario": 0, "filas_competidor": 0, "filas_segmento": 0}
+               "filas_concesionario": 0, "filas_competidor": 0, "filas_segmento": 0, "filas_precio_vo": 0}
+    if reglas_precio is None:
+        resumen["precio_vo"] = "sin precio_provisional en config/concesionario.yaml: no se calcula"
     por_nivel: Counter = Counter()
     t_segmentos = 0.0
     d = desde
@@ -419,6 +423,7 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                           "panel_mercado_segmento", "panel_mercado_sin_clasificar", "panel_mercado_competidor",
                           "panel_mercado_color_fuente", "panel_mercado_color_sin_familia"):
                 pg.execute(f"DELETE FROM {tabla} WHERE dia = %s", (d,))
+            pg.execute("DELETE FROM panel_precio_vo WHERE dia = %s AND origen = 'real'", (d,))
             calculado = False
             for fuente in FUENTES:   # cobertura del color: cada fuente con su captura completa del día
                 if d in h.completos[fuente]:
@@ -440,6 +445,10 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                     _insertar(pg, "panel_mercado_color_sin_familia", segmentos.COLS_SIN_FAMILIA, sin_familia)
                     t_segmentos += time.monotonic() - t
                     resumen["filas_segmento"] += len(filas_seg)
+                    if tipo == "VO" and reglas_precio is not None:
+                        filas_precio = precio.calcular(h, d, catalogo, reglas_precio)
+                        _insertar(pg, "panel_precio_vo", precio.COLS, filas_precio)
+                        resumen["filas_precio_vo"] += len(filas_precio)
                     por_nivel.update(f"{tipo} {f['nivel']}" for f in filas_seg)
                     resumen["filas_dia"] += len(filas_dia)
                     resumen["filas_modelo"] += len(filas_modelo)

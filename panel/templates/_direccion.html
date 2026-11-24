@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, segmentos %}
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, precio_vo %}
 <div id="direccion" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -100,4 +100,6 @@
       <a class="boton-enlace" href="/mercado">Ver el mercado</a>
     </section>
   </div>
+
+  {{ precio_vo(d.precio, "#direccion") }}
 </div>

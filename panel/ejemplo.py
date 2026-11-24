@@ -522,7 +522,64 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     # ---- Meta y Walcu por campaña y semana, y referencias por año (sin azar: salen de las filas de arriba)
     _campana_semana(filas, fin_meta)
     _referencias(filas, fin_meta)
+    _precio_vo(filas, hoy, conc)
     return filas
+
+
+def _euros(cents: int) -> str:
+    return f"{(cents + 50) // 100:,}".replace(",", ".") + " €"
+
+
+# Precio provisional de nuestros VO: un coche por caso, para ver cada regla y cada nivel de comparación.
+# (regla, precio frente a la mediana, días publicado, «al menos», nivel, comparables)
+CASOS_PRECIO = (
+    ("muy_por_encima", 1.14, 45, False, "segmento", 9),
+    ("por_encima_parado", 1.04, 72, False, "sin_km", 6),
+    ("en_precio_no_sale", 0.98, 104, False, "segmento", 11),
+    ("barato", 0.86, 12, False, "segmento", 7),
+    ("en_linea", 1.01, 20, False, "segmento", 8),
+    ("en_linea", 1.00, 8, False, "comunidad", 4),
+    ("sin_comparables", None, 33, False, None, 2),
+    ("muy_por_encima", 1.12, 61, True, "sin_antiguedad", 5),
+    ("en_linea", 0.95, 15, False, "segmento", 12),
+    ("sin_precio", None, 5, False, "segmento", 6),
+)
+ACABADOS_EJEMPLO = ("Básico", "Medio", "Alto")
+MOTORES_EJEMPLO = ("TSI 115 CV · Gasolina", "TDI 150 CV · Diésel · Automático", "TSI 150 CV · Gasolina · Automático")
+AMPLIADO = {"segmento": "", "sin_km": ". Comparado sin el tramo de km",
+            "sin_antiguedad": ". Comparado sin los tramos de antigüedad ni de km"}
+
+
+def _precio_vo(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) -> None:
+    """panel_precio_vo: los mismos textos y órdenes que analitica/precio.py (lo comprueba una prueba)."""
+    orden = {"muy_por_encima": 1, "por_encima_parado": 1, "en_precio_no_sale": 2, "barato": 3}
+    vo = list(conc.modelos_vo)
+    ant = [e for _, e in conc.tramos_antiguedad] or [None]
+    km = [e for _, e in conc.tramos_km] or [None]
+    for i, (regla, factor, dias, cota, nivel, n) in enumerate(CASOS_PRECIO):
+        mediana = 1_450_000 + 120_000 * (i % 5)
+        p25, p75 = mediana - 90_000, mediana + 110_000
+        precio = None if regla == "sin_precio" else round(mediana * (factor or 1.0), -4)
+        if nivel is None:
+            p25 = mediana = p75 = None
+        texto = {"muy_por_encima": f"Muy por encima del mercado: bajar a la mediana ({_euros(mediana or 0)})",
+                 "por_encima_parado": f"Plantéate bajar a la mediana ({_euros(mediana or 0)})",
+                 "en_precio_no_sale": "El precio está en mercado: revisa fotos, anuncio y leads",
+                 "barato": f"Por debajo del mercado (p25: {_euros(p25 or 0)}): si tiene interés, hay margen",
+                 "en_linea": "En línea con el mercado",
+                 "sin_comparables": "Sin comparables suficientes",
+                 "sin_precio": "Sin precio publicado: sin recomendación"}[regla]
+        if regla not in ("sin_comparables", "sin_precio"):
+            texto += AMPLIADO.get(nivel, f". Comparado sin tramos y ampliado a {conc.comunidad}")
+        filas["panel_precio_vo"].append({
+            "dia": hoy, "fuente": "vo", "id_anuncio": f"EJ-VO-{i + 1:03d}", "modelo": vo[i % len(vo)],
+            "version": None, "acabado": ACABADOS_EJEMPLO[i % 3], "motor": MOTORES_EJEMPLO[(i // 3) % 3],
+            "antiguedad": ant[i % len(ant)], "km": km[(i * 2) % len(km)], "precio_cents": precio,
+            "dias_publicado": dias, "dias_cota": cota, "nivel": nivel,
+            "zona": None if nivel is None else ("comunidad" if nivel == "comunidad" else "cercana"),
+            "n_comparables": n, "p25_cents": p25, "mediana_cents": mediana, "p75_cents": p75,
+            "regla": regla, "orden": orden.get(regla, 4), "recomendacion": texto,
+        })
 
 
 def _lunes(d: date) -> date:

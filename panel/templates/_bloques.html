@@ -28,3 +28,51 @@
   {% else %}{{ sin_datos() }}{% endif %}
 </section>
 {%- endmacro %}
+{% macro precio_vo(b, objetivo) -%}
+<section aria-labelledby="t-precio-vo" class="tarjeta bloque-precio-vo"{{ attrs("precio", b) }}>
+  <div class="tarjeta-cabeza">
+    <h2 id="t-precio-vo">Precio de nuestros VO</h2>
+    {% if b.hay %}<span class="nota">Mercado del {{ b.dia }}</span>{% endif %}
+  </div>
+  {{ marca(b) }}
+  {% if b.hay %}
+  <p class="aviso-provisional" role="note">{{ b.aviso }}</p>
+  {{ segmentos("Modelo", b.filtro, objetivo) }}
+  <div class="tabla-scroll">
+    <table class="tabla tabla-movil tabla-precio-vo">
+      <thead>
+        <tr>
+          <th scope="col" class="izq">Coche</th>
+          <th scope="col">Precio</th>
+          <th scope="col">Mediana</th>
+          <th scope="col">p25 – p75</th>
+          <th scope="col">Comparables</th>
+          <th scope="col">Días publicado</th>
+          <th scope="col" class="izq">Recomendación</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in b.filas %}
+        <tr class="precio-{{ f.clase }}" data-regla="{{ f.regla }}">
+          <th scope="row" class="izq">
+            <span class="vehiculo-nombre">{{ f.nombre }}</span>
+            <span class="vehiculo-detalle">{{ f.detalle }} · {{ f.id }}</span>
+          </th>
+          <td data-etiqueta="Precio">{{ f.precio }}</td>
+          <td data-etiqueta="Mediana">{{ f.mediana }}</td>
+          <td data-etiqueta="p25 – p75">{{ f.rango }}</td>
+          <td data-etiqueta="Comparables">{{ f.n }}<span class="n">{{ f.nivel }}</span></td>
+          <td data-etiqueta="Días publicado">{{ f.dias }}</td>
+          <td data-etiqueta="Recomendación" class="izq c-recomendacion">{{ f.recomendacion }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="izq">Ningún coche con este filtro.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="nota recuento">{{ b.recuento }}</p>
+  <p class="nota">Comparables: anuncios de otros concesionarios del mismo modelo, acabado, motor, tramo de antigüedad y tramo de km en la zona cercana, con precio. Si son pocos, se amplía (sin el tramo de km, sin el de antigüedad, con la comunidad) y se dice. «Al menos N días»: lo vimos desde el primer día de datos, puede llevar más.</p>
+  {% else %}{{ sin_datos() }}{% endif %}
+</section>
+{%- endmacro %}

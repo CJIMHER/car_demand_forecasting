@@ -33,6 +33,26 @@ mediano solo con precio). Zonas: la provincia del concesionario, su comunidad y 
 segmentos, además, la mediana de nuestro precio y la de la competencia por separado, con su n: las
 usan los criterios de Meta (regla e y contexto de la d).
 
+## precio.py · precio provisional de nuestros VO (en el mismo precálculo)
+
+`panel_precio_vo` (contrato del panel, origen `real`): para cada día válido de VO, cada anuncio propio del
+scraper VO con su precio, sus días publicado (desde el primer día que lo vimos; «al menos N días» si no lo
+vimos aparecer, como en Mercado), su segmento de comparación y una recomendación. Provisional, hasta tener un
+modelo de probabilidad de venta.
+
+- Segmento: mismo modelo, acabado, motor, tramo de antigüedad y tramo de km, en la zona cercana, sin nuestros
+  coches y solo con precio; p25, mediana y p75 como en los segmentos. Con menos de `min_comparables`, se
+  amplía (sin tramo de km, sin tramo de antigüedad, zona cercana + comunidad) y se dice; en el nivel más
+  amplio, con menos de `min_comparables_amplio`, «sin comparables suficientes». Un coche nuestro con el
+  acabado sin clasificar o sin dato de motor no se compara.
+- Reglas, la primera que se cumple: muy por encima (> p75 y `dias_muy_por_encima`), por encima y parado
+  (> mediana y `dias_por_encima`), en precio pero no sale (≤ mediana y `dias_en_precio`), barato (< p25), en
+  línea.
+- Umbrales: `precio_provisional` de `config/concesionario.yaml`. Sin esa sección no se calcula (el resumen lo
+  dice) y el resto del precálculo sigue.
+
+Pruebas: `tests/test_precio_provisional.py`.
+
 ## competidores.py · por concesionario y modelo (en el mismo precálculo)
 
 `panel_mercado_competidor`: para cada día válido y tipo, en la provincia propia, los anuncios y el

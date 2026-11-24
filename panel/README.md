@@ -17,6 +17,7 @@ conectar sus datos») hasta que lleguen los datos reales.
 | `permisos.py` | **Único** sitio con roles y permisos (quién ve qué vista, también según sus datos) |
 | `contrato.py` | Qué tablas lee cada bloque y de qué origen (real o ejemplo; un bloque nunca los mezcla) |
 | `direccion.py`, `ventas.py`, `marketing.py`, `negocio.py` | Consultas de las tres vistas sobre las tablas del contrato |
+| `precio.py` | Bloque «Precio de nuestros VO» de Ventas y Dirección (`panel_precio_vo`), con el filtro por modelo |
 | `alertas.py` | Alertas de las vistas: las del motor (tabla `alertas`) o, sin él, las de ejemplo; y el motor, las campañas sin regla y el tráfico de GA4 por canal en «Estado de las fuentes» |
 | `ejemplo.py` | Datos de ejemplo deterministas y coherentes entre vistas (`make ejemplo-cargar` / `ejemplo-borrar`) |
 | `seguridad.py` | argon2id, sesiones en Postgres, CSRF de doble envío, bloqueo de intentos, IP detrás de Caddy |
@@ -36,8 +37,9 @@ en VO, precio por antigüedad y km con filtros de acabado, combustible y motor. 
 toda la página: total, tabla y matriz cuentan solo esa familia, con la línea «Filtrando por color…» arriba.
 Los filtros se conservan al cambiar de zona o tipo si siguen existiendo; uno que
 no existe se descarta y se redirige a la URL sin él; se llega pulsando el modelo en la
-tabla de Mercado), `/direccion?tipo=todo|VN|VO`,
-`/ventas?tipo=…&riesgo=1&v=<número de stock>`, `/ventas/accion` (POST con CSRF: «Pedir campaña a
+tabla de Mercado), `/direccion?tipo=todo|VN|VO&modelo_vo=…`,
+`/ventas?tipo=…&riesgo=1&v=<número de stock>&modelo_vo=…` (`modelo_vo`: filtro del bloque «Precio de nuestros
+VO»), `/ventas/accion` (POST con CSRF: «Pedir campaña a
 marketing» y «Revisar precio»), `/marketing?tipo=todo|VN|VO&orden=venta|gasto`, `/estado-fuentes`
 (rol técnico), `/salud` y `/robots.txt`.
 

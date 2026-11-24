@@ -7,6 +7,7 @@ llegan ya calculadas, con su p10–p90, su versión de modelo y su n; aquí solo
 from __future__ import annotations
 
 from datetime import date
+from urllib.parse import quote
 
 import psycopg
 
@@ -15,6 +16,7 @@ from panel import alertas as pal
 from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
+from panel import precio as pr
 
 POR_PAGINA = 25
 # Botones del detalle: acción → (texto del botón, quién recibe el aviso, cómo se dice hecha)
@@ -43,13 +45,16 @@ def _fila(v: dict) -> dict:
 
 
 def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, solo_riesgo: bool,
-          sel: str | None, hoy: date, mostrar: int = POR_PAGINA) -> dict:
+          sel: str | None, hoy: date, mostrar: int = POR_PAGINA, modelo_vo: str | None = None) -> dict:
     """`mostrar`: cuántas filas de la lista se pintan (de 25 en 25; siempre incluye el vehículo elegido).
-    Los filtros y el resumen se aplican a todos los vehículos, no solo a los mostrados."""
+    Los filtros y el resumen se aplican a todos los vehículos, no solo a los mostrados. `modelo_vo`: filtro
+    por modelo del bloque «Precio de nuestros VO»; viaja en todos los enlaces de la vista."""
     org = contrato.origenes(modos, "ventas")
-    extra = "&riesgo=1" if solo_riesgo else ""
+    riesgo = "&riesgo=1" if solo_riesgo else ""
+    extra_vo = f"&{pr.PARAMETRO}={quote(modelo_vo, safe='')}" if modelo_vo else ""
+    extra = riesgo + extra_vo
     base = {"tipo": tipo, "solo_riesgo": solo_riesgo, "tipos": ng.selector_tipo("/ventas", tipo, "#ventas", extra),
-            "url_riesgo": f"/ventas?tipo={tipo}{'' if solo_riesgo else '&riesgo=1'}", "origenes": org}
+            "url_riesgo": f"/ventas?tipo={tipo}{'' if solo_riesgo else '&riesgo=1'}{extra_vo}", "origenes": org}
 
     def leer(origen):
         dia = ng.ultimo_dia(pg, "panel_riesgo_vehiculo", origen)
@@ -143,8 +148,9 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, s
     elif todos:
         detalle = ng.bloque(org["detalle"], hay=False, filtrado=True)
     alertas = pal.bloque_rol(pg, org["alertas"], "ventas", tipo)
+    precio = pr.bloque(pg, conc, org["precio"], modelo_vo, f"/ventas?tipo={tipo}{riesgo}", "#ventas")
     return {**base, "resumen": resumen, "lista": lista, "detalle": detalle, "dia": dia, "alertas": alertas,
-            "mostrar": mostrar}
+            "mostrar": mostrar, "precio": precio}
 
 
 # --------------------------------------------------------------------------- botones del detalle

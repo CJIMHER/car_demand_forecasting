@@ -333,19 +333,20 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         return pintar(request, parcial if es_htmx(request) else plantilla, contexto, pg=pg, usuario=u)
 
     @app.get("/direccion")
-    def vista_direccion(request: Request, tipo: str = "todo", pg=Depends(bd)):
+    def vista_direccion(request: Request, tipo: str = "todo", modelo_vo: str = "", pg=Depends(bd)):
         tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
         return vista_contrato(request, pg, "direccion", "direccion.html", "_direccion.html", lambda: {
-            "d": direccion.datos(pg, app.state.conc, modos_de(request, pg), tipo, app.state.hoy())})
+            "d": direccion.datos(pg, app.state.conc, modos_de(request, pg), tipo, app.state.hoy(),
+                                 modelo_vo[:80] or None)})
 
     @app.get("/ventas")
     def vista_ventas(request: Request, tipo: str = "todo", riesgo: str = "", v: str = "", n: str = "",
-                     pg=Depends(bd)):
+                     modelo_vo: str = "", pg=Depends(bd)):
         tipo = tipo if tipo in ("todo", "VN", "VO") else "todo"
         mostrar = min(int(n), 10_000) if n.isdigit() else ventas.POR_PAGINA
         return vista_contrato(request, pg, "ventas", "ventas.html", "_ventas.html", lambda: {
             "d": ventas.datos(pg, app.state.conc, modos_de(request, pg), tipo, riesgo == "1", v[:40] or None,
-                              app.state.hoy(), mostrar)})
+                              app.state.hoy(), mostrar, modelo_vo[:80] or None)})
 
     @app.post("/ventas/accion")
     def accion_ventas(request: Request, stock_id: str = Form(""), accion: str = Form(""), tipo: str = Form("todo"),

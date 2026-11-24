@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from collections import Counter
 from datetime import date, timedelta
+from urllib.parse import quote
 
 import psycopg
 
@@ -19,6 +20,7 @@ from panel import alertas as pal
 from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
+from panel import precio as pr
 
 TRAMOS = (("0–30 días", 0, 30), ("31–60 días", 31, 60), ("61–90 días", 61, 90), ("Más de 90", 91, None))
 
@@ -56,7 +58,8 @@ def _stock(pg, origen, tipo: str) -> tuple[dict, float | None, dict | None]:
     return stock, (sum(sel) / n if n else None), {"sel": sel, "dia": dia}
 
 
-def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, hoy: date) -> dict:
+def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, hoy: date,
+          modelo_vo: str | None = None) -> dict:
     org = contrato.origenes(modos, "direccion")
     tipos = _tipos(tipo)
 
@@ -142,9 +145,12 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, h
                 for a in filas], dia=dia)
 
     return {
-        "tipo": tipo, "tipos": ng.selector_tipo("/direccion", tipo, "#direccion"),
+        "tipo": tipo,
+        "tipos": ng.selector_tipo("/direccion", tipo, "#direccion",
+                                  f"&{pr.PARAMETRO}={quote(modelo_vo, safe='')}" if modelo_vo else ""),
         "fecha": fmt.fecha_larga(hoy), "kpis": [stock, antiguedad, ventas_kpi, alertas_kpi],
         "ventas_mes": ventas_mes, "alertas": alertas, "edad": edad, "mercado": mercado(pg, conc, tipo),
+        "precio": pr.bloque(pg, conc, org["precio"], modelo_vo, f"/direccion?tipo={tipo}", "#direccion"),
         "origenes": org,
     }
 

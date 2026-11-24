@@ -18,8 +18,9 @@ from test_panel import HOY, cliente, dentro, token
 
 
 def _real(pg, conc):
-    """Ventas con datos reales: el riesgo y las curvas, y el motor evaluado (bloque de alertas real)."""
-    a_real(pg, "panel_riesgo_vehiculo", "panel_curva_grupo")
+    """Ventas con datos reales: el riesgo, las curvas, el precio de nuestros VO y el motor evaluado (bloque de
+    alertas real)."""
+    a_real(pg, "panel_riesgo_vehiculo", "panel_curva_grupo", "panel_precio_vo")
     motor.evaluar(pg, HOY, conc, reglas("fuente_caida"))
     return pg.execute("SELECT stock_id FROM panel_riesgo_vehiculo WHERE origen = 'real' ORDER BY stock_id LIMIT 2"
                       ).fetchall()

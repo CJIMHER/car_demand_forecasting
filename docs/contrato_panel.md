@@ -77,6 +77,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Dirección | Tarjeta del mercado | `panel_mercado_dia`. Siempre real: fuera del contrato |
 | Ventas | Resumen y lista de vehículos | `panel_riesgo_vehiculo` |
 | Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
+| Ventas y Dirección | Precio de nuestros VO (provisional; Marketing no lo ve) | `panel_precio_vo` |
 | Marketing | Tarjetas de 28 días | `panel_campana_dia` y `panel_leads_dia` |
 | Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_leads_dia` y `panel_campana_salud` |
 | Marketing | Recomendación por modelo | `panel_recomendacion_modelo` |
@@ -473,6 +474,28 @@ Las de 2025 (`criterios_meta.c.referencia_anio`) son la «media» de las reglas 
 - Columnas: `campana_id`, `titulo`, `gasto_cents`, `impresiones`, `clics`.
 - **Cifras de Marketing:** debajo del bloque de campañas, «Campañas de otras marcas en esta cuenta: N, gasto
   X € en 28 días» (campañas con gasto en la misma ventana de 28 días). Sin ninguna, no hay línea.
+
+### panel_precio_vo · precio provisional de nuestros VO
+
+- **Grano**: día del precálculo de Mercado × anuncio VO propio (`fuente`, `id_anuncio`: el anuncio en la web de
+  stock, sin nada del cliente). Lo escribe `analitica/precio.py` dentro de `make precalcular`, con origen
+  `real`; recalcular un día sustituye sus filas reales (las de ejemplo no se tocan). Es provisional: lo
+  sustituirá el modelo de probabilidad de venta.
+- Columnas: `modelo`, `version`, `acabado` (NULL si no está en el catálogo), `motor`, `antiguedad` y `km`
+  (etiquetas de los tramos de `config/concesionario.yaml`), `precio_cents` (NULL sin precio publicado),
+  `dias_publicado` y `dias_cota` (true: «al menos N días», no lo vimos aparecer), `nivel` (`segmento`,
+  `sin_km`, `sin_antiguedad`, `comunidad` o NULL sin comparables suficientes), `zona` (`cercana` o
+  `comunidad`), `n_comparables`, `p25_cents`, `mediana_cents`, `p75_cents`, `regla` (`muy_por_encima`,
+  `por_encima_parado`, `en_precio_no_sale`, `barato`, `en_linea`, `sin_comparables`, `sin_precio`), `orden`
+  (1: reglas 1 y 2; 2: regla 3; 3: regla 4; 4: el resto) y `recomendacion` (el texto, con la ampliación si la
+  hubo).
+- **Comparables**: anuncios de otros concesionarios (nunca los nuestros) con precio, del mismo modelo, acabado,
+  motor, tramo de antigüedad y tramo de km, en la zona cercana. Con menos de `min_comparables` se amplía: sin el
+  tramo de km, sin el de antigüedad, zona cercana más la comunidad; en el último nivel bastan
+  `min_comparables_amplio`. Umbrales en `config/concesionario.yaml` (`precio_provisional`).
+- **Cifras de Ventas y Dirección**: «Precio de nuestros VO», un coche por fila ordenado por `orden` y, dentro,
+  por días publicado de más a menos; filtro por modelo (`?modelo_vo=`); el aviso «Recomendación provisional
+  basada en el mercado actual; no es una probabilidad de venta».
 
 Fuera del contrato: `panel_walcu_sin_cruce` (lo que no casa entre Meta y Walcu, con el motivo; lo escribe
 `make referencias-meta`).

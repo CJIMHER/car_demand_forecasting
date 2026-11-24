@@ -1,5 +1,20 @@
 # Cambios
 
+## 2026-11-24 · Precio provisional de nuestros VO en Ventas y Dirección (rama hito-1b-precio-provisional)
+
+- **`analitica/precio.py`** (en `make precalcular`): para cada coche VO nuestro, comparables del mismo modelo,
+  acabado, motor, tramo de antigüedad y de km en la zona cercana, sin nuestros coches; p25, mediana y p75 como
+  en Mercado. Con menos de 5 se amplía (sin km, sin antigüedad, zona cercana + comunidad) y se dice; con menos
+  de 3 en el nivel más amplio, «sin comparables suficientes». Cinco reglas en orden (muy por encima, por
+  encima y parado, en precio pero no sale, barato, en línea). Días publicado desde el primer día visto, con
+  «al menos N días» si no lo vimos aparecer.
+- **Umbrales** en `config/concesionario.yaml` (`precio_provisional`): 5 y 3 comparables, 30, 60 y 90 días.
+- **Migración `0020`**: `panel_precio_vo` (contrato del panel, `dia`, `origen`, `calculado_at`).
+- **Panel**: bloque «Precio de nuestros VO» en Ventas y Dirección (Marketing no lo ve), ordenado por regla,
+  con filtro por modelo (`?modelo_vo=`), el nivel de comparación y el aviso «Recomendación provisional
+  basada en el mercado actual; no es una probabilidad de venta». Datos de ejemplo con cada regla y nivel.
+- La prueba de imports del Dockerfile del panel sigue en verde: el panel no importa nada nuevo de `ingesta`.
+
 ## 2026-11-24 · Imagen del panel: prueba de los imports de ingesta (rama hito-1b-walcu-semanal)
 
 - Rama rebasada sobre `origin/main` con `4fe3eab` (COPY de `campanas`, `canales` y `referencias_meta` en

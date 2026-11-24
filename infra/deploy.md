@@ -484,6 +484,20 @@ Cada semana:
    09:15). Marketing → «Campañas de las últimas 4 semanas» (con las semanas incompletas marcadas) y
    «Referencias históricas».
 
+### 7.13 Precio provisional de nuestros VO
+
+Una vez, en el servidor:
+
+```bash
+make deploy          # migración 0020 (panel_precio_vo) y la imagen del panel con el bloque nuevo
+make precalcular     # rehace Mercado y rellena el precio de nuestros VO de todo el histórico
+```
+
+Después lo mantiene el cron del precálculo (09:10). Los umbrales están en `config/concesionario.yaml`
+(`precio_provisional`); tras cambiarlos, commit, `make deploy` y `make precalcular`. Ventas y Dirección →
+«Precio de nuestros VO». Si hay datos de ejemplo cargados en Ventas (`make ejemplo-cargar`), la vista sigue
+siendo «de ejemplo» y el rol de ventas no la ve hasta `make ejemplo-borrar` (7.7).
+
 ## 8. Día a día
 
 ```bash

@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas %}
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas, precio_vo %}
 {% macro contenido_detalle(dd, suf, h) -%}
       {% set v = dd.v %}
       <div>
@@ -133,6 +133,8 @@
       {% endif %}
     </section>
   </div>
+
+  {{ precio_vo(d.precio, "#ventas") }}
 
   {{ lista_alertas(d.alertas, "Alertas para ventas", "t-alertas-ventas") }}
 </div>

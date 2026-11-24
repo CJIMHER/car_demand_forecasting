@@ -284,6 +284,11 @@ def test_cada_bloque_de_ejemplo_lleva_su_etiqueta_y_la_vista_la_banda(pg, datos,
             # Marketing: «Atención frente a sus rivales» en Todo y VN; en VO, en su lugar, el stock de ocasión
             esperados = set(contrato.BLOQUES[vista]) - ({"atencion"} if "VO" in url else {"ocasion"}
                                                         if vista == "marketing" else set())
+            # El precio de nuestros VO sale del precálculo de Mercado, que aquí es real: no mezcla
+            if "precio" in esperados:
+                esperados.discard("precio")
+                origen, trozo = bloques(html)["precio"]
+                assert origen == "real" and ETIQUETA not in trozo and "Precio de nuestros VO" in trozo, url
             assert esperados <= set(b), (url, esperados - set(b))
             if vista == "marketing":
                 assert ("ocasion" in b) == ("VO" in url) and ("atencion" in b) != ("VO" in url), url
@@ -646,8 +651,9 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     for nombre in ("ventas_kpi", "ventas_mes", "alertas_kpi", "alertas"):
         assert b[nombre][0] == "ejemplo" and ETIQUETA in b[nombre][1], nombre
     assert BANDA in tec.get("/direccion").text and not _ve(dire, "/direccion")
-    # 2. El resto de Dirección: la vista se abre a dirección, sin banda ni etiquetas
-    a_real(pg, "panel_ventas_mes", "panel_alertas")
+    # 2. El resto de Dirección (con el precio de nuestros VO, que llega del precálculo de Mercado): la vista
+    # se abre a dirección, sin banda ni etiquetas
+    a_real(pg, "panel_ventas_mes", "panel_alertas", "panel_precio_vo")
     html = dire.get("/direccion").text
     assert _ve(dire, "/direccion") and BANDA not in html and ETIQUETA not in html
     assert 'href="/direccion"' in html

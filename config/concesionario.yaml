@@ -75,6 +75,21 @@ segmentos:
     - {hasta: 100000, etiqueta: "60.001–100.000 km"}
     - {etiqueta: "más de 100.000 km"}
 
+# Precio provisional de nuestros VO (Ventas y Dirección; analitica/precio.py), hasta que haya un modelo de
+# probabilidad de venta. Segmento: mismo modelo, acabado, motor, tramo de antigüedad y de km, en la zona
+# cercana, sin nuestros coches. Tras cambiarlo: make precalcular.
+precio_provisional:
+  # Con menos comparables se amplía: sin tramo de km, sin tramo de antigüedad, zona cercana + comunidad
+  min_comparables: 5
+  # En el nivel más amplio, con menos que esto: «sin comparables suficientes», sin recomendación
+  min_comparables_amplio: 3
+  # 1. Muy por encima: precio por encima del p75 y al menos estos días publicado → bajar a la mediana
+  dias_muy_por_encima: 30
+  # 2. Por encima y parado: precio por encima de la mediana y al menos estos días → plantearse la mediana
+  dias_por_encima: 60
+  # 3. En precio pero no sale: precio en la mediana o por debajo y al menos estos días → fotos, anuncio, leads
+  dias_en_precio: 90
+
 # Modelos de la marca, de más a menos habituales. Hoy solo los usan los datos de ejemplo del panel
 # (make ejemplo-cargar); el catálogo de versiones llega con Walcu.
 modelos:
