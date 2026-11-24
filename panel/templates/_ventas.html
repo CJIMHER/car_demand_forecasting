@@ -136,6 +136,31 @@
 
   {{ precio_vo(d.precio, "#ventas") }}
 
+  <section aria-labelledby="t-stock-crm" class="tarjeta bloque-stock-crm"{{ attrs("stock_crm", d.stock_crm) }}>
+    <div class="tarjeta-cabeza">
+      <h2 id="t-stock-crm">Stock VO en el CRM</h2>
+      {% if d.stock_crm.hay %}<span class="nota">{{ d.stock_crm.dia }}</span>{% endif %}
+    </div>
+    {{ marca(d.stock_crm) }}
+    {% if d.stock_crm.hay %}
+    <p>{{ d.stock_crm.n }} coches de ocasión en stock, {{ d.stock_crm.media }} días de media desde su entrada{% if d.stock_crm.con_dato %}; {{ d.stock_crm.sin_publicar }} sin publicar en la web{% endif %}.</p>
+    {% if d.stock_crm.filas %}
+    <div class="tabla-scroll">
+      <table class="tabla tabla-movil">
+        <thead><tr><th scope="col" class="izq">Sin publicar</th><th scope="col">Días en stock</th></tr></thead>
+        <tbody>
+          {% for f in d.stock_crm.filas %}
+          <tr><th scope="row" class="izq">{{ f.nombre }}<span class="vehiculo-detalle">{{ f.id }}</span></th><td data-etiqueta="Días en stock">{{ f.dias }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if d.stock_crm.mas %}<p class="nota">Y {{ d.stock_crm.mas }} más.</p>{% endif %}
+    {% endif %}
+    <p class="nota">Días desde la fecha de entrada del CRM (fecha de compra o, sin ella, de alta). Un traspaso a otra sede no es una venta.</p>
+    {% else %}<p class="sin-datos pendiente">Pendiente de conectar: stock interno (API de Walcu)</p>{% endif %}
+  </section>
+
   {{ salidas_recientes(d.salidas) }}
 
   {{ lista_alertas(d.alertas, "Alertas para ventas", "t-alertas-ventas") }}

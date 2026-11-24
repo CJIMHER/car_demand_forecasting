@@ -298,7 +298,8 @@ def test_filtro_por_modelo(pg, panel_url, personas, con_ejemplo):
 def test_ventas_abierto_a_ventas_con_precio_real(pg, panel_url, personas, con_ejemplo):
     """Con las demás tablas de Ventas ya reales, el precio real deja la vista abierta al rol de ventas."""
     from panel import precio as pp
-    a_real(pg, "panel_riesgo_vehiculo", "panel_curva_grupo", "panel_alertas", "panel_precio_vo", "panel_salidas_stock")
+    a_real(pg, "panel_riesgo_vehiculo", "panel_curva_grupo", "panel_alertas", "panel_precio_vo", "panel_salidas_stock",
+           "panel_stock_vehiculo")
     html = dentro(app_con(panel_url), "ventas").get("/ventas").text
     origen, trozo = bloques(html)["precio"]
     assert origen == "real" and ETIQUETA not in trozo and pp.AVISO in trozo

@@ -524,6 +524,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     _referencias(filas, fin_meta)
     _precio_vo(filas, hoy, conc)
     _salidas(filas, hoy, conc)
+    _ventas_crm(filas, hoy, conc)
     _prevision(filas, hoy, conc)
     return filas
 
@@ -614,6 +615,26 @@ def _salidas(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) -> No
             "n_comparables": 2 if factor is None else 6 + i,
             "mediana_cents": None if factor is None else mediana,
         })
+
+
+# Ventas del CRM de ejemplo: (tipo, índice del modelo, ventas del mes anterior, ventas del mes en curso)
+CASOS_VENTAS_CRM = (("VN", 0, 9, 5), ("VN", 1, 6, 4), ("VN", 2, 3, 1), ("VO", 0, 7, 3), ("VO", 1, 4, 2),
+                    ("VO", 3, 2, 0))
+
+
+def _ventas_crm(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) -> None:
+    """panel_ventas_crm: ventas del CRM del mes en curso y del anterior, por tipo y modelo."""
+    actual = hoy.replace(day=1)
+    anterior = (actual - UN_DIA).replace(day=1)
+    cuenta: dict[tuple, int] = {}
+    for tipo, m, n_ant, n_act in CASOS_VENTAS_CRM:
+        modelos = list(conc.modelos_vo if tipo == "VO" else conc.modelos_vn)
+        for mes, n in ((anterior, n_ant), (actual, n_act)):
+            clave = (mes, tipo, modelos[m % len(modelos)])   # con pocos modelos, dos casos pueden caer en uno
+            cuenta[clave] = cuenta.get(clave, 0) + n
+    for (mes, tipo, modelo), n in sorted(cuenta.items()):
+        if n:
+            filas["panel_ventas_crm"].append({"dia": hoy, "mes": mes, "tipo": tipo, "modelo": modelo, "ventas": n})
 
 
 # Previsión de ejemplo: (tipo, índice del modelo o None para el tipo, gasto semanal en euros, intercepto,

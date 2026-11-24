@@ -1,0 +1,171 @@
+# Conector de la API de Walcu (ingesta/walcu_api.py): solo lectura (GET), incremental por updated_at.
+#
+# Credenciales en el .env del servidor, nunca aquí: WALCU_API_KEY, WALCU_DEALER_ID y WALCU_SEUDONIMO_CLAVE (clave
+# del HMAC-SHA256 con que se seudonimizan clientes, comerciales, matrículas y bastidores). Sin WALCU_API_KEY el
+# conector no hace ninguna petición («sin credenciales»).
+#
+# Nombres de campo de la documentación de la API (docs/walcu_api.pdf, v0.0.2). Lo marcado PENDIENTE no está en
+# esa documentación: se comprueba con  make walcu-api-probar  el día que llegue la credencial.
+
+url_base: https://api.crm.walcu.com/dealers/{dealer_id}
+
+# Cabecera con la API Key. PENDIENTE: la documentación no dice cuál es (se ajusta con make walcu-api-probar)
+autenticacion:
+  cabecera: Authorization
+  prefijo: ""                    # p. ej. "Bearer " si Walcu lo pide
+
+# Filtro por fecha de actualización de las cargas incrementales. PENDIENTE: nombres de los parámetros.
+# El conector comprueba en cada página que el filtro se aplica: si llega algo actualizado antes de «desde»,
+# para (nunca un volcado completo diario).
+filtro:
+  desde: updated_at_from
+  hasta: updated_at_to
+  # La marca de agua de cada recurso se resta este margen al pedir lo siguiente (lo repetido no se duplica)
+  solape_minutos: 60
+
+# Paginación. PENDIENTE de que Walcu la confirme: «pagina» (número de página y tamaño) o «cursor».
+paginacion:
+  tipo: pagina                   # pagina | cursor
+  tamano: 100
+  # Dónde vienen los elementos en la respuesta: "" si la respuesta es la lista; si no, la clave (p. ej. data)
+  elementos: ""
+  pagina:
+    parametro: page
+    parametro_tamano: limit
+    primera: 1                   # número de la primera página
+  cursor:
+    parametro: cursor
+    parametro_tamano: limit
+    siguiente: next_cursor       # clave de la respuesta con el cursor de la página siguiente (vacía: no hay más)
+  max_paginas: 10000             # tope de seguridad por petición
+
+# Reintentos ante errores de red, 429 y 5xx (esperas crecientes). 401 y 403: para y lo dice.
+reintentos: 6
+timeout_segundos: 60
+
+# Carga inicial (make walcu-api-inicial DESDE=AAAA-MM-DD): por tramos mensuales. Walcu recomienda 2-3 años.
+
+# ---------------------------------------------------------------------------- privacidad
+# Lista blanca de campos por recurso. Todo lo que no esté aquí se descarta EN MEMORIA, antes de guardar nada (ni
+# en Postgres, ni en el bucket, ni en el registro). «a.b» es un campo dentro de otro; «a[].b», el campo b de
+# cada elemento de la lista a.
+# - seudonimizar: campos que se guardan solo como HMAC-SHA256 con WALCU_SEUDONIMO_CLAVE, nunca en claro.
+# - Nunca se admiten (el conector no arranca si aparecen en la lista): nombres, teléfonos, correos, direcciones,
+#   DNI, notas, comentarios, «computed» ni campos personalizados («custom»), salvo los de
+#   personalizados_no_personales.
+# - Los textos de la lista blanca con aspecto de dato personal (correo, teléfono, DNI) se guardan vacíos.
+recursos:
+  cars:
+    ruta: /cars/all              # también vendidos y bajas (published: false)
+    campos:
+      - _id
+      - type                     # new, used, demo, km0
+      - make
+      - model
+      - version
+      - fuel
+      - provider_codes.eurotax   # código de versión (el único código estructurado de la documentación)
+      - location
+      - purchase_date
+      - created_at
+      - updated_at
+      - published
+      - unpublished_at
+      - prices.retail.current_price.price
+      - mileage
+      - year
+      - color
+      - status.status
+      - status.assigned_at
+      - status_history[].status
+      - status_history[].assigned_at
+      - license_plate
+      - vin
+    seudonimizar: [license_plate, vin]
+  saleleads:
+    ruta: /saleleads/all
+    campos:
+      - _id
+      - client_id
+      - created_at
+      - updated_at
+      - origin.source
+      - origin.medium
+      - origin.campaign
+      - location
+      - status.status
+      - status.assigned_at
+      - status_history[].status
+      - status_history[].assigned_at
+      - status_history[].user
+      - current_assigned.to      # comercial asignado: solo para los comerciales excluidos
+      - car_list[].car_id
+      - car_list[].car.type
+      - car_list[].car.make
+      - car_list[].car.model
+    seudonimizar: [client_id, "status_history[].user", current_assigned.to]
+  dates:
+    ruta: /dates/all
+    campos:
+      - _id
+      - lead_id
+      - lead_type                # salelead, appraisallead, aftersalelead
+      - client_id
+      - salelead.car_id
+      - start_date
+      - showed_up
+      - status                   # PENDIENTE: Walcu dice que la cita tiene estado; la documentación no lo trae
+      - created_at
+      - updated_at
+    seudonimizar: [client_id]
+
+# Campos personalizados que el concesionario confirme que no son personales («custom.<nombre>»). Vacío: ninguno.
+personalizados_no_personales: []
+
+# ---------------------------------------------------------------------------- mapeo (a definir con AVISA)
+# Mientras esté vacío, el conector descarga y guarda, pero NO deduce ventas ni stock ni excluye sedes: informa de
+# los estados y las location que encuentra, con sus recuentos (make walcu-api-probar y Estado de las fuentes).
+# Los valores se comparan sin mayúsculas ni tildes.
+
+# Estados del vehículo (status.status de cars). A definir con AVISA.
+estados_vehiculo:
+  vendido: []
+  reservado: []
+  baja: []
+  publicado: []
+  finales: []                    # los que no vuelven atrás (normalmente vendido y baja)
+
+# Estados del lead (status.status de saleleads). A definir con AVISA. La venta es el lead en uno de «venta» o de
+# sus hitos; su fecha, la del primer hito (Firmado; si no, el primero de venta que tenga).
+estados_lead:
+  venta: []
+  hitos_venta:
+    firmado: []
+    matriculado: []
+    entregado: []
+  descartado: []
+  finales: []
+  num_inexistente: []            # estados (o motivos) de «número inexistente», si Walcu los da como estado
+
+# location de Walcu (sede, instalación o marca). A definir con AVISA. Las excluidas (otras marcas o empresas
+# del grupo) no cuentan en nada; con «incluidas» vacía, cuentan todas las que no estén excluidas.
+locations:
+  incluidas: []
+  excluidas: []
+  vo: []                         # sedes de VO: el tipo del lead cuando el nombre de la campaña no lo dice
+
+# Tipo del vehículo (type de cars y de car_list) → VN o VO, como en la exportación (Km0 es VO)
+tipos:
+  VN: [new]
+  VO: [used, km0, demo]
+
+# ---------------------------------------------------------------------------- conexión con lo que ya existe
+# Con datos de la API y el mapeo definido (estados de venta del lead y location), cada carga:
+# - genera walcu_campana_semana (fuente api) con las mismas columnas, exclusiones y cohortes que la carga por CSV
+#   (config/walcu_export.yaml: orígenes, palabras de VO, tipo por defecto). Cita = cita a la que el cliente
+#   asistió (showed_up); venta = lead en estado de venta. La carga por CSV sigue disponible como respaldo;
+# - escribe las ventas del CRM por mes, tipo y modelo (Dirección) y el stock con su fecha de entrada (Dirección y
+#   Ventas).
+# Las semanas generadas empiezan en el lunes de la primera semana completa de la carga inicial.
+semanal:
+  generar: true

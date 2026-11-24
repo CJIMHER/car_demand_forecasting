@@ -27,7 +27,7 @@ TODOS = "*"           # en Resultado.sin_evaluar: la regla entera
 TIPOS = ("VN", "VO")
 TIPO_TEXTO = {"VN": "nuevos", "VO": "de ocasión"}
 SCRAPERS = {"vo": "VO", "vn": "VN", "vn_otros": "VN eléctricos e híbridos"}
-CONECTORES = {"meta": "Meta", "ga4": "GA4", "gtrends": "Google Trends"}
+CONECTORES = {"meta": "Meta", "ga4": "GA4", "gtrends": "Google Trends", "walcu_api": "Walcu (API)"}
 
 
 @dataclass

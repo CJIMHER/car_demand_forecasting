@@ -1,7 +1,8 @@
 """Vista «Dirección» (docs/prototipo/Main.dc.html y Movil.dc.html).
 
-Lee panel_stock_vehiculo, panel_ventas_mes, las salidas de nuestro stock publicado (panel_salidas_stock,
-estimación de ventas: panel/salidas.py) y las alertas (las del motor, tabla alertas, o las de
+Lee panel_stock_vehiculo (el stock del CRM, ingesta/walcu_crm.py), panel_ventas_mes, las ventas del CRM
+(panel_ventas_crm) y las salidas de nuestro stock publicado (panel_salidas_stock, estimación de ventas mientras no
+haya ventas del CRM y, con ellas, comprobación: panel/salidas.py) y las alertas (las del motor, tabla alertas, o las de
 ejemplo de panel_alertas: panel/alertas.py); el precio provisional de nuestros VO (panel_precio_vo); Meta y
 Walcu por semanas (panel_campana_semana) con las referencias por año (panel_referencia_meta) y GA4 por canal
 (panel_trafico_canal_dia), con los mismos cálculos que Marketing; y, para la tarjeta del mercado y nuestro
@@ -33,7 +34,7 @@ from panel import prevision as pv
 from panel import salidas as sal
 
 # Bloques cuya fuente real aún no existe: lo que dicen en vez de datos de ejemplo
-STOCK_INTERNO = "stock interno (Walcu o DMS)"
+STOCK_INTERNO = "stock interno (API de Walcu)"
 PENDIENTE = {"stock": STOCK_INTERNO, "antiguedad": STOCK_INTERNO, "edad": STOCK_INTERNO,
              "ventas_mes": "predicción de ventas"}
 
@@ -115,9 +116,14 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, h
     else:
         edad = ng.bloque(org["edad"], hay=False)
 
-    # ---- salidas de nuestro stock (estimación de ventas mientras no lleguen las del CRM): tarjeta y bloque
-    ventas_kpi, _ = sal.mensual(pg, org["ventas_kpi"], tipo, hoy)
-    _, salidas = sal.mensual(pg, org["salidas"], tipo, hoy)
+    # ---- ventas del mes: las del CRM y, sin ellas, las salidas de nuestro stock (estimación de ventas); con
+    # ventas del CRM, las salidas quedan como comprobación
+    kpi_crm, ventas_crm = sal.crm(pg, org["ventas_crm"], tipo, hoy)
+    if ventas_crm.get("hay") and org["ventas_kpi"] == org["ventas_crm"]:
+        ventas_kpi = kpi_crm
+    else:
+        ventas_kpi, _ = sal.mensual(pg, org["ventas_kpi"], tipo, hoy)
+    _, salidas = sal.mensual(pg, org["salidas"], tipo, hoy, crm=bool(ventas_crm.get("hay")))
 
     # ---- ventas del mes frente a la banda prevista (solo con el modo ejemplo: la predicción aún no existe)
     clave = "todo" if tipo == "todo" else tipo
@@ -184,7 +190,7 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, h
         "tipos": ng.selector_tipo("/direccion", tipo, "#direccion",
                                   f"&{pr.PARAMETRO}={quote(modelo_vo, safe='')}" if modelo_vo else ""),
         "fecha": fmt.fecha_larga(hoy),
-        "ventas_mes": ventas_mes, "salidas": salidas, "prevision": pv.direccion(pg, org["prevision"], tipo), "alertas": alertas, "edad": edad, "mercado": mercado(pg, conc, tipo),
+        "ventas_mes": ventas_mes, "ventas_crm": ventas_crm, "salidas": salidas, "prevision": pv.direccion(pg, org["prevision"], tipo), "alertas": alertas, "edad": edad, "mercado": mercado(pg, conc, tipo),
         "precio": pr.bloque(pg, conc, org["precio"], modelo_vo, f"/direccion?tipo={tipo}", "#direccion"),
         "origenes": org,
     }

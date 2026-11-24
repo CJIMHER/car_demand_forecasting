@@ -152,8 +152,9 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, s
     alertas = pal.bloque_rol(pg, org["alertas"], "ventas", tipo)
     precio = pr.bloque(pg, conc, org["precio"], modelo_vo, f"/ventas?tipo={tipo}{riesgo}", "#ventas")
     salidas = sal.recientes(pg, conc, org["salidas"], tipo, hoy)
+    stock_crm = pr.stock_crm(pg, org["stock_crm"])
     return {**base, "resumen": resumen, "lista": lista, "detalle": detalle, "dia": dia, "alertas": alertas,
-            "mostrar": mostrar, "precio": precio, "salidas": salidas}
+            "mostrar": mostrar, "precio": precio, "salidas": salidas, "stock_crm": stock_crm}
 
 
 # --------------------------------------------------------------------------- botones del detalle

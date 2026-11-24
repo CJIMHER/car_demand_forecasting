@@ -42,7 +42,9 @@ USER_AGENT = "cdf-conectores/1.0"
 
 
 class ErrorDescarga(Exception):
-    pass
+    def __init__(self, mensaje: str = "", codigo: int | None = None):
+        super().__init__(mensaje)
+        self.codigo = codigo        # código HTTP de la respuesta que lo causó, si lo hubo
 
 
 class SinCredenciales(Exception):
@@ -64,11 +66,12 @@ def limpiar(texto: str, secretos: Iterable[str | None]) -> str:
 def peticion_json(url: str, *, metodo: str = "GET", cabeceras: Mapping[str, str] | None = None,
                   cuerpo: bytes | None = None, es_limite: Callable[[int, dict], bool] | None = None,
                   secretos: Iterable[str | None] = (), dormir=time.sleep, intentos: int = 6,
-                  timeout: float = 60, al_responder: Callable[[Mapping[str, str]], None] | None = None
-                  ) -> tuple[dict, bytes]:
+                  timeout: float = 60, al_responder: Callable[[Mapping[str, str]], None] | None = None,
+                  con_mensaje: bool = True) -> tuple[dict, bytes]:
     """(respuesta como JSON, cuerpo en bruto). Lanza ErrorDescarga si no puede. `al_responder` recibe las
     cabeceras (en minúsculas) de cada respuesta correcta: Meta dice en ellas cuánto lleva gastado de su
-    límite de uso."""
+    límite de uso. `con_mensaje`=False: el error no copia el mensaje de la API (podría llevar datos
+    personales), solo el código HTTP."""
     secretos = list(secretos)
     ultimo = "sin intentos"
     for n in range(1, intentos + 1):
@@ -91,7 +94,7 @@ def peticion_json(url: str, *, metodo: str = "GET", cabeceras: Mapping[str, str]
             except Exception:
                 datos = {}
             error = datos.get("error") if isinstance(datos.get("error"), dict) else {}
-            mensaje = str(error.get("message") or error.get("status") or "")[:200]
+            mensaje = str(error.get("message") or error.get("status") or "")[:200] if con_mensaje else ""
             ultimo = limpiar(f"HTTP {exc.code} {mensaje}".strip(), secretos)
             limite = exc.code == 429 or bool(es_limite and es_limite(exc.code, datos))
             if limite:
@@ -100,7 +103,7 @@ def peticion_json(url: str, *, metodo: str = "GET", cabeceras: Mapping[str, str]
                 except (TypeError, ValueError):
                     pass
             elif exc.code < 500:
-                raise ErrorDescarga(f"la API rechazó la petición: {ultimo}") from None
+                raise ErrorDescarga(f"la API rechazó la petición: {ultimo}", exc.code) from None
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
             ultimo = f"error de red ({type(exc).__name__})"
         if n < intentos:

@@ -92,6 +92,7 @@ class Fila:
     color: str | None = None          # color exterior tal cual (ficha o, si no hay, el del scraper)
     color_estado: str | None = None   # estado de la ficha ese día (None: el anuncio no está en la exportación)
     color_vin_distinto: bool = False  # la ficha trae color con un VIN distinto del anuncio: se anula
+    bastidor: str | None = None       # para enlazar nuestros anuncios con el CRM (analitica/precio.py)
 
 
 Clave = tuple[str, str]  # (fuente, id_anuncio)
@@ -247,7 +248,7 @@ class Hechos:
         color, estado, vin_distinto = self.color((fuente, id_anuncio), dia, bastidor)
         if color is None and not vin_distinto:
             color = color_scraper   # el del propio anuncio, si algún día lo publica la web
-        return Fila(p, d, bool(pr), self.modelo(m), *resto, color, estado, vin_distinto)
+        return Fila(p, d, bool(pr), self.modelo(m), *resto, color, estado, vin_distinto, bastidor or None)
 
     def propias(self) -> dict[Clave, list[tuple[date, Fila]]]:
         """Cada anuncio nuestro (es_propio) con sus días vistos, en orden, y su fila de cada día
@@ -419,6 +420,7 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
     paleta = colores.cargar()
     reglas_precio = precio.cargar_reglas()
     reglas_salidas = salidas.cargar_reglas()
+    entradas = precio.enlace_crm(pg)          # fecha de entrada real de nuestros VO, si hay datos del CRM
     h = Hechos(pg, conc)
     hasta = hasta or hoy_madrid()
     todos = set().union(*h.completos.values())
@@ -462,9 +464,11 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
                     t_segmentos += time.monotonic() - t
                     resumen["filas_segmento"] += len(filas_seg)
                     if tipo == "VO" and reglas_precio is not None:
-                        filas_precio = precio.calcular(h, d, catalogo, reglas_precio)
+                        filas_precio = precio.calcular(h, d, catalogo, reglas_precio, entradas)
                         _insertar(pg, "panel_precio_vo", precio.COLS, filas_precio)
                         resumen["filas_precio_vo"] += len(filas_precio)
+                        resumen["precio_vo_con_entrada_crm"] = resumen.get("precio_vo_con_entrada_crm", 0) + sum(
+                            f["dias_stock"] is not None for f in filas_precio)
                     por_nivel.update(f"{tipo} {f['nivel']}" for f in filas_seg)
                     resumen["filas_dia"] += len(filas_dia)
                     resumen["filas_modelo"] += len(filas_modelo)

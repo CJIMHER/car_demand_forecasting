@@ -211,6 +211,34 @@ antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la c
   inexistente, con la diferencia entre años) y lo que no casa.
 - Pruebas: `tests/test_walcu_meta_hist.py`.
 
+## API de Walcu (walcu_api.py) y lo que se deriva (walcu_crm.py)
+
+- Coches (`/cars/all`), leads de venta (`/saleleads/all`) y citas (`/dates/all`), solo lectura (el cliente solo
+  sabe hacer GET), incremental por `updated_at` con una marca de agua por recurso (`walcu_api_marca`).
+  Credenciales en el `.env`: `WALCU_API_KEY`, `WALCU_DEALER_ID` y `WALCU_SEUDONIMO_CLAVE`; sin las dos primeras
+  no hace ninguna petición. URL, cabecera, filtro, paginación (página o cursor, pendiente de confirmar con
+  Walcu), lista blanca y mapeo en `config/walcu_api.yaml`.
+- **Privacidad**: lista blanca de campos por recurso; todo lo demás se descarta en memoria antes de guardar
+  nada, y el bucket (`walcu_api/raw/<día>/`) recibe el JSON ya filtrado, nunca la respuesta original. Clientes,
+  comerciales, matrículas y bastidores, solo como HMAC-SHA256. La configuración no arranca si la lista blanca
+  lleva nombres, teléfonos, correos, direcciones, DNI, notas, comentarios, `computed` o campos personalizados no
+  confirmados; un texto de la lista blanca con aspecto de dato personal se guarda vacío. El registro y los
+  errores solo llevan nombres de campo y recuentos; los errores de la API no copian su mensaje.
+- Tablas (migración 0023, solo añadir, versionadas por huella: volver a descargar no duplica):
+  `walcu_api_vehiculo` (+ `_estado`, `_precio_dia`: nuestra foto diaria del precio), `walcu_api_lead` (+ `_estado`,
+  con el usuario seudonimizado) y `walcu_api_cita`; vistas `*_vigente`.
+- Reintentos ante red, 429 y 5xx; 401 o 403 para en seco con «Walcu rechazó la credencial». Si la API devuelve
+  algo actualizado antes de lo pedido (el filtro no se aplica), para para no descargarlo todo.
+- `make walcu-api` (cron 06:30), `make walcu-api-inicial DESDE=AAAA-MM-DD` (por meses), `make walcu-api-probar`
+  (una página de cada recurso: solo nombres de campo, tipos y recuentos; no guarda nada) y `make walcu-api-mapeo`
+  (estados y location encontrados, con recuentos y si están mapeados). Estado en `fuentes_estado` (`walcu_api`,
+  tipo `descarga`) y alerta de fuente caída como Meta y GA4.
+- `walcu_crm.py`, tras cada carga: con el mapeo pendiente solo informa. Con él, genera `walcu_campana_semana`
+  (fuente `api`; cita = `showed_up`, venta = estado de venta; mismas exclusiones y cohortes que el CSV, que sigue de
+  respaldo), `panel_ventas_crm` y, con los estados del vehículo, `panel_stock_vehiculo`. Ver
+  `docs/contrato_panel.md`.
+- Pruebas: `tests/test_walcu_api.py` (respuestas de ejemplo; nunca sale a la red).
+
 ## Concesionario de la instancia (concesionario.py)
 
 `ingesta/concesionario.py` lee `config/concesionario.yaml` (o el fichero de `CDF_CONCESIONARIO`):

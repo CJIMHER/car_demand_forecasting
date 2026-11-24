@@ -80,8 +80,10 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 
 | Vista | Bloque | Tablas |
 | --- | --- | --- |
-| Dirección | Tarjeta de stock, tarjeta de antigüedad, stock por días en exposición | `panel_stock_vehiculo` |
-| Dirección | Tarjeta «Salidas del mes» y bloque «Salidas de nuestro stock (estimación de ventas)» | `panel_salidas_stock` |
+| Dirección | Tarjeta de stock, tarjeta de antigüedad, stock por días en exposición (el stock del CRM: API de Walcu) | `panel_stock_vehiculo` |
+| Dirección | Tarjeta «Ventas del mes»: las del CRM o, sin ellas, «Salidas del mes» (estimación) | `panel_ventas_crm` y `panel_salidas_stock` |
+| Dirección | Bloque «Ventas del CRM» por mes, tipo y modelo (solo si hay ventas del CRM) | `panel_ventas_crm` |
+| Dirección | Bloque «Salidas de nuestro stock» (estimación de ventas o, con ventas del CRM, comprobación) | `panel_salidas_stock` |
 | Dirección | Gráfico de ventas acumuladas frente a lo previsto (sin modo ejemplo: «Pendiente de conectar: predicción de ventas») | `panel_ventas_mes` |
 | Dirección | Tarjeta de alertas abiertas, alertas de hoy | `alertas_evaluacion` y `panel_alertas` (ver más abajo) |
 | Ventas y Marketing | Alertas para su rol | `alertas_evaluacion` y `panel_alertas` |
@@ -96,6 +98,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
 | Ventas y Dirección | Precio de nuestros VO (provisional; Marketing no lo ve) | `panel_precio_vo` |
 | Ventas | Salidas de nuestro stock de las últimas 4 semanas, un coche por fila | `panel_salidas_stock` |
+| Ventas | Stock VO en el CRM: cuántos, días de media desde su entrada y los que no están publicados | `panel_stock_vehiculo` |
 | Marketing | Tarjetas de 28 días | `panel_campana_dia` y `panel_leads_dia` |
 | Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_campana_semana` (Walcu por semanas, como las reglas), `panel_campana_salud` y `panel_campana_decision` |
 | Marketing | Recomendación por modelo | `panel_recomendacion_modelo` |
@@ -545,6 +548,32 @@ Las de 2025 (`criterios_meta.c.referencia_anio`) son la «media» de las reglas 
   las ventas del CRM».
 - **Cifras de Ventas**: las salidas de las últimas 4 semanas, un coche por fila: fecha (provisional en gris),
   último precio, días publicado, mediana del segmento y la diferencia del precio frente a ella.
+
+### panel_ventas_crm · ventas del CRM (API de Walcu)
+
+- **Grano**: mes de la venta × tipo (VN, VO) × modelo; `ventas` es un recuento. Lo escribe
+  `ingesta/walcu_crm.py` después de cada carga de la API de Walcu (`make walcu-api`, cron 06:30), con origen
+  `real`, rehaciéndolo entero (`dia` = día del cálculo). Solo con datos de la API y el mapeo de
+  `config/walcu_api.yaml` definido (estados de venta del lead y location); si no, no escribe nada y Dirección
+  sigue con las salidas.
+- **Venta**: un lead de venta que está ahora en un estado de venta (o de sus hitos Firmado, Matriculado,
+  Entregado). Su mes es el del primer Firmado (si no, el del primer estado de venta). Si el lead sale del estado
+  de venta (venta anulada), deja de contar. Los traspasos de coches entre sedes no son ventas.
+- **Tipo y modelo**: la tipología del coche vendido (`car_list` del lead o el coche enlazado; `config/walcu_api.yaml`,
+  `tipos`); sin ella, la regla de siempre (nombre de la campaña, location de VO, tipo por defecto). Modelo: el del
+  coche; sin él, «Sin modelo».
+- **Exclusiones**: las de Walcu por semanas (location excluidas, comerciales excluidos, empresas del grupo con su
+  propio marketing y campañas de otras marcas o de posventa).
+- **Cifras de Dirección**: con filas, la tarjeta es «Ventas del mes» (mes en curso, VN · VO) y se añade el bloque
+  «Ventas del CRM» por mes en curso y anterior, tipo y modelo. Las salidas de nuestro stock quedan debajo como
+  comprobación.
+
+`panel_stock_vehiculo` (desde la 0023, `publicado` y `fecha_entrada`): con el mapeo de estados del vehículo, el
+stock del CRM de cada día: coches ni vendidos ni de baja, de las location que cuentan, con `dias_exposicion`
+desde su fecha de entrada real (`purchase_date` o, sin ella, `created_at`). `stock_id` es el id del coche en
+Walcu. `panel_precio_vo` (desde la 0023, `fecha_entrada` y `dias_stock`): si el anuncio de la web se enlaza con el
+CRM por el bastidor (los dos seudonimizados con `WALCU_SEUDONIMO_CLAVE`), las reglas del precio provisional usan
+los días en stock en vez de los días publicado, y Ventas los muestra como «N en stock».
 
 ### panel_prevision_modelo y panel_prevision_semana · previsión de leads, citas y ventas de Meta
 

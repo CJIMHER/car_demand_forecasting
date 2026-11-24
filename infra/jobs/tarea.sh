@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# tarea.sh cargar|comprobar|precalcular|alertas|avisos|meta|ga4|gtrends|copia — lo lanza cron como usuario cdf. Deja el registro en
+# tarea.sh cargar|comprobar|precalcular|alertas|avisos|meta|ga4|walcu_api|gtrends|copia — lo lanza cron como usuario cdf. Deja el registro en
 # /logs/<tarea>_<día>.log (en el servidor, /opt/cdf/logs/jobs/) y borra los de más de 90 días.
 set -uo pipefail
 
-TAREA="${1:?uso: tarea.sh cargar|comprobar|precalcular|alertas|avisos|meta|ga4|gtrends|copia}"
+TAREA="${1:?uso: tarea.sh cargar|comprobar|precalcular|alertas|avisos|meta|ga4|walcu_api|gtrends|copia}"
 [ -f /run/cdf-env/jobs.env ] && . /run/cdf-env/jobs.env
 # rclone sin fichero de configuración (el remoto va por RCLONE_CONFIG_HZ_*): sin aviso de rclone.conf.
 export RCLONE_CONFIG=/dev/null
@@ -30,6 +30,7 @@ case "$TAREA" in
   alertas)   python -m alertas.motor ;;
   meta)      python -m ingesta.meta ;;
   ga4)       python -m ingesta.ga4 ;;
+  walcu_api) python -m ingesta.walcu_api incremental ;;
   gtrends)   python -m ingesta.gtrends cargar ;;
   copia)     /app/infra/backup/pg_backup.sh ;;
   *)         echo "tarea desconocida: $TAREA"; exit 2 ;;

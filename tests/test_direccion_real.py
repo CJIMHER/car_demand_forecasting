@@ -35,7 +35,7 @@ def test_sin_modo_ejemplo_direccion_no_muestra_ejemplo_y_dice_lo_pendiente(pg, d
            ORDER BY tipo, dia DESC"""))
     assert origen == "real" and "Stock publicado" in stock and f'class="kpi-valor">{publicados}<' in stock
     assert "stock interno: pendiente de conectar" in stock
-    for nombre, fuente in (("antiguedad", "stock interno (Walcu o DMS)"), ("edad", "stock interno (Walcu o DMS)"),
+    for nombre, fuente in (("antiguedad", "stock interno (API de Walcu)"), ("edad", "stock interno (API de Walcu)"),
                            ("ventas_mes", "predicción de ventas")):
         origen, trozo = b[nombre]
         assert origen == "" and f"Pendiente de conectar: {fuente}" in trozo, nombre

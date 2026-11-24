@@ -75,7 +75,7 @@ def test_imagen_en_hora_de_madrid():
 def test_crontab_a_las_horas_previstas_y_como_cdf():
     lineas = [l.split() for l in CRONTAB.splitlines() if re.match(r"^\d", l)]
     assert [(l[0], l[1], l[5], l[-1]) for l in lineas] == [
-        ("0", "6", "cdf", "meta"), ("10", "6", "cdf", "ga4"), ("0", "7", "cdf", "gtrends"),
+        ("0", "6", "cdf", "meta"), ("10", "6", "cdf", "ga4"), ("30", "6", "cdf", "walcu_api"), ("0", "7", "cdf", "gtrends"),
         ("30", "8", "cdf", "cargar"), ("0", "9", "cdf", "comprobar"), ("10", "9", "cdf", "precalcular"),
         ("15", "9", "cdf", "alertas"), ("30", "9", "cdf", "copia")]
     # Los avisos de los botones de Ventas, cada minuto y también como cdf

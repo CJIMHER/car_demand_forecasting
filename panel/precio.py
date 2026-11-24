@@ -1,7 +1,8 @@
 """Bloque «Precio de nuestros VO» de Ventas y Dirección (tabla panel_precio_vo del contrato).
 
 La recomendación llega ya calculada (analitica/precio.py, en el precálculo de Mercado): aquí solo se ordena,
-se filtra por modelo y se escribe. Es provisional: no es una probabilidad de venta.
+se filtra por modelo y se escribe. Si el coche está enlazado con el CRM, los días son los días en stock (desde su
+fecha de entrada real), no los días publicado. Es provisional: no es una probabilidad de venta.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ AVISO = "Recomendación provisional basada en el mercado actual; no es una proba
 PARAMETRO = "modelo_vo"
 COLS = ("fuente", "id_anuncio", "modelo", "version", "acabado", "motor", "antiguedad", "km", "precio_cents",
         "dias_publicado", "dias_cota", "nivel", "n_comparables", "p25_cents", "mediana_cents", "p75_cents", "regla",
-        "orden", "recomendacion")
+        "orden", "recomendacion", "dias_stock")
 CLASE = {1: "bajar", 2: "revisar", 3: "barato", 4: "linea"}
 
 
@@ -44,7 +45,8 @@ def _fila(v: dict, conc: Concesionario) -> dict:
         "rango": (f"{fmt.euros(v['p25_cents'])} – {fmt.euros(v['p75_cents'])}"
                   if v["p25_cents"] is not None else fmt.GUION),
         "n": fmt.miles(v["n_comparables"]), "nivel": nivel_texto(v["nivel"], conc),
-        "dias": dias_texto(v["dias_publicado"], v["dias_cota"]), "recomendacion": v["recomendacion"],
+        "dias": (dias_texto(v["dias_publicado"], v["dias_cota"]) if v["dias_stock"] is None
+                 else f"{fmt.miles(v['dias_stock'])} en stock"), "recomendacion": v["recomendacion"],
         "regla": v["regla"], "clase": CLASE[v["orden"]],
     }
 
@@ -58,7 +60,7 @@ def bloque(pg: psycopg.Connection, conc: Concesionario, origen: str | None, mode
         return ng.bloque(origen, hay=False)
     todos = [dict(zip(COLS, f)) for f in pg.execute(
         f"""SELECT {', '.join(COLS)} FROM {TABLA} WHERE origen = %s AND dia = %s
-            ORDER BY orden, dias_publicado DESC, modelo, id_anuncio""", (origen, dia))]
+            ORDER BY orden, coalesce(dias_stock, dias_publicado) DESC, modelo, id_anuncio""", (origen, dia))]
     modelos = sorted({v["modelo"] for v in todos})
     modelo = modelo if modelo in modelos else None
     filtro = [{"id": "", "etiqueta": "Todos", "activa": modelo is None, "url": base_url, "objetivo": objetivo}] + [
@@ -67,3 +69,27 @@ def bloque(pg: psycopg.Connection, conc: Concesionario, origen: str | None, mode
     filas = [_fila(v, conc) for v in todos if modelo is None or v["modelo"] == modelo]
     return ng.bloque(origen, filas=filas, filtro=filtro, modelo=modelo, aviso=AVISO, dia=fmt.fecha_corta(dia),
                      recuento=f"{fmt.miles(len(filas))} de {fmt.miles(len(todos))} coches")
+
+
+STOCK_MAX_FILAS = 20
+
+
+def stock_crm(pg: psycopg.Connection, origen: str | None) -> dict:
+    """Stock VO completo del CRM (panel_stock_vehiculo, último día): cuántos hay, cuántos no están publicados en la
+    web y los que llevan más días en stock sin publicar. Los días salen de la fecha de entrada real."""
+    dia = ng.ultimo_dia(pg, "panel_stock_vehiculo", origen) if origen else None
+    if dia is None:
+        return ng.bloque(origen, hay=False)
+    filas = pg.execute(
+        """SELECT stock_id, modelo, version, dias_exposicion, publicado FROM panel_stock_vehiculo
+           WHERE origen = %s AND dia = %s AND tipo = 'VO' ORDER BY dias_exposicion DESC, stock_id""",
+        (origen, dia)).fetchall()
+    n = len(filas)
+    sin_publicar = [f for f in filas if f[4] is False]
+    con_dato = any(f[4] is not None for f in filas)
+    media = sum(f[3] for f in filas) / n if n else None
+    return ng.bloque(origen, n=fmt.miles(n), media=fmt.miles(media) if media is not None else fmt.GUION,
+                     con_dato=con_dato, sin_publicar=fmt.miles(len(sin_publicar)),
+                     filas=[{"id": f[0], "nombre": f"{f[1]} {f[2] or ''}".strip(), "dias": fmt.miles(f[3])}
+                            for f in sin_publicar[:STOCK_MAX_FILAS]],
+                     mas=max(len(sin_publicar) - STOCK_MAX_FILAS, 0), dia=fmt.fecha_corta(dia))

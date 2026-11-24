@@ -100,6 +100,10 @@ modelo de probabilidad de venta.
   línea.
 - Umbrales: `precio_provisional` de `config/concesionario.yaml`. Sin esa sección no se calcula (el resumen lo
   dice) y el resto del precálculo sigue.
+- Con coches de la API de Walcu y `WALCU_SEUDONIMO_CLAVE` (`enlace_crm`): si el bastidor del anuncio, seudonimizado,
+  casa con un coche del CRM, se guardan su `fecha_entrada` y sus `dias_stock` y las reglas usan los días en stock
+  en vez de los días publicado. Sin datos del CRM, todo como antes. El resumen dice cuántos casan
+  (`precio_vo_con_entrada_crm`).
 
 Pruebas: `tests/test_precio_provisional.py`.
 

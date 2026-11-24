@@ -533,6 +533,38 @@ make prevision       # entrena, valida y prevé (segundos); después, cada noche
 Si un tipo no mejora a la referencia en la validación, el panel no enseña su previsión y dice por qué.
 Parámetros en `config/prevision.yaml`; tras cambiarlos, commit, `make deploy` y `make prevision`.
 
+### 7.16 API de Walcu (el día que llegue la credencial)
+
+Ya con el código desplegado (`make deploy`: migración 0023), el conector no hace nada mientras falte la
+credencial («sin credenciales» en `make estado`, sin alerta). El día que llegue:
+
+1. En `/opt/cdf/.env` (permisos 600): `WALCU_API_KEY`, `WALCU_DEALER_ID` y `WALCU_SEUDONIMO_CLAVE`
+   (`openssl rand -hex 32`; guárdala también fuera del servidor: si cambia, los seudónimos nuevos no casan con los
+   guardados). Opcional: `WALCU_COMERCIALES_EXCLUIDOS` (ids de usuario de Walcu, separados por comas). Después,
+   `make deploy` para que las tareas de cron reciban las variables.
+2. `make walcu-api-probar`: una página de cada recurso de los últimos 7 días. Solo enseña nombres de campo, tipos y
+   recuentos, ningún valor, y no guarda nada. Comprobar:
+   - que no da 401 o 403 (si los da: la clave, el dealer_id o `autenticacion.cabecera`/`prefijo` de
+     `config/walcu_api.yaml`);
+   - «actualizados antes de lo pedido: 0» (si no, los nombres del filtro en `filtro`);
+   - la paginación con lo que confirme Walcu (`paginacion`: página o cursor, nombres de los parámetros y dónde
+     vienen los elementos);
+   - que los campos de la lista blanca aparecen («De la lista blanca no aparecen: …» lo dice), en particular
+     `status` de las citas y `provider_codes.eurotax`.
+   Cada cambio en `config/walcu_api.yaml`: commit en el Mac, `make deploy` y otra vez `make walcu-api-probar`.
+3. `make walcu-api-inicial DESDE=AAAA-MM-DD` (Walcu recomienda 2-3 años): por meses; se puede repetir sin
+   duplicar nada.
+4. `make walcu-api-mapeo`: estados de coches y de leads y location, con sus recuentos. Con AVISA, rellenar en
+   `config/walcu_api.yaml` `estados_vehiculo`, `estados_lead` (venta y sus hitos Firmado, Matriculado, Entregado) y
+   `locations` (incluidas, excluidas y de VO). Commit, `make deploy` y `make walcu-api`.
+5. Con el mapeo, cada carga genera Walcu por semanas desde la API (fuente `api`), las ventas del CRM de Dirección
+   y el stock con su fecha de entrada (Dirección y Ventas). El resumen de cada carga (`make estado`, `make logs`)
+   dice el acuerdo del tipo con la tipología de `car_list`. El CSV (`make walcu-cargar`) sigue de respaldo: si la
+   API no está, se carga como siempre; si está, la carga siguiente de la API vuelve a tomar las semanas en que
+   difiera.
+
+A partir de ahí, cada día a las 06:30 (`make walcu-api` a mano).
+
 ## 8. Día a día
 
 ```bash

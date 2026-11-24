@@ -1,5 +1,32 @@
 # Cambios
 
+## 2026-11-24 · Conector de la API de Walcu, listo antes de la credencial (rama hito-3-walcu-api)
+
+- **Conector** (`ingesta/walcu_api.py`, `config/walcu_api.yaml`): coches, leads de venta y citas, solo lectura (el
+  cliente solo hace GET), incremental por `updated_at` con marca de agua por recurso e inserción idempotente.
+  Paginación por página o por cursor, según la configuración (pendiente de que Walcu la confirme). Reintentos
+  ante red, 429 y 5xx; 401 y 403 paran y lo dicen. Si el filtro por fecha no se aplica, para.
+- **Privacidad**: lista blanca de campos por recurso, filtrada en memoria antes de guardar nada; el bucket recibe
+  solo el JSON filtrado. Clientes, comerciales, matrículas y bastidores, como HMAC-SHA256
+  (`WALCU_SEUDONIMO_CLAVE`). Registro y errores sin valores.
+- **Órdenes**: `make walcu-api` (cron 06:30), `make walcu-api-inicial DESDE=…`, `make walcu-api-probar` (solo
+  nombres de campo, tipos y recuentos) y `make walcu-api-mapeo`. Estado en `fuentes_estado` (`walcu_api`) y
+  alerta de fuente caída.
+- **Migración `0023`**: `walcu_api_*` (coches con historia de estados y foto diaria del precio, leads con historia
+  de estados, citas, marca de agua); `walcu_campana_semana.fuente` (csv o api); `panel_ventas_crm` (contrato);
+  `panel_stock_vehiculo` + `publicado`, `fecha_entrada`; `panel_precio_vo` + `fecha_entrada`, `dias_stock`.
+- **Mapeo** de estados y sedes en `config/walcu_api.yaml`, vacío («a definir con AVISA»): mientras lo esté, no se
+  deduce ninguna venta ni se excluye ninguna sede; se informa de lo encontrado con recuentos.
+- **Con el mapeo** (`ingesta/walcu_crm.py`): Walcu por semanas generado desde la API (cita = `showed_up`, venta =
+  estado de venta, mismas exclusiones y cohortes; el CSV sigue de respaldo) con el porcentaje de acuerdo del tipo
+  con `car_list`; Dirección → «Ventas del mes» con las ventas del CRM y bloque «Ventas del CRM», y las salidas
+  pasan a comprobación; stock del CRM con su fecha de entrada (Dirección y el bloque nuevo «Stock VO en el CRM» de
+  Ventas); el precio provisional usa los días en stock si el anuncio casa con el CRM por el bastidor. Todo se
+  activa solo con datos de la API.
+- `CLAUDE.md`: no conectarse nunca al servidor ni a su base de datos.
+- Pruebas: `tests/test_walcu_api.py` (26, con respuestas de ejemplo) y ajustes en el contrato del panel, Dirección,
+  precio provisional y crontab.
+
 ## 2026-11-24 · Salidas de VO: diagnóstico (rama hito-1b-salidas-vo)
 
 - **Revisión de «0 salidas de VO»**: no es un fallo de `analitica/salidas.py`. Los identificadores de VO

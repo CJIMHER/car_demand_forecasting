@@ -19,7 +19,8 @@ PYTHON ?= .venv/bin/python
         estado copia restaurar-prueba test hora logs ps psql precalcular salidas-diagnostico panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
         ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas gtrends gtrends-enlaces gtrends-subir \
-        meta-historico walcu-cargar walcu-agregar referencias-meta prevision
+        meta-historico walcu-cargar walcu-agregar referencias-meta prevision walcu-api walcu-api-inicial \
+        walcu-api-probar walcu-api-mapeo
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -147,6 +148,19 @@ walcu-cargar: ## Carga el CSV agregado de Walcu: make walcu-cargar FICHERO=/ruta
 walcu-agregar: ## (Mac) Agrega la exportación de leads de Walcu: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu.csv [EXCLUIDOS=…]
 	@test -n "$(ENTRADA)" -a -n "$(SALIDA)" || { echo "Uso: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu_semanal.csv"; exit 1; }
 	$(PYTHON) scripts/walcu_agregar.py "$(ENTRADA)" "$(SALIDA)" $(if $(EXCLUIDOS),--excluidos "$(EXCLUIDOS)")
+
+walcu-api: ## API de Walcu (cron 06:30): carga incremental de coches, leads y citas; sin credenciales no hace nada
+	$(JOBS) python -m ingesta.walcu_api incremental
+
+walcu-api-inicial: ## API de Walcu: carga inicial por tramos mensuales: make walcu-api-inicial DESDE=AAAA-MM-DD
+	@test -n "$(DESDE)" || { echo "Uso: make walcu-api-inicial DESDE=2024-01-01"; exit 1; }
+	$(JOBS) python -m ingesta.walcu_api inicial --desde $(DESDE)
+
+walcu-api-probar: ## API de Walcu: una página de cada recurso; solo nombres de campo, tipos y recuentos (no guarda nada)
+	$(JOBS) python -m ingesta.walcu_api probar
+
+walcu-api-mapeo: ## API de Walcu: estados y location encontrados, con sus recuentos, para mapearlos en config/walcu_api.yaml
+	$(JOBS) python -m ingesta.walcu_api mapeo
 
 referencias-meta: ## Cruce Meta–Walcu y referencias de coste por año y tipo (tabla e informe de lo que no casa)
 	$(JOBS) python -m ingesta.referencias_meta

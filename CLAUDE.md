@@ -1,6 +1,7 @@
 Reglas del proyecto car_demand_forecasting
 
 - Módulos: infra/, scrapers/, ingesta/, analitica/, alertas/, panel/. Un README por módulo: qué hace y cómo se prueba.
+- Nunca te conectes al servidor ni a su base de datos, ni siquiera en solo lectura (ni SSH, ni psql, ni túneles). Si hacen falta datos de producción, se da el comando al usuario y lo ejecuta él.
 - Servidor: Hetzner, proyecto cdf, aislado. Docker Compose con prefijo cdf_. No toques ningún otro servidor. KROL no es fuente de datos (mezcla varias marcas): de él solo se reutiliza código, en vendor/krol, que no se modifica.
 - Nada se sobrescribe: cada captura añade filas con captured_at y run_id. Los brutos de los scrapers se guardan comprimidos en el bucket antes de parsear.
 - Desaparecer no es vender: un anuncio externo ausente se marca ausente, nunca vendido. Venta solo si la confirma Walcu.

@@ -343,15 +343,17 @@ def test_direccion_cifras(pg, panel_url, personas, con_ejemplo):
     # Tramos de días en exposición: el de más de 90, en ámbar
     mas90 = sum(f["dias_exposicion"] > 90 for f in stock_hoy)
     assert re.search(rf'Más de 90</span>.*?relleno viejo.*?<span class="tramo-n">{mas90}</span>', b["edad"][1], re.S)
-    # Salidas del mes (estimación de ventas) y, con el modo ejemplo, las ventas frente a su banda
-    del_mes = [f for f in filas["panel_salidas_stock"] if (f["dia"].year, f["dia"].month) == (HOY.year, HOY.month)]
-    assert f'<span class="kpi-valor">{len(del_mes)}</span>' in b["ventas_kpi"][1]
-    assert "Salidas del mes" in b["ventas_kpi"][1] and "estimación de ventas" in b["ventas_kpi"][1]
+    # Ventas del mes: con ventas del CRM, las suyas (y las salidas de nuestro stock quedan como comprobación)
+    del_mes = sum(f["ventas"] for f in filas["panel_ventas_crm"] if f["mes"] == HOY.replace(day=1))
+    assert f'<span class="kpi-valor">{del_mes}</span>' in b["ventas_kpi"][1]
+    assert "Ventas del mes" in b["ventas_kpi"][1] and "ventas del CRM" in b["ventas_kpi"][1]
+    assert "Ventas del CRM" in b["ventas_crm"][1] and "comprobación" in b["salidas"][1]
     assert "Lo normal: 8 de cada 10 meses caen aquí" in b["ventas_mes"][1] and "data-ventas=" in b["ventas_mes"][1]
     # Selector VN: solo stock VN y solo alertas de VN o de los dos
     b = bloques(cl.get("/direccion?tipo=VN").text)
     assert f'<span class="kpi-valor">{n_vn}</span>' in b["stock"][1] and "Stock VN" in b["stock"][1]
-    assert "Salidas VN del mes" in b["ventas_kpi"][1]
+    vn_mes = sum(f["ventas"] for f in filas["panel_ventas_crm"] if f["mes"] == HOY.replace(day=1) and f["tipo"] == "VN")
+    assert "Ventas VN del mes" in b["ventas_kpi"][1] and f'<span class="kpi-valor">{vn_mes}</span>' in b["ventas_kpi"][1]
     vn = [a for a in alertas if a["tipo"] in (None, "VN")]
     assert f'<span class="kpi-valor">{len(vn)}</span>' in b["alertas_kpi"][1]
 
@@ -669,14 +671,14 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     b = bloques(tec.get("/direccion").text)
     for nombre in ("stock", "antiguedad", "edad"):
         assert b[nombre][0] == "real" and ETIQUETA not in b[nombre][1], nombre
-    for nombre in ("ventas_kpi", "ventas_mes", "alertas_kpi", "alertas"):
+    for nombre in ("ventas_kpi", "ventas_crm", "ventas_mes", "alertas_kpi", "alertas"):
         assert b[nombre][0] == "ejemplo" and ETIQUETA in b[nombre][1], nombre
     assert BANDA in tec.get("/direccion").text and not _ve(dire, "/direccion")
     # 2. El resto de Dirección (con el precio de nuestros VO, que llega del precálculo de Mercado): la vista
     # se abre a dirección, sin banda ni etiquetas
     a_real(pg, "panel_ventas_mes", "panel_alertas", "panel_precio_vo", "panel_campana_semana", "panel_referencia_meta",
            "panel_trafico_canal_dia", "panel_salidas_stock", "panel_prevision_semana",
-           "panel_prevision_modelo")
+           "panel_prevision_modelo", "panel_ventas_crm")
     html = dire.get("/direccion").text
     assert _ve(dire, "/direccion") and BANDA not in html and ETIQUETA not in html
     assert 'href="/direccion"' in html
@@ -709,7 +711,7 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
 
 def test_sin_filas_dice_sin_datos_todavia_nunca_cero(pg, panel_url, personas, con_ejemplo):
     for t in ("panel_alertas", "panel_ventas_mes", "panel_atencion_relativa", "panel_campana_resultado",
-              "panel_salidas_stock"):
+              "panel_salidas_stock", "panel_ventas_crm"):
         pg.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(t)))
     cl = dentro(app_con(panel_url), "tecnico")
     b = bloques(cl.get("/direccion").text)

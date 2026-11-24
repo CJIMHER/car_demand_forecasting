@@ -43,7 +43,7 @@ ORDEN = {"muy_por_encima": 1, "por_encima_parado": 1, "en_precio_no_sale": 2, "b
 
 COLS = ["dia", "origen", "fuente", "id_anuncio", "modelo", "version", "acabado", "motor", "antiguedad", "km",
         "precio_cents", "dias_publicado", "dias_cota", "nivel", "zona", "n_comparables", "p25_cents",
-        "mediana_cents", "p75_cents", "regla", "orden", "recomendacion"]
+        "mediana_cents", "p75_cents", "regla", "orden", "recomendacion", "fecha_entrada", "dias_stock"]
 
 
 @dataclass(frozen=True)
@@ -162,9 +162,24 @@ def texto(regla: str, c: Comparacion, nuestro: Coche, conc: Concesionario) -> st
                    "comunidad": f". Comparado sin tramos y ampliado a {conc.comunidad}"}[c.nivel]
 
 
-def calcular(h, dia: date, catalogo, reglas: Reglas) -> list[dict]:
+def enlace_crm(pg, entorno=None):
+    """Con coches del CRM (API de Walcu) y WALCU_SEUDONIMO_CLAVE: función bastidor del anuncio → fecha de entrada
+    real del coche (el bastidor se compara seudonimizado). Si no, None y todo sigue con los días publicado."""
+    import os
+    clave = ((os.environ if entorno is None else entorno).get("WALCU_SEUDONIMO_CLAVE") or "").strip()
+    if not clave:
+        return None
+    from ingesta import walcu_api, walcu_crm
+    mapa = walcu_crm.entradas(pg)
+    if not mapa:
+        return None
+    return lambda bastidor: mapa.get(walcu_api.seudonimo(clave, bastidor)) if bastidor else None
+
+
+def calcular(h, dia: date, catalogo, reglas: Reglas, entradas=None) -> list[dict]:
     """Filas de panel_precio_vo (origen real) de un día válido de VO. `h` es el lector de hechos de
-    analitica/mercado.py."""
+    analitica/mercado.py. `entradas` (enlace_crm): con la fecha de entrada real del CRM, las reglas usan los días
+    en stock en vez de los días publicado."""
     conc: Concesionario = h.conc
     nuestros, otros = [], []
     for clave, f in h.filas(dia, "VO").items():
@@ -179,8 +194,10 @@ def calcular(h, dia: date, catalogo, reglas: Reglas) -> list[dict]:
     filas = []
     for (fuente, id_anuncio), f, c in nuestros:
         dias = (dia - h.primero[(fuente, id_anuncio)]).days
+        entrada = entradas(f.bastidor) if entradas else None
+        dias_stock = (dia - entrada).days if entrada is not None and entrada <= dia else None
         comp = comparar(c, comparables, reglas)
-        regla = decidir(c.precio_cents, dias, comp, reglas)
+        regla = decidir(c.precio_cents, dias if dias_stock is None else dias_stock, comp, reglas)
         filas.append({
             "dia": dia, "origen": "real", "fuente": fuente, "id_anuncio": id_anuncio, "modelo": f.modelo,
             "version": f.version, "acabado": c.acabado, "motor": c.motor,
@@ -190,5 +207,6 @@ def calcular(h, dia: date, catalogo, reglas: Reglas) -> list[dict]:
             "nivel": comp.nivel, "zona": comp.zona, "n_comparables": comp.n, "p25_cents": comp.p25,
             "mediana_cents": comp.mediana, "p75_cents": comp.p75, "regla": regla, "orden": ORDEN[regla],
             "recomendacion": texto(regla, comp, c, conc),
+            "fecha_entrada": entrada if dias_stock is not None else None, "dias_stock": dias_stock,
         })
     return filas

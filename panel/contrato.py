@@ -30,7 +30,7 @@ TABLAS = (
     "panel_recomendacion_modelo", "panel_atencion_relativa", "panel_semana_campana",
     "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_semana", "panel_referencia_meta",
     "panel_campana_otra_marca", "panel_precio_vo", "panel_salidas_stock",
-    "panel_prevision_modelo", "panel_prevision_semana",
+    "panel_prevision_modelo", "panel_prevision_semana", "panel_ventas_crm",
 )
 
 # Tablas del motor de alertas (migración 0009) con el mismo formato (dia, origen, calculado_at). No
@@ -46,7 +46,9 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
     "direccion": {
         "stock": ("panel_stock_vehiculo",),
         "antiguedad": ("panel_stock_vehiculo",),
-        "ventas_kpi": ("panel_salidas_stock",),     # salidas de nuestro stock del mes (estimación de ventas)
+        # Ventas del mes: las del CRM (ingesta/walcu_crm.py) o, sin ellas, las salidas de nuestro stock (estimación)
+        "ventas_kpi": ("panel_ventas_crm", "panel_salidas_stock"),
+        "ventas_crm": ("panel_ventas_crm",),        # ventas del CRM por mes, tipo y modelo
         "alertas_kpi": ALERTAS,
         "ventas_mes": ("panel_ventas_mes",),
         "alertas": ALERTAS,
@@ -65,6 +67,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "alertas": ALERTAS,
         "precio": ("panel_precio_vo",),             # precio provisional de nuestros VO (analitica/precio.py)
         "salidas": ("panel_salidas_stock",),        # salidas de las últimas 4 semanas, un coche por fila
+        "stock_crm": ("panel_stock_vehiculo",),     # stock VO completo del CRM, con su fecha de entrada real
     },
     "marketing": {
         "kpis": ("panel_campana_dia", "panel_leads_dia"),

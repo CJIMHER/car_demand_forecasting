@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, sin_datos_o_pendiente, segmentos, precio_vo, salida %}
+{% from "_bloques.html" import attrs, marca, sin_datos, sin_datos_o_pendiente, segmentos, precio_vo, salida, mensual_por_modelo %}
 <div id="direccion" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -68,34 +68,8 @@
     </section>
   </div>
 
-  <section aria-labelledby="t-salidas" class="tarjeta bloque-salidas"{{ attrs("salidas", d.salidas) }}>
-    <div class="tarjeta-cabeza">
-      <h2 id="t-salidas">Salidas de nuestro stock (estimación de ventas)</h2>
-      {% if d.salidas.hay %}<span class="nota">Calculado el {{ d.salidas.calculado }}</span>{% endif %}
-    </div>
-    {{ marca(d.salidas) }}
-    {% if d.salidas.hay %}
-    <div class="tabla-scroll">
-      <table class="tabla tabla-salidas-mes">
-        <thead><tr><th scope="col" class="izq">Modelo</th><th scope="col">{{ d.salidas.mes_anterior[:1]|upper }}{{ d.salidas.mes_anterior[1:] }}</th><th scope="col">{{ d.salidas.mes_actual[:1]|upper }}{{ d.salidas.mes_actual[1:] }}</th></tr></thead>
-        {% for g in d.salidas.grupos %}
-        <tbody data-tipo="{{ g.tipo }}">
-          <tr class="grupo"><th scope="rowgroup" class="izq">{{ g.nombre }}</th><td>{{ salida(g.anterior) }}</td><td>{{ salida(g.actual) }}</td></tr>
-          {% for f in g.filas %}
-          <tr><th scope="row" class="izq">{{ f.modelo }}</th><td>{{ salida(f.anterior) }}</td><td>{{ salida(f.actual) }}</td></tr>
-          {% else %}
-          <tr><td colspan="3" class="izq">Ninguna salida.</td></tr>
-          {% endfor %}
-        </tbody>
-        {% endfor %}
-        {% if d.salidas.dos %}
-        <tfoot><tr><th scope="row" class="izq">Total</th><td>{{ salida(d.salidas.total_anterior) }}</td><td>{{ salida(d.salidas.total) }}</td></tr></tfoot>
-        {% endif %}
-      </table>
-    </div>
-    <p class="nota">{{ d.salidas.nota }} En gris, las provisionales: aún pueden volver a publicarse.</p>
-    {% else %}{{ sin_datos() }}{% endif %}
-  </section>
+  {% if d.ventas_crm.hay %}{{ mensual_por_modelo("ventas_crm", d.ventas_crm, "Ninguna venta.", "") }}{% endif %}
+  {{ mensual_por_modelo("salidas", d.salidas, "Ninguna salida.", " En gris, las provisionales: aún pueden volver a publicarse.") }}
 
   <section aria-labelledby="t-dir-prevision" class="tarjeta bloque-prevision"{{ attrs("prevision", d.prevision) }}>
     <div class="tarjeta-cabeza">

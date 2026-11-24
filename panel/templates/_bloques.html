@@ -33,6 +33,37 @@
 {{ c.n }}{% if c.prov %} <span class="provisional">{{ c.prov }}</span>{% endif %}
 {%- endmacro %}
 
+{% macro mensual_por_modelo(nombre, b, ninguna, nota_extra) -%}
+<section aria-labelledby="t-{{ nombre }}" class="tarjeta bloque-salidas"{{ attrs(nombre, b) }}>
+  <div class="tarjeta-cabeza">
+    <h2 id="t-{{ nombre }}">{{ b.titulo or "Salidas de nuestro stock (estimación de ventas)" }}</h2>
+    {% if b.hay %}<span class="nota">Calculado el {{ b.calculado }}</span>{% endif %}
+  </div>
+  {{ marca(b) }}
+  {% if b.hay %}
+  <div class="tabla-scroll">
+    <table class="tabla tabla-salidas-mes">
+      <thead><tr><th scope="col" class="izq">Modelo</th><th scope="col">{{ b.mes_anterior[:1]|upper }}{{ b.mes_anterior[1:] }}</th><th scope="col">{{ b.mes_actual[:1]|upper }}{{ b.mes_actual[1:] }}</th></tr></thead>
+      {% for g in b.grupos %}
+      <tbody data-tipo="{{ g.tipo }}">
+        <tr class="grupo"><th scope="rowgroup" class="izq">{{ g.nombre }}</th><td>{{ salida(g.anterior) }}</td><td>{{ salida(g.actual) }}</td></tr>
+        {% for f in g.filas %}
+        <tr><th scope="row" class="izq">{{ f.modelo }}</th><td>{{ salida(f.anterior) }}</td><td>{{ salida(f.actual) }}</td></tr>
+        {% else %}
+        <tr><td colspan="3" class="izq">{{ ninguna }}</td></tr>
+        {% endfor %}
+      </tbody>
+      {% endfor %}
+      {% if b.dos %}
+      <tfoot><tr><th scope="row" class="izq">Total</th><td>{{ salida(b.total_anterior) }}</td><td>{{ salida(b.total) }}</td></tr></tfoot>
+      {% endif %}
+    </table>
+  </div>
+  <p class="nota">{{ b.nota }}{{ nota_extra }}</p>
+  {% else %}{{ sin_datos() }}{% endif %}
+</section>
+{%- endmacro %}
+
 {% macro salidas_recientes(b) -%}
 <section aria-labelledby="t-salidas-recientes" class="tarjeta bloque-salidas"{{ attrs("salidas", b) }}>
   <div class="tarjeta-cabeza">
@@ -98,7 +129,7 @@
           <th scope="col">Mediana</th>
           <th scope="col">p25 – p75</th>
           <th scope="col">Comparables</th>
-          <th scope="col">Días publicado</th>
+          <th scope="col">Días publicado o en stock</th>
           <th scope="col" class="izq">Recomendación</th>
         </tr>
       </thead>
@@ -113,7 +144,7 @@
           <td data-etiqueta="Mediana">{{ f.mediana }}</td>
           <td data-etiqueta="p25 – p75">{{ f.rango }}</td>
           <td data-etiqueta="Comparables">{{ f.n }}<span class="n">{{ f.nivel }}</span></td>
-          <td data-etiqueta="Días publicado">{{ f.dias }}</td>
+          <td data-etiqueta="Días publicado o en stock">{{ f.dias }}</td>
           <td data-etiqueta="Recomendación" class="izq c-recomendacion">{{ f.recomendacion }}</td>
         </tr>
         {% else %}
