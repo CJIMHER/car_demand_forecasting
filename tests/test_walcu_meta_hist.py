@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -974,3 +975,64 @@ def test_referencias_excluyen_empresas_del_grupo(pg):
                                        "walcu_leads": 20}
     r = ref.leer_referencias(pg)
     assert r[(2025, "todo")]["gasto_cents"] == 55_000 and r[(2025, "todo")]["leads"] == 47   # como sin Covey
+
+
+# ================================================================== tarjetas de Marketing con Walcu semanal
+
+def _tarjeta(html: str, titulo: str) -> dict[str, str]:
+    bloque = html.split('id="t-campanas"')[1].split("</section>")[0]
+    fila = bloque.split(f'<span class="campana-nombre">{titulo}</span>')[1].split("</tr>")[0]
+    celdas = dict(re.findall(r'<td data-etiqueta="([^"]+)"[^>]*>(.*?)</td>', fila, re.S))
+    diag = bloque.split(f'<span class="campana-nombre">{titulo}</span>')[1].split('class="fila-diagnostico"')
+    celdas["criterios"] = diag[1].split("</tr>")[0] if len(diag) > 1 else ""
+    return celdas
+
+
+def _marketing(pg, panel_url):
+    from test_contrato_panel import ROLES, CLAVE, app_con, dentro
+    from panel import usuarios
+    for rol in ROLES:
+        usuarios.alta(pg, rol, f"Persona {rol}", rol, CLAVE)
+    pg.execute("UPDATE panel_usuarios SET cambiar_clave = false")
+    return dentro(app_con(panel_url), "marketing").get("/marketing").text
+
+
+def test_tarjeta_y_regla_con_los_mismos_leads_y_citas(pg, panel_url, conc):
+    """Solo la semana del 26-10 con leads (citas completas): la tarjeta y la regla a dicen lo mismo."""
+    _escenario(pg)
+    _campana_real(pg, "9", GOLF, 50, 26)            # 26 días a 50 € = 1.300 €
+    _walcu_nov(pg, f"2026-10-26,Facebook,{GOLF},VN,20,10,8,2,8,1,0")
+    _, js = cr.juzgar(pg, HOY, "real", conc, motor.cargar_criterios(), {})
+    j = next(x for x in js if x.campana_id == "9")
+    assert (j.leads, j.leads_cita, j.citas) == (20, 20, 8)
+    assert "lead a cita: 8 de 20" in j.reglas["a"].cifras_texto
+    motor.evaluar(pg, HOY, conc)
+    t = _tarjeta(_marketing(pg, panel_url), GOLF)
+    assert t["Gasto"] == "1.300 €"
+    assert t["Leads"] == "20" and t["Citas"] == "8"                 # los de la regla, sin «provisional»
+    assert t["€ / lead"] == "65 €" and t["€ / cita"] == "162 €"      # 1.300 € / 20 y / 8 = 162,5 (al euro, como el panel)
+    assert "provisional" not in t["Citas"] and "provisional" not in t["€ / cita"]
+    # La venta: la semana aún no tiene 60 días
+    assert t["Ventas"].startswith("1") and "provisional" in t["Ventas"] and "provisional" in t["€ / venta"]
+    # Regla a (fuera de zona: 8 de 18 = 44 % > 35 %): «Revisar:» antes de lo que hay que revisar
+    assert "(umbral 35 %). Revisar: la localización" in t["criterios"]
+
+
+def test_tarjeta_con_citas_provisionales_y_sin_walcu(pg, panel_url, conc):
+    _escenario(pg)
+    _campana_real(pg, "9", GOLF, 50, 26)
+    _campana_real(pg, "10", "VW [VN][2026] Polo noviembre", 20, 5, leads_meta=3)   # sin leads de Walcu que casen
+    _walcu_nov(pg, f"2026-10-26,Facebook,{GOLF},VN,20,10,8,2,8,1,0", f"2026-11-09,Facebook,{GOLF},VN,10,10,0,0,5,0,0")
+    _, js = cr.juzgar(pg, HOY, "real", conc, motor.cargar_criterios(), {})
+    j = next(x for x in js if x.campana_id == "9")
+    motor.evaluar(pg, HOY, conc)
+    html = _marketing(pg, panel_url)
+    t = _tarjeta(html, GOLF)
+    # Leads: todos, como la regla c; citas: todas hasta hoy (13), provisionales (la semana del 9-11 aún no tiene 14 días)
+    assert t["Leads"] == str(j.leads) == "30" and "coste por lead: 1.300 € / 30 leads" in j.reglas["c"].cifras_texto
+    assert t["Citas"].startswith("13") and "provisional" in t["Citas"] and "provisional" in t["€ / cita"]
+    assert j.citas == 8                                             # la regla, solo con las semanas completas
+    # Sin Walcu que case: los leads según Meta (5 días × 3) y citas y ventas «—»
+    p = _tarjeta(html, "VW [VN][2026] Polo noviembre")
+    assert p["Leads"].startswith("15") and "según Meta" in p["Leads"]
+    assert p["Citas"] == "—" and p["€ / cita"] == "—" and p["€ / lead"] == "7 €"

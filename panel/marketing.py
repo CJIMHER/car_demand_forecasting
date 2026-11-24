@@ -48,6 +48,9 @@ MOTIVOS = {"estacionalidad": "Estacionalidad", "calendario": "Calendario", "stoc
 AMBITOS = {"VN": "Nuevos (VN)", "VO": "Ocasión (VO)", "ambos": "VN y VO"}
 SIN_MERCADO = "sin datos de mercado"
 COMUN = "gasto común a VN y VO"
+# Reglas cuyo texto de «revisar» es una lista de cosas (como en sus avisos de alertas/reglas.yaml): llevan
+# «Revisar:» delante; las demás (b, c) ya son una frase completa
+CON_REVISAR = ("a", "d", "f")
 VEREDICTOS = {"por_encima": "Por encima de lo esperado", "normal": "Dentro de lo normal",
               "por_debajo": "Por debajo de lo esperado"}
 
@@ -107,6 +110,36 @@ def _leads(pg, origen, desde: date, hasta: date, tipo: str = "todo") -> dict[str
             (origen, desde, hasta, tipo, tipo)):
         salida[campana] = [int(leads), int(citas), int(ventas)]
     return salida
+
+
+def _walcu_vida(pg, origen, tipo: str) -> dict[str, list]:
+    """Walcu semanal de cada campaña (panel_campana_semana, último cálculo), semana a semana, las semanas con
+    carga de Walcu: [(semana, gasto €, leads, citas, ventas, citas completas, ventas completas, casa)]. Con `tipo`
+    VN o VO, los leads, citas y ventas de ese tipo. Las mismas filas que las reglas (alertas/criterios.py,
+    walcu_semana): una campaña sin ninguna semana que case no tiene datos de Walcu."""
+    dia = ng.ultimo_dia(pg, "panel_campana_semana", origen)
+    if dia is None:
+        return {}
+    suf = "" if tipo == "todo" else f"_{tipo.lower()}"
+    salida: dict[str, list] = defaultdict(list)
+    for cid, semana, gasto, leads, citas, ventas, c_ok, v_ok, casa in pg.execute(
+            f"""SELECT campana_id, semana, gasto_cents / 100.0, coalesce(leads{suf}, 0), coalesce(citas{suf}, 0),
+                       coalesce(ventas{suf}, 0), citas_completas, ventas_completas, cruce IS NOT NULL
+                FROM panel_campana_semana WHERE origen = %s AND dia = %s AND walcu AND campana_id IS NOT NULL""",
+            (origen, dia)):
+        salida[cid].append((semana, float(gasto), int(leads), int(citas), int(ventas), bool(c_ok), bool(v_ok),
+                            bool(casa)))
+    return salida
+
+
+def _plazos() -> tuple[int, int]:
+    """Días para tener las citas y las ventas completas (cohorte de config/campanas_walcu.yaml)."""
+    from ingesta import referencias_meta as ref
+    try:
+        plazos = ref.cargar()
+        return plazos.dias_cita, plazos.dias_venta
+    except (OSError, ref.ErrorCruce):
+        return 14, 60
 
 
 def _ambitos(pg, origen) -> dict[str, str]:
@@ -179,9 +212,13 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
     if v is None:
         return ng.bloque(origen, hay=False, orden=orden)
     ini, fin, _, _ = v
-    hay_leads = _hay(pg, "panel_leads_dia", origen)
-    leads = _leads(pg, origen, ini, fin) if hay_leads else {}
-    leads_tipo = _leads(pg, origen, ini, fin, tipo) if hay_leads and tipo != "todo" else {}
+    # Leads, citas y ventas: Walcu semanal, sobre toda la vida de la campaña (las mismas semanas que las reglas)
+    walcu = _walcu_vida(pg, origen, "todo")
+    walcu_tipo = _walcu_vida(pg, origen, tipo) if tipo != "todo" else walcu
+    hay_leads = any(s[7] for v in walcu.values() for s in v)
+    vida = {cid: (float(g), None if n_meta is None else int(n_meta)) for cid, g, n_meta in pg.execute(
+        """SELECT campana_id, sum(gasto_cents) / 100.0, sum(leads_meta) FROM panel_campana_dia
+           WHERE origen = %s AND dia <= %s GROUP BY campana_id""", (origen, fin))}
     salud_dia = ng.ultimo_dia(pg, "panel_campana_salud", origen)
     salud: dict[str, list] = defaultdict(list)
     if salud_dia:
@@ -199,10 +236,22 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
                       min(inicio), sum(gasto_cents) / 100.0, max(dia) FROM panel_campana_dia
                WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = ANY(%s) GROUP BY campana_id""",
             (origen, ini, fin, list(_de_tipo(tipo)))):
-        gasto = float(gasto)
+        # Gasto de toda la vida de la campaña; los costes, con el de las semanas con carga de Walcu (como las reglas)
+        gasto, leads_meta = vida.get(cid, (float(gasto), None))
         # Una de ambos vista en VN o VO: sus leads de ese tipo y ningún coste (el gasto no se reparte)
         comun = tipo != "todo" and ambito == "ambos"
-        l, c, ve = (leads_tipo if comun else leads).get(cid, [0, 0, 0]) if hay_leads else (None, None, None)
+        lunes_inicio = inicio - timedelta(days=inicio.weekday())
+        semanas = [s for s in (walcu_tipo if comun else walcu).get(cid, []) if s[0] >= lunes_inicio]
+        segun_meta = citas_prov = ventas_prov = False
+        if any(s[7] for s in semanas):
+            gasto_base = sum(s[1] for s in semanas)
+            l, c, ve = (sum(s[i] for s in semanas) for i in (2, 3, 4))
+            # Provisional: una semana con leads que aún puede sumar citas (o ventas); sin leads, no crece
+            citas_prov = any(not s[5] and s[2] for s in semanas)
+            ventas_prov = any(not s[6] and s[2] for s in semanas)
+        else:                                   # sin carga de Walcu que case: los leads según Meta
+            gasto_base, l, c, ve = gasto, leads_meta, None, None
+            segun_meta = leads_meta is not None
         dias_vida = (fin - inicio).days + 1
         estado, fallos, n_salud = "sin_datos", [], None
         if salud.get(cid):
@@ -214,9 +263,10 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
                 for s in sorted(con_datos, key=lambda s: -float(s[9])):
                     if s[10] in ("vigilar", "revisar"):
                         fallos.append(diagnostico(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[1], s[9], s[11]))
-        coste = (lambda n: None) if comun else (lambda n: _div(gasto, n) if n else None)
+        coste = (lambda n: None) if comun else (lambda n: _div(gasto_base, n) if n else None)
         decision, reglas = decisiones.get(cid, (None, []))
-        criterios = [f"{NOMBRE_REGLA[r['regla']]}: {r['texto']}" + (f". {r['revisar']}" if r.get("revisar") else "")
+        criterios = [f"{NOMBRE_REGLA[r['regla']]}: {r['texto']}"
+                     + (f". {'Revisar: ' if r['regla'] in CON_REVISAR else ''}{r['revisar']}" if r.get("revisar") else "")
                      + ("" if r["estado"] in ("activa", "no_aplica") else " (no salta)")
                      for r in reglas if r["estado"] in ("activa", "sin_volumen") and r["regla"] != "e"
                      or r["estado"] == "no_aplica"]
@@ -231,6 +281,7 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
                     + ("" if ultimo == fin else " · terminada"),
             "gasto": _euros(gasto), "leads": fmt.miles(l), "citas": fmt.miles(c), "ventas": fmt.miles(ve),
             "cpl": _euros(coste(l)), "cpc": _euros(coste(c)), "cpv": _euros(coste(ve)),
+            "segun_meta": segun_meta, "citas_prov": citas_prov, "ventas_prov": ventas_prov,
             # La decisión sale de los criterios de Meta; la salud frente a su referencia es solo detalle
             "decision": decision, "decision_texto": DECISIONES[decision] if decision else "Sin decidir todavía",
             "criterios": criterios, "salud_texto": salud_texto, "estado": estado if salud.get(cid) else None,
@@ -247,7 +298,9 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
            WHERE origen = %s AND dia BETWEEN %s AND %s AND gasto_cents > 0""", (origen, ini, fin)).fetchone()
     otras = (f"Campañas de otras marcas en esta cuenta: {n_otras}, gasto {_euros(float(gasto_otras))} en "
              f"{VENTANA} días." if n_otras else "")
+    dias_cita, dias_venta = _plazos()
     return ng.bloque(origen, filas=filas, orden=orden, hay_leads=hay_leads, hay_salud=bool(salud_dia), otras=otras,
+                     dias_cita=dias_cita, dias_venta=dias_venta,
                      hay_decision=bool(decisiones),
                      tipo=tipo, hay_comun=any(f["comun"] for f in filas),
                      ordenes=[{"id": o, "etiqueta": e, "activa": o == orden, "url": f"/marketing?tipo={tipo}&orden={o}"}
@@ -545,12 +598,7 @@ def ultimas_semanas(pg, origen, tipo: str = "todo") -> dict:
                       "citas": fmt.miles(n[1]) if cargada else fmt.GUION,
                       "ventas": fmt.miles(n[2]) if cargada else fmt.GUION,
                       "estado": texto, "incompleta": cargada and not (c_ok and v_ok), "sin_carga": not cargada})
-    from ingesta import referencias_meta as ref
-    try:
-        plazos = ref.cargar()
-        dias_cita, dias_venta = plazos.dias_cita, plazos.dias_venta
-    except (OSError, ref.ErrorCruce):
-        dias_cita, dias_venta = 14, 60
+    dias_cita, dias_venta = _plazos()
     nombre = f"{fmt.fecha_corta(semanas_b[0])} – {fmt.fecha_corta(semanas_b[-1] + timedelta(days=6))}"
     sin_carga = [x["semana"] for x in lista if x["sin_carga"]]
     return ng.bloque(origen, filas=filas, total=total, mes=nombre, walcu=walcu, tipo=tipo,

@@ -1,5 +1,18 @@
 # Cambios
 
+## 2026-11-24 · Marketing: las tarjetas de campaña leen Walcu por semanas (rama hito-1b-walcu-tipo)
+
+- **Arreglo**: en «Campañas: decisión y venta», Leads, Citas, Ventas y los costes salían «—» aunque la regla de
+  la misma campaña tenía los datos: las tarjetas leían `panel_leads_dia` (Walcu diario, sin filas reales) y las
+  reglas, `panel_campana_semana`. Ahora las dos leen las mismas semanas.
+- **Qué muestran**, sobre toda la vida de la campaña: gasto; leads de Walcu (sin carga de Walcu que case, los
+  de Meta con «según Meta»); citas y ventas de Walcu hasta hoy. Costes con el gasto de las semanas con carga
+  de Walcu, como las reglas, siempre que haya al menos un lead, una cita o una venta. Si alguna semana con
+  leads aún no tiene las citas (14 días) o las ventas (60 días) completas, la cifra y su coste salen en gris
+  con «provisional». Las reglas no cambian: solo semanas completas.
+- Regla a (y d y f): «Revisar:» delante de lo que hay que revisar, como en los avisos de Telegram.
+- El bloque de campañas del contrato pasa de `panel_leads_dia` a `panel_campana_semana`.
+
 ## 2026-11-24 · Walcu: tipo VN/VO, exclusiones y equivalencias (rama hito-1b-walcu-tipo)
 
 - **Tipo VN/VO** (`scripts/walcu_agregar.py`): Walcu marca «Nuevo» casi todos los leads de campañas de ocasión

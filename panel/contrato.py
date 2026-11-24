@@ -58,7 +58,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
     "marketing": {
         "kpis": ("panel_campana_dia", "panel_leads_dia"),
         "recomendacion": ("panel_recomendacion_modelo",),
-        "campanas": ("panel_campana_dia", "panel_leads_dia", "panel_campana_salud", "panel_campana_decision",
+        "campanas": ("panel_campana_dia", "panel_campana_semana", "panel_campana_salud", "panel_campana_decision",
                      "panel_campana_otra_marca"),     # otras marcas: solo la línea de debajo
         "atencion": ("panel_atencion_relativa",),
         "ocasion": ("panel_riesgo_vehiculo",),      # solo en VO: stock de ocasión que mover

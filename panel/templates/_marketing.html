@@ -79,12 +79,12 @@
                 <span class="campana-nota">{{ c.nota }}</span>
               </th>
               <td data-etiqueta="Gasto">{{ c.gasto }}</td>
-              <td data-etiqueta="Leads"{% if not d.campanas.hay_leads %} title="Sin datos todavía"{% endif %}>{{ c.leads }}</td>
-              <td data-etiqueta="Citas">{{ c.citas }}</td>
-              <td data-etiqueta="Ventas">{{ c.ventas }}</td>
+              <td data-etiqueta="Leads" class="c-leads">{{ c.leads }}{% if c.segun_meta %}<span class="n">según Meta</span>{% endif %}</td>
+              <td data-etiqueta="Citas" class="c-citas{% if c.citas_prov %} provisional{% endif %}">{{ c.citas }}{% if c.citas_prov %}<span class="n">provisional</span>{% endif %}</td>
+              <td data-etiqueta="Ventas" class="c-ventas{% if c.ventas_prov %} provisional{% endif %}">{{ c.ventas }}{% if c.ventas_prov %}<span class="n">provisional</span>{% endif %}</td>
               <td data-etiqueta="€ / lead"{% if c.comun %} title="Gasto común a VN y VO: no se reparte"{% endif %}>{{ c.cpl }}</td>
-              <td data-etiqueta="€ / cita"{% if c.comun %} title="Gasto común a VN y VO: no se reparte"{% endif %}>{{ c.cpc }}</td>
-              <td data-etiqueta="€ / venta" class="fuerte"{% if c.comun %} title="Gasto común a VN y VO: no se reparte"{% endif %}>{{ c.cpv }}</td>
+              <td data-etiqueta="€ / cita" class="c-cpc{% if c.citas_prov %} provisional{% endif %}"{% if c.comun %} title="Gasto común a VN y VO: no se reparte"{% endif %}>{{ c.cpc }}{% if c.citas_prov and c.cpc != '—' %}<span class="n">provisional</span>{% endif %}</td>
+              <td data-etiqueta="€ / venta" class="fuerte c-cpv{% if c.ventas_prov %} provisional{% endif %}"{% if c.comun %} title="Gasto común a VN y VO: no se reparte"{% endif %}>{{ c.cpv }}{% if c.ventas_prov and c.cpv != '—' %}<span class="n">provisional</span>{% endif %}</td>
               <td data-etiqueta="Decisión" class="izq c-salud">
                 <span class="chip chip-decision-{{ c.decision or 'ninguna' }}">{{ c.decision_texto }}</span>
               </td>
@@ -103,7 +103,8 @@
           </tbody>
         </table>
       </div>
-      {% if not d.campanas.hay_leads %}<p class="nota motivo">Leads, citas y ventas: sin datos todavía.</p>{% endif %}
+      {% if not d.campanas.hay_leads %}<p class="nota motivo">Sin carga de Walcu: leads según Meta; citas y ventas, sin datos todavía.</p>{% endif %}
+      <p class="nota">Gasto, leads, citas y ventas: toda la vida de la campaña. Leads, citas y ventas, de Walcu por semanas (las mismas que usan las reglas); sin carga de Walcu que case, los leads según Meta. Los costes usan el gasto de las semanas con carga de Walcu. «Provisional»: alguna semana de la campaña aún no tiene las citas ({{ d.campanas.dias_cita }} días) o las ventas ({{ d.campanas.dias_venta }} días) completas y la cifra puede crecer; las reglas solo usan las semanas completas.</p>
       {% if d.campanas.otras %}<p class="nota otras-marcas">{{ d.campanas.otras }}</p>{% endif %}
       {% if d.campanas.hay_comun %}<p class="nota">Campaña de VN y VO: leads, citas y ventas solo de {{ d.tipo }}. Su gasto es común a VN y VO y no se reparte con ninguna regla, así que aquí no tiene coste por lead, por cita ni por venta; se ve completo en «Todo».</p>{% endif %}
       <p class="nota">Decisión (continuar, revisar, parar o subir presupuesto): con los criterios de las campañas de Meta, desde el segundo día de vida; cada regla dice sus cifras frente a su umbral y su n, y con poco volumen se muestra sin saltar. Detalle: cada medida de la campaña (entrega, anuncio, web, calidad del lead y stock) se compara con su referencia en campañas anteriores de su mismo ámbito (VN, VO o los dos) con los mismos días de vida; explica, pero no decide. El tipo (de un modelo o general) y el ámbito de cada campaña salen de su nombre, con las reglas de config/campanas.yaml. Con un modelo que no capturamos en Mercado («sin datos de mercado»), la regla e y la comparación con la competencia no se aplican.</p>

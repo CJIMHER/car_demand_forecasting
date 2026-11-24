@@ -164,7 +164,7 @@ def test_origen_de_un_bloque():
     modos = {t: M(False, True) for t in contrato.TABLAS + contrato.MOTOR}
     assert set(contrato.estados(modos).values()) == {"ejemplo"}
     # Una fila real en una tabla: los bloques que la leen pasan a real (también su otra tabla)
-    modos["panel_leads_dia"] = M(True, True)
+    modos["panel_campana_dia"] = M(True, True)
     o = contrato.origenes(modos, "marketing")
     assert o["kpis"] == o["campanas"] == "real" and o["recomendacion"] == "ejemplo"
     assert contrato.estado_vista(modos, "marketing") == "ejemplo"       # quedan bloques de ejemplo
@@ -462,9 +462,10 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     # Ordenar por gasto
     html = cl.get("/marketing?orden=gasto").text
     nombres = re.findall(r'<span class="campana-nombre">([^<]+)</span>', bloques(html)["campanas"][1])
-    gastos = {}
+    gastos = {}                                   # toda la vida de las campañas con gasto en los 28 días
+    activas = {f["campana_id"] for f in filas["panel_campana_dia"] if ini <= f["dia"] <= fin}
     for f in filas["panel_campana_dia"]:
-        if ini <= f["dia"] <= fin:
+        if f["campana_id"] in activas:
             gastos[f["titulo"]] = gastos.get(f["titulo"], 0) + f["gasto_cents"]
     assert nombres == sorted(gastos, key=lambda n: -gastos[n])
 
@@ -484,6 +485,18 @@ def _kpi(html: str, etiqueta_inicio: str) -> tuple[str, str]:
     m = re.search(r'<span class="kpi-etiqueta">' + etiqueta_inicio + r'[^<]*</span>\s*<span class="kpi-valor">([^<]+)'
                   r'</span>\s*<span class="kpi-sub">([^<]*)</span>', html)
     return m.group(1), m.group(2)
+
+
+def _vida(filas, cid, de_tipo=None) -> tuple[float, float, int | None]:
+    """(gasto de toda la vida de la campaña en €, gasto de sus semanas con Walcu en €, leads de Walcu semanal) de
+    una campaña de ejemplo, como las tarjetas de Marketing (panel_campana_semana)."""
+    dias = [f for f in filas["panel_campana_dia"] if f["campana_id"] == cid]
+    inicio = min(f["inicio"] for f in dias)
+    lunes = inicio - timedelta(days=inicio.weekday())
+    semanas = [w for w in filas["panel_campana_semana"] if w["campana_id"] == cid and w["walcu"] and w["semana"] >= lunes]
+    col = "leads" if de_tipo is None else f"leads_{de_tipo.lower()}"
+    leads = sum(w[col] for w in semanas) if any(w["cruce"] for w in semanas) else None
+    return sum(f["gasto_cents"] for f in dias) / 100, sum(w["gasto_cents"] for w in semanas) / 100, leads
 
 
 @pytest.mark.parametrize("tipo", ["todo", "VN", "VO"])
@@ -515,13 +528,15 @@ def test_marketing_selector_cuadra_con_las_filas(pg, panel_url, personas, con_ej
         f = por_nombre[titulo[cid]]
         comun = tipo != "todo" and ambito[cid] == "ambos"
         assert f["ambito"] == ambito[cid]
-        assert f["Gasto"] == f"{fmt.miles(gasto[cid])} €"                 # el gasto, entero: no se reparte
-        assert f["Leads"] == fmt.miles(leads(cid, tipo if comun else None)), cid
+        # Toda la vida de la campaña: el gasto, entero (no se reparte), y los leads de Walcu semanal
+        vida, gasto_walcu, l = _vida(filas, cid, tipo if comun else None)
+        assert f["Gasto"] == f"{fmt.miles(vida)} €"
+        assert f["Leads"] == fmt.miles(l), cid
         if comun:
             assert (f["€ / lead"], f["€ / cita"], f["€ / venta"]) == ("—", "—", "—"), cid
             assert "gasto común a VN y VO" in f["nota"]
         else:
-            assert f["€ / lead"] == f"{fmt.miles(gasto[cid] / leads(cid))} €" and "gasto común" not in f["nota"]
+            assert f["€ / lead"] == f"{fmt.miles(gasto_walcu / l)} €" and "gasto común" not in f["nota"]
     # Tarjetas: en VN o VO, solo las campañas de ese ámbito, y lo dicen
     de_tarjetas = {cid for cid in gasto if tipo == "todo" or ambito[cid] == tipo}
     g = sum(gasto[c] for c in de_tarjetas)
@@ -530,9 +545,7 @@ def test_marketing_selector_cuadra_con_las_filas(pg, panel_url, personas, con_ej
     assert valor == f"{fmt.miles(g)} €"
     assert _kpi(b["kpis"][1], "Leads")[0] == fmt.miles(l)
     assert _kpi(b["kpis"][1], "Coste por lead")[0] == f"{fmt.miles(g / l)} €"
-    # …y cuadran con las filas de la tabla que no son de ambos
-    assert g == pytest.approx(sum(float(f["Gasto"][:-2].replace(".", "")) for f in tabla
-                                  if tipo == "todo" or f["ambito"] == tipo), abs=len(tabla))
+    # (las tarjetas son de los últimos 28 días; la tabla, de toda la vida de cada campaña)
     if tipo == "todo":
         assert "sin la campaña de VN y VO" not in html
     else:
@@ -669,16 +682,18 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     a_real(pg, "panel_leads_dia")
     b = bloques(tec.get("/marketing").text)
     assert b["kpis"][0] == "real" and "Sin datos todavía" in b["kpis"][1] and ETIQUETA not in b["kpis"][1]
-    assert b["campanas"][0] == "real" and "Sin datos todavía" in b["campanas"][1]
     assert b["recomendacion"][0] == "ejemplo" and ETIQUETA in b["recomendacion"][1]
+    # Las campañas leen Walcu por semanas (panel_campana_semana), como las reglas: sin Meta, sin datos
+    a_real(pg, "panel_campana_semana")
+    b = bloques(tec.get("/marketing").text)
+    assert b["campanas"][0] == "real" and "Sin datos todavía" in b["campanas"][1]
     assert not _ve(dentro(app, "marketing"), "/marketing")
     a_real(pg, "panel_campana_dia")
     b = bloques(tec.get("/marketing").text)
     assert "Sin datos todavía" not in b["kpis"][1]
     assert ">Sin decidir todavía</span>" in b["campanas"][1]            # sin pasar el motor: sin decisión
     a_real(pg, "panel_campana_salud", "panel_recomendacion_modelo", "panel_atencion_relativa",
-           "panel_semana_campana", "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_semana",
-           "panel_referencia_meta")
+           "panel_semana_campana", "panel_campana_resultado", "panel_trafico_canal_dia", "panel_referencia_meta")
     html = dentro(app, "marketing").get("/marketing").text
     assert PENDIENTE not in html and BANDA not in html and ETIQUETA not in html
 

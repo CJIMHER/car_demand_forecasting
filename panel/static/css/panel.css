@@ -562,3 +562,7 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 .tabla-precio-vo tr.precio-bajar .c-recomendacion { color: #9A3412; font-weight: 600; }
 .tabla-precio-vo tr.precio-revisar .c-recomendacion { color: var(--marron); font-weight: 600; }
 .tabla-precio-vo tr.precio-barato .c-recomendacion { color: var(--azul-oscuro); }
+
+/* Marketing: cifras provisionales de Walcu (semanas sin citas o ventas completas) */
+.tabla-campanas td.provisional { color: var(--gris); }
+.tabla-campanas td .n { display: block; }

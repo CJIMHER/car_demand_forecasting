@@ -79,7 +79,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
 | Ventas y Dirección | Precio de nuestros VO (provisional; Marketing no lo ve) | `panel_precio_vo` |
 | Marketing | Tarjetas de 28 días | `panel_campana_dia` y `panel_leads_dia` |
-| Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_leads_dia` y `panel_campana_salud` |
+| Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_campana_semana` (Walcu por semanas, como las reglas), `panel_campana_salud` y `panel_campana_decision` |
 | Marketing | Recomendación por modelo | `panel_recomendacion_modelo` |
 | Marketing | Atención frente a sus rivales (Todo y VN) | `panel_atencion_relativa` |
 | Marketing | Ocasión: dónde hay stock que mover (solo VO) | `panel_riesgo_vehiculo`, la misma tabla que Ventas |
