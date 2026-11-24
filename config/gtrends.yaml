@@ -7,8 +7,12 @@
 geo: ES                      # zona (código de Trends)
 zona: España                 # cómo la escribe Trends en la cabecera de cada columna: «término: (España)»
 periodo: today 12-m          # últimos 12 meses: Trends da datos semanales
-categoria: 47                # Autos y vehículos
-categoria_nombre: Autos y vehículos   # primera línea del CSV: «Categoría: Autos y vehículos»
+categoria: 47                # Automóviles y vehículos (cat=47 en el enlace)
+# Primera línea del CSV, «Categoría: <nombre>». El CSV no trae el código, así que se compara el nombre con
+# estos, que son equivalentes (Trends ha cambiado cómo la escribe). El primero es el que se muestra.
+categoria_nombres:
+  - Automóviles y vehículos
+  - Autos y vehículos
 idioma: es                   # idioma de la página (y de la cabecera del CSV: «Semana»)
 frecuencia: Semana           # primera columna de la cabecera: datos semanales
 semanas: {minimo: 50, maximo: 54}     # unas 52 semanas

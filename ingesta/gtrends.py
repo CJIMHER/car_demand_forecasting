@@ -69,13 +69,25 @@ class Config:
     zona: str
     periodo: str
     categoria: int
-    categoria_nombre: str
+    categoria_nombres: tuple[str, ...]   # nombres equivalentes de la categoría; el primero es el que se muestra
     idioma: str
     frecuencia: str
     semanas_min: int
     semanas_max: int
     max_terminos: int
     semanas_atencion: int
+
+    @property
+    def categoria_nombre(self) -> str:
+        return self.categoria_nombres[0]
+
+    def es_categoria(self, nombre: str) -> bool:
+        """La categoría del CSV es la del YAML: por su código si lo trae («47» o «… (47)») y, si no, por
+        cualquiera de sus nombres equivalentes (Trends la ha llamado de más de una forma)."""
+        codigo = re.fullmatch(r"(?:.*\()?\s*(\d+)\s*\)?", nombre.strip())
+        if codigo:
+            return int(codigo.group(1)) == self.categoria
+        return plegar(nombre) in {plegar(n) for n in self.categoria_nombres}
 
 
 def ruta_config() -> Path:
@@ -85,8 +97,12 @@ def ruta_config() -> Path:
 def cargar_config(fichero: Path | None = None) -> Config:
     c = yaml.safe_load((fichero or ruta_config()).read_text(encoding="utf-8")) or {}
     try:
+        nombres = c.get("categoria_nombres") or c["categoria_nombre"]
+        nombres = tuple(str(n) for n in ([nombres] if isinstance(nombres, str) else nombres))
+        if not nombres:
+            raise ValueError("categoria_nombres vacío")
         cfg = Config(str(c["geo"]), str(c["zona"]), str(c["periodo"]), int(c["categoria"]),
-                     str(c["categoria_nombre"]), str(c.get("idioma") or "es"), str(c["frecuencia"]),
+                     nombres, str(c.get("idioma") or "es"), str(c["frecuencia"]),
                      int(c["semanas"]["minimo"]), int(c["semanas"]["maximo"]), int(c.get("max_terminos") or 5),
                      int((c.get("atencion") or {}).get("semanas") or 4))
     except (KeyError, TypeError, ValueError) as exc:
@@ -291,8 +307,9 @@ def errores_serie(s: Serie, cfg: Config) -> list[str]:
     errores = []
     if s.categoria is None:
         errores.append(f"sin la línea «Categoría: {cfg.categoria_nombre}»: se ha descargado sin categoría")
-    elif plegar(s.categoria) != plegar(cfg.categoria_nombre):
-        errores.append(f"categoría «{s.categoria}» en lugar de «{cfg.categoria_nombre}»")
+    elif not cfg.es_categoria(s.categoria):
+        errores.append(f"categoría «{s.categoria}» en lugar de "
+                       + " o ".join(f"«{n}»" for n in cfg.categoria_nombres) + f" ({cfg.categoria})")
     otras = sorted({z for z in s.zonas if plegar(z) != plegar(cfg.zona)})
     if otras:
         errores.append(f"zona {', '.join(f'«{z}»' for z in otras)} en lugar de «{cfg.zona}»")
@@ -395,7 +412,7 @@ def manifiesto(inf: Informe, comps: list[Comparacion], cfg: Config, fecha: date)
         "fecha_descarga": fecha.isoformat(),
         "generado_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "geo": cfg.geo, "zona": cfg.zona, "periodo": cfg.periodo, "categoria": cfg.categoria,
-        "categoria_nombre": cfg.categoria_nombre,
+        "categoria_nombre": cfg.categoria_nombre, "categoria_nombres": list(cfg.categoria_nombres),
         "comparaciones": [{
             "id": cid, "modelo": por_id[cid].modelo, "consulta": por_id[cid].consulta,
             "terminos": list(por_id[cid].terminos), "fichero": f"{cid}.csv", "fichero_original": f.nombre,
@@ -487,6 +504,9 @@ def cargar(pg, carpeta: Path, cfg: Config, subir=None) -> dict:
         return {"entrega": fecha.isoformat(), "comparaciones": len(man["comparaciones"]), "filas": 0,
                 "filas_nuevas": 0, "brutos": None, "atencion_modelos": escribir_atencion(pg, fecha, cfg),
                 "ya_cargada": True}
+    if "categoria" in man and int(man["categoria"]) != cfg.categoria:
+        raise ErrorGtrends(f"la entrega {carpeta.name} es de la categoría {man['categoria']}, no de la "
+                           f"{cfg.categoria} de config/gtrends.yaml")
     for c in man["comparaciones"]:
         if hashlib.sha256((carpeta / c["fichero"]).read_bytes()).hexdigest() != c["huella"]:
             raise ErrorGtrends(f"{c['fichero']}: su huella no es la del manifiesto (fichero cambiado o incompleto)")

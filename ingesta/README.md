@@ -107,8 +107,9 @@ Nunca lanza; el script sale siempre con el código de la copia.
 
 Google Trends se descarga a mano, una vez al mes, desde el perfil de Chrome del proyecto. El código
 nunca accede a Google (ni pytrends, ni navegadores automáticos, ni peticiones a trends.google.com);
-automatiza el resto. Configuración en `config/gtrends.yaml` (zona, periodo, categoría 47 «Autos y
-vehículos», semanas esperadas); comparaciones de `data/competidores.csv`: el modelo propio y hasta 4
+automatiza el resto. Configuración en `config/gtrends.yaml` (zona, periodo, categoría 47 con sus nombres
+equivalentes, «Automóviles y vehículos» o «Autos y vehículos», semanas esperadas; el CSV solo trae el
+nombre, así que se acepta cualquiera de `categoria_nombres` o el código si algún día lo trae); comparaciones de `data/competidores.csv`: el modelo propio y hasta 4
 competidores (5 términos, el límite de Trends); con más, varias comparaciones con el modelo como ancla.
 
 | Orden | Dónde | Qué hace |

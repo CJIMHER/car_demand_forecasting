@@ -1,5 +1,16 @@
 # Cambios
 
+## 2026-11-24 · Google Trends: la categoría 47 con cualquiera de sus nombres (rama hito-1b-gtrends-categoria)
+
+- **Arreglo**: `make gtrends-subir` rechazaba los 28 CSV porque Trends escribe ahora «Categoría: Automóviles y
+  vehículos» y se esperaba «Autos y vehículos». Es la misma categoría (cat=47 en el enlace).
+- `config/gtrends.yaml`: `categoria_nombre` pasa a `categoria_nombres` (lista de nombres equivalentes; el
+  primero es el que se muestra). Un YAML con el antiguo `categoria_nombre` sigue valiendo.
+- La comprobación usa el código (47) si la línea de categoría lo trae («47» o «… (47)») y, si no, cualquiera de
+  los nombres del YAML, sin tildes ni mayúsculas. Vale para la subida (Mac) y la carga (`make gtrends`); la
+  carga además rechaza una entrega cuyo manifiesto sea de otro código de categoría.
+- El manifiesto añade `categoria_nombres`.
+
 ## 2026-11-24 · Previsión bayesiana de leads, citas y ventas de Meta (rama hito-2-prevision)
 
 - **Modelo** (`analitica/prevision.py`), de fórmula cerrada y con numpy:

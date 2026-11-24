@@ -419,7 +419,7 @@ en `/opt/cdf/.env` (por defecto, no).
 ### 7.11 Google Trends (descarga manual, una vez al mes)
 
 Google Trends se descarga **a mano** desde el perfil de Chrome del proyecto: el código nunca accede a
-Google. Zona (España), periodo (12 meses, datos semanales) y categoría (Autos y vehículos, 47) están en
+Google. Zona (España), periodo (12 meses, datos semanales) y categoría (47, «Automóviles y vehículos», antes «Autos y vehículos») están en
 `config/gtrends.yaml`; las comparaciones salen de `data/competidores.csv`.
 
 Una vez, en el servidor:

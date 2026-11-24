@@ -104,7 +104,7 @@ def test_pagina_de_enlaces(comps, cfg):
     for c in comps:
         assert f'data-id="{c.id}"' in pagina and c.url(cfg).replace("&", "&amp;") in pagina
     assert pagina.count('type="checkbox"') == 3 and 'id="faltan"' in pagina and "Faltan " in pagina
-    assert "localStorage" in pagina and "Autos y vehículos" in pagina
+    assert "localStorage" in pagina and "Automóviles y vehículos" in pagina
     assert "make gtrends-subir" in pagina
 
 
@@ -189,14 +189,48 @@ def test_categoria_distinta_se_rechaza_y_dice_que_comparacion_volver_a_descargar
     assert not inf.ok
     (error,) = inf.errores
     assert error.startswith("polo-1 (multiTimeline (2).csv): categoría «Todas las categorías» en lugar de "
-                            "«Autos y vehículos». Vuelve a descargar polo-1: https://trends.google.com/trends/explore?cat=47")
+                            "«Automóviles y vehículos» o «Autos y vehículos» (47). Vuelve a descargar polo-1: https://trends.google.com/trends/explore?cat=47")
 
 
 def test_sin_linea_de_categoria_se_rechaza(tmp_path, comps, cfg):
     _todo(tmp_path / "d", comps)
     poner(tmp_path / "d", "multiTimeline.csv", csv_trends(por_id(comps)["golf-1"].terminos, categoria=None))
     (error,) = gt.comprobar(tmp_path / "d", comps, cfg).errores
-    assert "golf-1" in error and "sin la línea «Categoría: Autos y vehículos»" in error
+    assert "golf-1" in error and "sin la línea «Categoría: Automóviles y vehículos»" in error
+
+
+@pytest.mark.parametrize("categoria", ["Automóviles y vehículos", "Autos y vehículos", "AUTOMOVILES Y VEHICULOS",
+                                       "47", "Automóviles y vehículos (47)"])
+def test_categoria_por_codigo_o_por_cualquiera_de_sus_nombres(tmp_path, comps, cfg, categoria):
+    """Trends ha pasado a escribir «Automóviles y vehículos» la que antes era «Autos y vehículos» (cat=47)."""
+    _todo(tmp_path / "d", comps)
+    poner(tmp_path / "d", "multiTimeline.csv", csv_trends(por_id(comps)["golf-1"].terminos, categoria=categoria))
+    inf = gt.comprobar(tmp_path / "d", comps, cfg)
+    assert inf.ok, inf.texto(len(comps))
+
+
+def test_codigo_de_otra_categoria_se_rechaza(tmp_path, comps, cfg):
+    _todo(tmp_path / "d", comps)
+    poner(tmp_path / "d", "multiTimeline.csv", csv_trends(por_id(comps)["golf-1"].terminos, categoria="Otra (12)"))
+    (error,) = gt.comprobar(tmp_path / "d", comps, cfg).errores
+    assert "categoría «Otra (12)» en lugar de" in error
+
+
+def test_los_nombres_de_la_categoria_salen_del_yaml(tmp_path):
+    base = gt.ruta_config().read_text(encoding="utf-8")
+    import yaml
+    c = yaml.safe_load(base)
+    c["categoria_nombres"] = ["Vehículos"]
+    f = tmp_path / "gtrends.yaml"
+    f.write_text(yaml.safe_dump(c, allow_unicode=True), encoding="utf-8")
+    cfg = gt.cargar_config(f)
+    assert cfg.es_categoria("vehiculos") and cfg.es_categoria("47")
+    assert not cfg.es_categoria("Automóviles y vehículos")
+    # Formato anterior, con un solo nombre, sigue valiendo
+    del c["categoria_nombres"]
+    c["categoria_nombre"] = "Autos y vehículos"
+    f.write_text(yaml.safe_dump(c, allow_unicode=True), encoding="utf-8")
+    assert gt.cargar_config(f).categoria_nombres == ("Autos y vehículos",)
 
 
 @pytest.mark.parametrize("cambio, texto", [
@@ -276,12 +310,12 @@ def test_ip_del_parametro_del_entorno_o_del_env_del_mac(tmp_path):
 
 # ================================================================== carga en el servidor
 
-def entrega(tmp_path, comps, cfg, valores_por_comp=None, fecha=DESCARGA) -> Path:
+def entrega(tmp_path, comps, cfg, valores_por_comp=None, fecha=DESCARGA, categoria="Autos y vehículos") -> Path:
     """Una entrega como la deja la subida: <comparación>.csv y manifiesto.json."""
     d = tmp_path / "local"
     for c in comps:
         v = (valores_por_comp or {}).get(c.id)
-        poner(d, f"{c.id}-descarga.csv", csv_trends(c.terminos, v))
+        poner(d, f"{c.id}-descarga.csv", csv_trends(c.terminos, v, categoria=categoria))
     inf = gt.comprobar(d, comps, cfg)
     assert inf.ok, inf.texto(len(comps))
     raiz = tmp_path / "entrada"
@@ -328,6 +362,23 @@ def test_la_carga_es_de_solo_anadir(pg, tmp_path, comps, cfg):
     gt.cargar(pg, entrega(tmp_path, comps, cfg), cfg, Bucket())
     with pytest.raises(psycopg.Error):
         pg.execute("UPDATE gtrends_semana SET valor = 1")
+
+
+def test_carga_con_la_categoria_escrita_automoviles_y_vehiculos(pg, tmp_path, comps, cfg):
+    carpeta = entrega(tmp_path, comps, cfg, categoria="Automóviles y vehículos")
+    r = gt.cargar(pg, carpeta, cfg, Bucket())
+    assert r["filas"] == (5 + 3 + 3) * 52 and not r["ya_cargada"]
+
+
+def test_entrega_de_otro_codigo_de_categoria_no_se_carga(pg, tmp_path, comps, cfg):
+    carpeta = entrega(tmp_path, comps, cfg)
+    man = json.loads((carpeta / "manifiesto.json").read_text(encoding="utf-8"))
+    man["categoria"] = 12
+    (carpeta / "manifiesto.json").write_text(json.dumps(man), encoding="utf-8")
+    b = Bucket()
+    with pytest.raises(gt.ErrorGtrends, match="categoría 12"):
+        gt.cargar(pg, carpeta, cfg, b)
+    assert b.subidas == [] and pg.execute("SELECT count(*) FROM gtrends_semana").fetchone()[0] == 0
 
 
 def test_un_fichero_cambiado_no_se_carga(pg, tmp_path, comps, cfg):
