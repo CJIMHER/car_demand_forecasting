@@ -359,21 +359,55 @@ def test_historico_sin_desde_o_sin_credenciales_falla_claro(monkeypatch):
 # ================================================================== script del Mac
 
 EXPORTACION = ["Nombre", "Teléfono", "Email", "Origen", "Detalle campaña", "Tipo de vehículo solicitado", "Fecha Lead",
-               "Id negociación creada", "Estado", "Motivo fracaso", "Código postal", "Vendedor"]
+               "Id negociación creada", "Resultado última actividad", "Estado", "Motivo fracaso", "Código postal",
+               "Vendedor"]
 
 
 def _leads(conc):
     cerca, lejos = conc.zona_cercana[0] + "001", ("28" if conc.zona_cercana[0] != "28" else "08") + "001"
     return [
         ["Ana Pérez", "612345678", "ana@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
-         "03/11/2026 10:15", "N-1", "Vendido", "", cerca, "Comercial 1"],
+         "03/11/2026 10:15", "N-1", "Visita en exposición", "Vendido", "", cerca, "Comercial Uno"],
         ["Luis Gómez", "699111222", "luis@correo.es", "facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
-         "04/11/2026 11:00", "", "Perdido", "Número inexistente", lejos, "Comercial 2"],
-        ["Eva Ruiz", "600000001", "eva@correo.es", "AiVORA", "", "Ocasión", "2026-10-30 09:00", "N-2", "En curso", "",
-         "", "Comercial 1"],
+         "04/11/2026 11:00", "", "", "Perdido", "Número inexistente", lejos, "Comercial Dos"],
+        ["Eva Ruiz", "600000001", "eva@correo.es", "AiVORA", "", "Ocasión", "2026-10-30 09:00", "N-2", "", "En curso",
+         "", "", "Comercial Uno"],
         ["Raro", "600000002", "r@correo.es", "Portal raro", "Llamar al 612345678", "Seminuevo", "30/10/2026", "", "", "",
-         "1234", "Comercial 3"],
+         "", "1234", "Comercial Tres"],
+        # Negociación creada, pero la última actividad es un presupuesto por teléfono: no es cita (ni venta)
+        ["Pepe Mora", "600000003", "p@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
+         "05/11/2026 12:00", "N-3", "Presupuesto por teléfono", "Vendido", "", cerca, "Comercial Dos"],
+        # Lead de un comercial excluido (cuando lo está): se descarta antes de agregar
+        ["Sara Gil", "600000004", "s@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
+         "06/11/2026 12:00", "N-4", "Visita en exposición", "Vendido", "", cerca, "Comercial Excluido"],
     ]
+
+
+@pytest.fixture
+def wa(tmp_path, monkeypatch):
+    """El script, sin leer nunca el fichero de comerciales excluidos real del Mac."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import walcu_agregar
+    monkeypatch.setattr(walcu_agregar, "EXCLUIDOS", tmp_path / "no_existe" / "comerciales_excluidos.txt")
+    return walcu_agregar
+
+
+def _exportacion(tmp_path, conc, formato="csv"):
+    entrada = tmp_path / f"leads.{formato}"
+    if formato == "csv":
+        with entrada.open("w", encoding="utf-8", newline="") as f:
+            csv.writer(f, delimiter=";").writerows([EXPORTACION, *_leads(conc)])
+    else:
+        _xlsx(entrada, [EXPORTACION, *_leads(conc)])
+    return entrada
+
+
+def _filas(texto):
+    return {(f["mes"], f["origen"], f["campana"], f["tipo"]): f for f in csv.DictReader(io.StringIO(texto))}
+
+
+PERSONALES = ("Ana", "Pérez", "Sara", "612345678", "699111222", "correo", "Comercial", "Excluido", "N-1")
 
 
 def _xlsx(ruta: Path, filas: list[list[str]]) -> None:
@@ -404,31 +438,88 @@ def _xlsx(ruta: Path, filas: list[list[str]]) -> None:
 
 
 @pytest.mark.parametrize("formato", ["csv", "xlsx"])
-def test_script_agrega_sin_datos_personales(tmp_path, conc, capsys, formato):
-    import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-    import walcu_agregar as wa
-    entrada = tmp_path / f"leads.{formato}"
-    if formato == "csv":
-        with entrada.open("w", encoding="utf-8", newline="") as f:
-            csv.writer(f, delimiter=";").writerows([EXPORTACION, *_leads(conc)])
-    else:
-        _xlsx(entrada, [EXPORTACION, *_leads(conc)])
+def test_script_agrega_sin_datos_personales(tmp_path, conc, capsys, wa, formato):
+    entrada = _exportacion(tmp_path, conc, formato)
     salida = tmp_path / "walcu.csv"
     assert wa.main([str(entrada), str(salida)]) == 0
     texto = salida.read_text(encoding="utf-8")
     registro = capsys.readouterr().out
-    for personal in ("Ana", "Pérez", "612345678", "699111222", "correo", "Comercial", "N-1"):
+    for personal in PERSONALES:
         assert personal not in texto and personal not in registro, personal
-    filas = {(f["mes"], f["origen"], f["campana"], f["tipo"]): f for f in csv.DictReader(io.StringIO(texto))}
+    filas = _filas(texto)
     assert list(csv.reader(io.StringIO(texto)))[0] == list(walcu.COLUMNAS)
     golf = filas[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
+    # Sin excluidos: 4 leads (Ana, Luis, Pepe, Sara); citas: Ana y Sara (Pepe, presupuesto por teléfono, no)
     assert (golf["leads"], golf["leads_cercana"], golf["leads_fuera"], golf["citas"], golf["ventas"],
-            golf["num_inexistente"]) == ("2", "1", "1", "1", "1", "1")
+            golf["num_inexistente"]) == ("4", "3", "1", "2", "2", "1")
+    assert "de comerciales excluidos (no cuentan): 0" in registro
+    assert "no cuenta como cita por su última actividad: 1" in registro
     assert filas[("2026-10", "AiVORA", "(sin campaña)", "VO")]["leads_sin_zona"] == "1"
     raro = filas[("2026-10", "otros", "(campaña omitida)", "VO")]
     assert raro["leads_fuera"] == "1"                       # «1234» → 01234: provincia 01, fuera de la zona
     walcu.validar(salida.read_bytes())                      # lo que escribe lo acepta el servidor
+
+
+@pytest.mark.parametrize("formato", ["csv", "xlsx"])
+def test_script_descarta_los_leads_de_comerciales_excluidos(tmp_path, conc, capsys, wa, formato):
+    excluidos = tmp_path / "fuera_del_repo" / "comerciales_excluidos.txt"
+    excluidos.parent.mkdir()
+    excluidos.write_text("# uno por línea\n  comercial excluido \n\nOtro Que No Está\n", encoding="utf-8")
+    salida = tmp_path / "walcu.csv"
+    assert wa.main([str(_exportacion(tmp_path, conc, formato)), str(salida), "--excluidos", str(excluidos)]) == 0
+    texto, registro = salida.read_text(encoding="utf-8"), capsys.readouterr().out
+    golf = _filas(texto)[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
+    assert (golf["leads"], golf["citas"], golf["ventas"]) == ("3", "1", "1")      # sin el lead de Sara
+    assert "de comerciales excluidos (no cuentan): 1" in registro
+    for personal in PERSONALES + ("Otro Que No Está",):     # ni los nombres del fichero de excluidos
+        assert personal not in texto and personal not in registro, personal
+
+
+def test_fichero_de_excluidos_por_defecto(tmp_path, conc, capsys, wa, monkeypatch):
+    por_defecto = tmp_path / "cdf_walcu" / "comerciales_excluidos.txt"
+    por_defecto.parent.mkdir()
+    por_defecto.write_text("Comercial Excluido\n", encoding="utf-8")
+    monkeypatch.setattr(wa, "EXCLUIDOS", por_defecto)
+    assert wa.EXCLUIDOS.name == "comerciales_excluidos.txt"
+    salida = tmp_path / "walcu.csv"
+    assert wa.main([str(_exportacion(tmp_path, conc)), str(salida)]) == 0
+    assert "de comerciales excluidos (no cuentan): 1" in capsys.readouterr().out
+
+
+def test_por_defecto_en_cdf_walcu_y_sin_el_fichero_no_excluye_nada(wa):
+    import importlib
+    original = importlib.reload(wa)
+    assert original.EXCLUIDOS == Path.home() / "cdf_walcu" / "comerciales_excluidos.txt"
+
+
+def test_fichero_de_excluidos_indicado_que_no_existe_no_escribe_nada(tmp_path, conc, capsys, wa):
+    salida = tmp_path / "walcu.csv"
+    assert wa.main([str(_exportacion(tmp_path, conc)), str(salida), "--excluidos", str(tmp_path / "nada.txt")]) == 1
+    assert not salida.exists() and "comerciales excluidos" in capsys.readouterr().err
+
+
+def test_sin_excluidos_la_columna_del_comercial_no_se_lee(tmp_path, conc, wa):
+    cols = [c for c in EXPORTACION if c != "Vendedor"]
+    entrada = tmp_path / "leads.csv"
+    with entrada.open("w", encoding="utf-8", newline="") as f:
+        csv.writer(f).writerows([cols, *[fila[:-1] for fila in _leads(conc)]])
+    assert wa.main([str(entrada), str(tmp_path / "walcu.csv")]) == 0
+    assert wa.main([str(entrada), str(tmp_path / "otra.csv"), "--excluidos", str(_vacio(tmp_path))]) == 0
+
+
+def _vacio(tmp_path):
+    f = tmp_path / "vacio.txt"
+    f.write_text("", encoding="utf-8")
+    return f
+
+
+def test_actividades_que_no_cuentan_como_cita_en_la_configuracion(wa):
+    assert wa.cargar_config()["actividades_no_cita"] == ["PRESUPUESTO POR TELÉFONO"]
+
+
+def test_los_ficheros_de_excluidos_no_se_versionan():
+    gitignore = (Path(__file__).resolve().parent.parent / ".gitignore").read_text(encoding="utf-8")
+    assert "comerciales_excluidos*.txt" in gitignore
 
 
 # ================================================================== panel

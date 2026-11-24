@@ -1,19 +1,24 @@
 """Agrega la exportación de leads de Walcu por mes, origen, campaña y tipo (en el Mac).
 
 Uso:
-  .venv/bin/python scripts/walcu_agregar.py ENTRADA.xlsx|ENTRADA.csv SALIDA.csv
-  make walcu-agregar ENTRADA=… SALIDA=…
+  .venv/bin/python scripts/walcu_agregar.py ENTRADA.xlsx|ENTRADA.csv SALIDA.csv [--excluidos FICHERO]
+  make walcu-agregar ENTRADA=… SALIDA=… [EXCLUIDOS=…]
 
 Lee la exportación tal como la saca el CRM y escribe el CSV que carga  make walcu-cargar  en el servidor,
 con exactamente estas columnas:
   mes, origen, campana, tipo, leads, leads_cercana, leads_fuera, leads_sin_zona, citas, ventas, num_inexistente
 
 Solo se leen las columnas de config/walcu_export.yaml (Origen, Detalle campaña, Tipo de vehículo solicitado,
-Fecha Lead, Id negociación creada, Estado, Motivo fracaso y, solo para la zona, Código postal); las demás
-(nombre, teléfono, correo, vendedor…) no se leen. En un .xlsx, las celdas de las otras columnas se saltan sin
-convertirlas.
+Fecha Lead, Id negociación creada, Resultado última actividad, Estado, Motivo fracaso y, solo para la zona,
+Código postal; Vendedor, solo si hay comerciales excluidos); las demás (nombre, teléfono, correo…) no se
+leen. En un .xlsx, las celdas de las otras columnas se saltan sin convertirlas.
 
-- Cita: el lead tiene negociación creada. Venta: además, su estado es de venta (estados_venta).
+- Comerciales excluidos: fichero local opcional (por defecto ~/cdf_walcu/comerciales_excluidos.txt), un
+  nombre por línea. Sus leads se descartan antes de agregar. Lleva nombres: no se versiona ni se copia al
+  repositorio ni al servidor, y el registro solo dice cuántos leads se han excluido. Si el fichero por
+  defecto no existe, no se excluye nada; si se pasa uno con --excluidos y no existe, no se escribe nada.
+- Cita: el lead tiene negociación creada, salvo que su «Resultado última actividad» sea una de
+  actividades_no_cita (PRESUPUESTO POR TELÉFONO). Venta: además, su estado es de venta (estados_venta).
 - Zona: por los dos primeros dígitos del código postal, con la zona cercana de config/concesionario.yaml
   (la provincia propia y provincias_cercanas): cercana, fuera o sin zona (sin código postal válido).
 - Número inexistente: el motivo de fracaso contiene alguno de motivos_num_inexistente.
@@ -56,6 +61,7 @@ OTROS = "otros"
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 NS_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 MIN_MOSTRAR = 5
+EXCLUIDOS = Path.home() / "cdf_walcu" / "comerciales_excluidos.txt"
 
 
 class ErrorExportacion(Exception):
@@ -146,6 +152,19 @@ def leer_xlsx(ruta: Path, columnas: dict[str, str]):
         raise ErrorExportacion("la hoja está vacía")
 
 
+def leer_excluidos(ruta: Path | None) -> frozenset[str]:
+    """Nombres de comerciales excluidos (plegados), uno por línea; vacías y # se ignoran. Sin fichero por
+    defecto, ninguno. Los nombres no salen nunca de aquí: solo sirven para comparar."""
+    if ruta is None:
+        if not EXCLUIDOS.is_file():
+            return frozenset()
+        ruta = EXCLUIDOS
+    if not ruta.is_file():
+        raise ErrorExportacion("no existe el fichero de comerciales excluidos que se ha indicado")
+    return frozenset(plegar(n) for n in ruta.read_text(encoding="utf-8-sig").splitlines()
+                     if plegar(n) and not n.lstrip().startswith("#"))
+
+
 def leer(ruta: Path, columnas: dict[str, str]):
     if ruta.suffix.lower() in (".xlsx", ".xlsm"):
         return leer_xlsx(ruta, columnas)
@@ -183,8 +202,10 @@ def zona(cp: str, cercanas: tuple[str, ...]) -> str:
 
 
 class Agregador:
-    def __init__(self, cfg: dict, conc: cc.Concesionario):
+    def __init__(self, cfg: dict, conc: cc.Concesionario, excluidos: frozenset[str] = frozenset()):
         self.cercanas = conc.zona_cercana
+        self.excluidos = excluidos
+        self.no_cita = {plegar(x) for x in cfg.get("actividades_no_cita") or []}
         self.ventas = {plegar(x) for x in cfg.get("estados_venta") or []}
         self.inexistente = [plegar(x) for x in cfg.get("motivos_num_inexistente") or [] if plegar(x)]
         self.tipos = {plegar(a): t for t, alias in (cfg.get("tipos") or {}).items() for a in alias or []}
@@ -199,6 +220,9 @@ class Agregador:
 
     def anadir(self, lead: dict) -> None:
         self.cuentas["leidos"] += 1
+        if self.excluidos and plegar(lead.get("comercial")) in self.excluidos:
+            self.cuentas["excluidos"] += 1
+            return
         d = fecha(lead["fecha"])
         if d is None:
             self.cuentas["sin_fecha"] += 1
@@ -216,6 +240,9 @@ class Agregador:
         estado = plegar(lead["estado"])
         motivo = plegar(lead["motivo_fracaso"])
         cita = bool(str(lead["negociacion"] or "").strip())
+        if cita and plegar(lead["resultado_actividad"]) in self.no_cita:
+            cita = False
+            self.cuentas["no_cita"] += 1
         a = self.filas[(f"{d:%Y-%m}", origen, campana, tipo)]
         a["leads"] += 1
         a[f"leads_{zona(lead['codigo_postal'], self.cercanas)}"] += 1
@@ -242,7 +269,9 @@ class Agregador:
             return ", ".join(f"«{v}»: {n}" for v, n in vis) or "—"
         c = self.cuentas
         return "\n".join([
-            f"Leads leídos: {c['leidos']}; sin fecha válida (no cuentan): {c['sin_fecha']}; "
+            f"Leads leídos: {c['leidos']}; de comerciales excluidos (no cuentan): {c['excluidos']}; "
+            f"sin fecha válida (no cuentan): {c['sin_fecha']}; "
+            f"con negociación que no cuenta como cita por su última actividad: {c['no_cita']}; "
             f"con tipo no reconocido (cuentan como {self.tipo_defecto}): {c['tipo_por_defecto']}; "
             f"campañas omitidas por parecer un dato personal: {c['campanas_omitidas']}.",
             f"Estados: {lista(self.estados, 1)}",
@@ -251,10 +280,14 @@ class Agregador:
         ])
 
 
-def agregar(entrada: Path, cfg: dict | None = None, conc: cc.Concesionario | None = None) -> Agregador:
+def agregar(entrada: Path, cfg: dict | None = None, conc: cc.Concesionario | None = None,
+            excluidos: frozenset[str] = frozenset()) -> Agregador:
     cfg = cfg or cargar_config()
-    ag = Agregador(cfg, conc or cc.cargar())
-    for lead in leer(entrada, cfg["columnas"]):
+    ag = Agregador(cfg, conc or cc.cargar(), excluidos)
+    columnas = dict(cfg["columnas"])
+    if not excluidos:
+        columnas.pop("comercial", None)          # sin excluidos, la columna del comercial no se lee
+    for lead in leer(entrada, columnas):
         ag.anadir(lead)
     return ag
 
@@ -263,9 +296,11 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("entrada", type=Path)
     parser.add_argument("salida", type=Path)
+    parser.add_argument("--excluidos", type=Path, default=None,
+                        help=f"comerciales excluidos, uno por línea (por defecto {EXCLUIDOS}, si existe)")
     args = parser.parse_args(argv)
     try:
-        ag = agregar(args.entrada)
+        ag = agregar(args.entrada, excluidos=leer_excluidos(args.excluidos))
         contenido = ag.csv()
         v = walcu.validar(contenido)              # la misma validación que en el servidor
     except (ErrorExportacion, walcu.ErrorWalcu, OSError, zipfile.BadZipFile, KeyError) as exc:

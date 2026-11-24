@@ -26,3 +26,6 @@ __pycache__/
 
 # Salidas locales del Mac (enlaces de Google Trends)
 salidas/
+
+# Comerciales excluidos de la agregación de Walcu (nombres): nunca en el repositorio
+comerciales_excluidos*.txt

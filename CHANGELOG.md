@@ -24,6 +24,11 @@
   Walcu del mes o dicen «sin datos de Walcu» y no se aplican (ya no quedan inactivas); c, «coste por cita en
   la media» = como mucho la referencia de 2025 del mismo tipo (también para la d). Actualizado
   `docs/criterios_marketing_meta.md`.
+- **Comerciales excluidos y citas** (`scripts/walcu_agregar.py`): fichero local opcional
+  `~/cdf_walcu/comerciales_excluidos.txt` (un nombre por línea, en `.gitignore`, nunca en el repositorio ni en
+  el servidor); sus leads se descartan antes de agregar y el registro solo dice cuántos. Un lead con
+  negociación no cuenta como cita si su «Resultado última actividad» es PRESUPUESTO POR TELÉFONO
+  (`actividades_no_cita` en `config/walcu_export.yaml`).
 - **Marketing**: bloques «Campañas del último mes» (gasto, leads de Walcu y según Meta, citas, ventas, coste
   por lead, por cita y por venta, y la decisión) y «Referencias históricas».
 - **Pruebas**: `tests/test_walcu_meta_hist.py` (validador con correo, columna de más, teléfonos, DNI y NIE;

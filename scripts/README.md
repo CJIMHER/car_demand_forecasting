@@ -13,9 +13,16 @@ campaña y tipo, y escribe el CSV que carga `make walcu-cargar` en el servidor.
     make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_agregado.csv
 
 - Lee solo las columnas de `config/walcu_export.yaml` (Origen, Detalle campaña, Tipo de vehículo
-  solicitado, Fecha Lead, Id negociación creada, Estado, Motivo fracaso y Código postal); las demás no se
-  leen. El `.xlsx` se lee con la biblioteca estándar, sin dependencias nuevas.
-- Cita: el lead tiene negociación. Venta: con negociación y un estado de `estados_venta`. Número
+  solicitado, Fecha Lead, Id negociación creada, Resultado última actividad, Estado, Motivo fracaso,
+  Código postal y, solo si hay comerciales excluidos, Vendedor); las demás no se leen. El `.xlsx` se lee
+  con la biblioteca estándar, sin dependencias nuevas.
+- **Comerciales excluidos**: fichero local opcional, por defecto `~/cdf_walcu/comerciales_excluidos.txt`
+  (otro con `EXCLUIDOS=…` o `--excluidos`), un nombre por línea (sin mayúsculas ni tildes; `#` comenta). Sus
+  leads se descartan antes de agregar. Lleva nombres: **no se versiona** (`.gitignore`), no se copia al
+  repositorio ni al servidor, y el registro solo dice cuántos leads se han excluido. Si el de por defecto no
+  existe, no se excluye nada; si se indica uno que no existe, no se escribe nada.
+- Cita: el lead tiene negociación creada, salvo que su «Resultado última actividad» esté en
+  `actividades_no_cita` (PRESUPUESTO POR TELÉFONO). Venta: cita y un estado de `estados_venta`. Número
   inexistente: el motivo de fracaso contiene uno de `motivos_num_inexistente`. Tipo VN/VO por `tipos`.
 - Zona por el código postal con la zona cercana de `config/concesionario.yaml` (nada de provincias en el
   código). El código postal no se escribe nunca.

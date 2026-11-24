@@ -1,8 +1,8 @@
 Histórico de Meta, cargas de Walcu agregadas y referencias de coste, en la rama `hito-1b-walcu-meta-hist`
 (desde `main` en `7139d1f`), sin push y sin conectarme al servidor.
 
-**Pruebas:** suite completa con Postgres (`.venv/bin/python -m pytest -q`): 549 en verde y 1 saltada (la de
-`cryptography`, que falta en el entorno local). Las nuevas están en `tests/test_walcu_meta_hist.py` (40).
+**Pruebas:** suite completa con Postgres (`.venv/bin/python -m pytest -q`): 557 en verde y 1 saltada (la de
+`cryptography`, que falta en el entorno local). Las nuevas están en `tests/test_walcu_meta_hist.py` (48).
 
 **Paso 0 (ordenar el repositorio):** `hito-1b-gtrends` ya estaba rebasada sobre `hito-1b-ga4-canales` con la
 0016 detrás de la 0015 (sesión anterior). La fusioné en `main` con `--ff-only` (`7139d1f`, ya en GitHub) y
@@ -39,16 +39,24 @@ misma cuenta, solo lectura:
 
   Los mensajes dicen fila y columna, nunca el valor. Antes de guardar, el CSV va comprimido al bucket
   (`walcu/agregado/<día>/`).
-- **Tu CSV** (`~/cdf_walcu/walcu_agregado_historico.csv`, no copiado al repositorio) pasa la validación: 591
-  filas. Hay un aviso: en 10 filas `leads_cercana + leads_fuera + leads_sin_zona` no suma `leads` (por ejemplo,
-  2026-08 Facebook VN: 52 + 5 + 315 = 372 de 373). Es un aviso y no un rechazo.
+- **Tu CSV** (`~/cdf_walcu/walcu_agregado_historico.csv`, no copiado al repositorio; ya filtrado por
+  comerciales excluidos y sin las citas de presupuesto por teléfono) pasa la validación: 535 filas. Hay un
+  aviso: 1 fila con más citas que leads, más ventas que citas o más números inexistentes que leads. Es un
+  aviso y no un rechazo. (La versión anterior, de 591 filas, tenía otro aviso: 10 filas en que las zonas no
+  sumaban los leads.)
 - **`scripts/walcu_agregar.py`** (Mac; `make walcu-agregar ENTRADA=… SALIDA=…`):
   - lee el .xlsx o el .csv del CRM con la biblioteca estándar y solo las 8 columnas de
     `config/walcu_export.yaml`;
   - calcula la zona con la zona cercana de `config/concesionario.yaml`;
   - conserva la web propia como origen, sacándola de `propio.web` (nuevo campo);
   - escribe solo recuentos. Una campaña con aspecto de dato personal sale como «(campaña omitida)»;
-  - el CSV pasa la misma validación que en el servidor antes de escribirse.
+  - el CSV pasa la misma validación que en el servidor antes de escribirse;
+  - **comerciales excluidos**: fichero local opcional (por defecto `~/cdf_walcu/comerciales_excluidos.txt`, un
+    nombre por línea). Sus leads se descartan antes de agregar. No se versiona (`.gitignore`), no se copia al
+    repositorio ni al servidor, y el registro solo dice cuántos leads se han excluido. La columna Vendedor
+    solo se lee si hay excluidos;
+  - **cita** = negociación creada, salvo que «Resultado última actividad» sea PRESUPUESTO POR TELÉFONO
+    (`actividades_no_cita` en `config/walcu_export.yaml`). Venta = cita con estado de venta.
 
 ## 3. Cruce y referencias
 
@@ -141,7 +149,11 @@ Cada semana: `make walcu-agregar` en el Mac, `scp` y `make walcu-cargar`. Lo exp
     ventas todavía pueden crecer, y el panel lo dice.
 16. **Varias campañas de Meta con el mismo nombre normalizado**: se elige la que tiene gasto en esos meses; si
     hay más de una, va al informe para que se ponga una equivalencia con `id:`.
-17. **`make meta-historico` sin credenciales** termina con error (lo lanza alguien a mano). La carga diaria
+17. **Comerciales excluidos**: si el fichero por defecto no existe, no se excluye nada y el registro lo dice
+    con «0»; si se indica uno con `--excluidos`/`EXCLUIDOS=` y no existe, no se escribe nada. Nombres sin
+    mayúsculas ni tildes, líneas vacías y con `#` ignoradas.
+18. **Presupuesto por teléfono** tampoco cuenta como venta (venta = cita con estado de venta).
+19. **`make meta-historico` sin credenciales** termina con error (lo lanza alguien a mano). La carga diaria
     sigue anotando «sin_credenciales».
 
 ## Para revisar

@@ -456,8 +456,10 @@ anotación de `meta` con los tramos.
 Cada semana:
 
 1. En el Mac: exportar los leads de Walcu (xlsx o csv) y
-   `make walcu-agregar ENTRADA=~/Descargas/leads.xlsx SALIDA=~/Descargas/walcu_agregado.csv`. La primera vez,
-   revisar los estados, tipos y motivos que escribe y ajustar `config/walcu_export.yaml`.
+   `make walcu-agregar ENTRADA=~/Descargas/leads.xlsx SALIDA=~/Descargas/walcu_agregado.csv`. Descarta los
+   leads de los comerciales de `~/cdf_walcu/comerciales_excluidos.txt` (solo en el Mac; nunca en el
+   repositorio ni en el servidor). La primera vez, revisar los estados, tipos y motivos que escribe y
+   ajustar `config/walcu_export.yaml`.
 2. Copiar el CSV al servidor: `scp -i ~/.ssh/cdf_hetzner ~/Descargas/walcu_agregado.csv cdf@<ip>:/opt/cdf/entrada/`.
 3. En el servidor: `make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_agregado.csv`. Si el fichero trae otra
    columna o algo con aspecto de correo, teléfono o DNI, lo rechaza entero y no carga nada.

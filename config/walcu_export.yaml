@@ -11,12 +11,18 @@ columnas:
   campana: Detalle campaña
   tipo: Tipo de vehículo solicitado
   fecha: Fecha Lead
-  negociacion: Id negociación creada     # con valor: el lead tiene negociación creada = cita
+  negociacion: Id negociación creada     # con valor: el lead tiene negociación creada = cita…
+  resultado_actividad: Resultado última actividad   # … salvo las de actividades_no_cita
   estado: Estado
   motivo_fracaso: Motivo fracaso
   codigo_postal: Código postal            # solo para la zona; nunca se escribe
+  # Solo se lee si hay comerciales excluidos (fichero local, fuera del repositorio): nunca se escribe
+  comercial: Vendedor
 
-# Venta = negociación cerrada como vendida: lead con negociación y con uno de estos estados
+# Un lead con negociación creada NO cuenta como cita si su «Resultado última actividad» es uno de estos
+actividades_no_cita: ["PRESUPUESTO POR TELÉFONO"]
+
+# Venta = negociación cerrada como vendida: lead que cuenta como cita y con uno de estos estados
 estados_venta: [vendido, vendida, ganado, ganada, venta]
 
 # Número inexistente: el motivo de fracaso contiene alguno de estos textos
