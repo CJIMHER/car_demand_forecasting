@@ -1,5 +1,23 @@
 # Cambios
 
+## 2026-11-24 · Walcu: tipo VN/VO, exclusiones y equivalencias (rama hito-1b-walcu-tipo)
+
+- **Tipo VN/VO** (`scripts/walcu_agregar.py`): Walcu marca «Nuevo» casi todos los leads de campañas de ocasión
+  (2.443 de 2.484 en Facebook). Ahora, por este orden: el nombre de la campaña (`[VN]`/`[VO]`, VN o VO al
+  principio, «ocasión», «boutique» o «seminuevo» → VO); si no lo dice, sede o equipo de VO (`sedes_vo: [Carpa
+  VO]`, `equipos_vo: [VO]` en `config/walcu_export.yaml`); el campo «Tipo de vehículo solicitado»; VN. Las
+  columnas Sede y Equipo se leen solo para esto y para las exclusiones; no se escriben. El registro cuenta
+  cuántos leads salen de cada paso.
+- **Exclusiones** (`config/concesionario.yaml`): PV (posventa) en `propio.palabras_excluidas`; nueva
+  `propio.empresas_excluidas: [Covey]`: leads con ese texto en sede, equipo u origen fuera al agregar (se
+  cuentan y se avisa), y campañas de Meta o Walcu que lo llevan en el nombre fuera de `make referencias-meta`.
+- **Cruce Walcu → Meta** (`config/campanas_walcu.yaml`): sufijos por regla « Campaña», « - leadgen» y
+  « - landing» (además de -copy, copia y -OK) y sin espacios entre corchetes; seis equivalencias a mano (año
+  distinto, «-VW», « B», « 2», «Test - », «Sin título…»). «Lanzamiento» y «Lanzamiento Julio» (generales de
+  VN de Walcu) en `sin_equivalencia`: salen en el informe como campañas sin Meta, sin pedir equivalencia.
+- El histórico corregido (`~/cdf_walcu/walcu_semanal_historico.csv`, 1.280 filas, 100 semanas) valida sin
+  avisos.
+
 ## 2026-11-24 · Precio provisional de nuestros VO en Ventas y Dirección (rama hito-1b-precio-provisional)
 
 - **`analitica/precio.py`** (en `make precalcular`): para cada coche VO nuestro, comparables del mismo modelo,

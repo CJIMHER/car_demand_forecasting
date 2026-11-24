@@ -484,7 +484,7 @@ def test_historico_sin_desde_o_sin_credenciales_falla_claro(monkeypatch):
 
 EXPORTACION = ["Nombre", "Teléfono", "Email", "Origen", "Detalle campaña", "Tipo de vehículo solicitado", "Fecha Lead",
                "Id negociación creada", "Resultado última actividad", "Estado", "Motivo fracaso", "Código postal",
-               "Vendedor"]
+               "Sede", "Equipo", "Vendedor"]
 
 
 def _leads(conc):
@@ -492,21 +492,21 @@ def _leads(conc):
     return [
         ["Ana Pérez", "612345678", "ana@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
          "03/11/2026 10:15", "N-1", "Visita en exposición", "Negociación creada (Cerrada / Vendido)", "", cerca,
-         "Comercial Uno"],
+         "Sede central", "Ventas VN", "Comercial Uno"],
         ["Luis Gómez", "699111222", "luis@correo.es", "facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
-         "04/11/2026 11:00", "", "", "Perdido", "Número inexistente", lejos, "Comercial Dos"],
+         "04/11/2026 11:00", "", "", "Perdido", "Número inexistente", lejos, "Sede central", "Ventas VN", "Comercial Dos"],
         ["Eva Ruiz", "600000001", "eva@correo.es", "AiVORA", "", "VO", "2026-10-30 09:00", "N-2", "", "En curso",
-         "", "", "Comercial Uno"],
+         "", "", "Sede central", "Ventas VN", "Comercial Uno"],
         ["Raro", "600000002", "r@correo.es", "Portal raro", "Llamar al 612345678", "Km0", "30/10/2026", "", "", "",
-         "", "1234", "Comercial Tres"],
+         "", "1234", "Sede central", "Ventas VN", "Comercial Tres"],
         # Negociación creada, pero la última actividad es un presupuesto por teléfono: no es cita (ni venta)
         ["Pepe Mora", "600000003", "p@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
          "05/11/2026 12:00", "N-3", "Presupuesto por teléfono", "En curso (Cerrada / Vendido)", "", cerca,
-         "Comercial Dos"],
+         "Sede central", "Ventas VN", "Comercial Dos"],
         # Lead de un comercial excluido (cuando lo está): se descarta antes de agregar
         ["Sara Gil", "600000004", "s@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
          "06/11/2026 12:00", "N-4", "Visita en exposición", "En curso (Cerrada / Vendido)", "", cerca,
-         "Comercial Excluido"],
+         "Sede central", "Ventas VN", "Comercial Excluido"],
     ]
 
 
@@ -650,7 +650,7 @@ def _lead(campana="VW [VN][2026] Golf noviembre", tipo="Nuevo", negociacion="N-9
           actividad="Visita en exposición"):
     return {"origen": "Facebook", "campana": campana, "tipo": tipo, "fecha": "10/11/2026 10:00",
             "negociacion": negociacion, "resultado_actividad": actividad, "estado": estado, "motivo_fracaso": motivo,
-            "codigo_postal": "", "comercial": ""}
+            "codigo_postal": "", "sede": "", "equipo": "", "comercial": ""}
 
 
 def _agregar(wa, conc, *leads):
@@ -677,8 +677,9 @@ def test_numero_inexistente(wa, conc, motivo, n):
 
 @pytest.mark.parametrize("tipo, esperado", [("Nuevo", "VN"), ("VO", "VO"), ("Km0", "VO"), ("", "VN")])
 def test_tipo_de_vehiculo_solicitado(wa, conc, tipo, esperado):
-    ag, filas = _agregar(wa, conc, _lead(tipo=tipo))
-    assert list(filas) == [("2026-11-09", "Facebook", "VW [VN][2026] Golf noviembre", esperado)]
+    """Con una campaña que no dice el tipo y sin sede ni equipo de VO, manda el campo."""
+    ag, filas = _agregar(wa, conc, _lead(campana="Lanzamiento", tipo=tipo))
+    assert list(filas) == [("2026-11-09", "Facebook", "Lanzamiento", esperado)]
     assert ag.cuentas["tipo_por_defecto"] == (1 if tipo == "" else 0)
 
 
@@ -700,7 +701,7 @@ NUESTRAS = ["VW [VN][2026] Golf noviembre", "Semana del SUV", "Seminuevos", "Se 
 
 def test_otras_marcas_en_la_configuracion(conc):
     assert conc.prefijos_excluidos == ("au", "se", "cu")
-    assert conc.palabras_excluidas == ("sk", "skoda", "seat", "audi", "cupra")
+    assert conc.palabras_excluidas == ("sk", "skoda", "seat", "audi", "cupra", "pv")
     for nombre in OTRAS:
         assert conc.otra_marca(nombre), nombre
     # Palabra entera; el prefijo, solo como primera palabra seguida de su etiqueta entre corchetes
@@ -719,12 +720,12 @@ def _conc_con(tmp_path, quitar: list[str]):
 
 
 def test_sin_listas_no_se_excluye_nada(tmp_path):
-    otro = _conc_con(tmp_path, ["  prefijos_excluidos: [AU, SE, CU]\n", "  palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA]\n"])
+    otro = _conc_con(tmp_path, ["  prefijos_excluidos: [AU, SE, CU]\n", "  palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA, PV]\n"])
     assert otro.prefijos_excluidos == otro.palabras_excluidas == () and not any(otro.otra_marca(n) for n in OTRAS)
 
 
 def test_solo_prefijos_o_solo_palabras(tmp_path):
-    solo_prefijos = _conc_con(tmp_path, ["  palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA]\n"])
+    solo_prefijos = _conc_con(tmp_path, ["  palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA, PV]\n"])
     assert solo_prefijos.otra_marca("AU [VN] x") and not solo_prefijos.otra_marca("EXT SK [2026] SKODA DAYS")
     solo_palabras = _conc_con(tmp_path, ["  prefijos_excluidos: [AU, SE, CU]\n"])
     assert solo_palabras.otra_marca("EXT SK [2026] SKODA DAYS") and not solo_palabras.otra_marca("AU [VN] x")
@@ -734,14 +735,14 @@ def test_una_entrada_que_no_es_una_palabra_es_un_error(tmp_path):
     from ingesta.concesionario import ErrorConfiguracion
     texto = (Path(__file__).resolve().parent.parent / "config" / "concesionario.yaml").read_text(encoding="utf-8")
     f = tmp_path / "concesionario.yaml"
-    f.write_text(texto.replace("[SK, SKODA, SEAT, AUDI, CUPRA]", "[SK, ALFA ROMEO]"), encoding="utf-8")
+    f.write_text(texto.replace("[SK, SKODA, SEAT, AUDI, CUPRA, PV]", "[SK, ALFA ROMEO]"), encoding="utf-8")
     with pytest.raises(ErrorConfiguracion, match="palabras_excluidas"):
         cargar_concesionario(f)
 
 
 def test_script_excluye_otras_marcas_cuenta_y_avisa(tmp_path, conc, capsys, wa):
     entrada = tmp_path / "leads.csv"
-    filas = _leads(conc) + [["X", "", "", "Facebook", nombre, "Nuevo", "07/11/2026", "", "", "", "", "", "C"]
+    filas = _leads(conc) + [["X", "", "", "Facebook", nombre, "Nuevo", "07/11/2026", "", "", "", "", "", "", "", "C"]
                             for nombre in OTRAS]
     with entrada.open("w", encoding="utf-8", newline="") as f:
         csv.writer(f, delimiter=";").writerows([EXPORTACION, *filas])
@@ -852,3 +853,124 @@ def test_marketing_ultimas_4_semanas_marca_las_incompletas_y_referencias(pg, pan
     refs = html.split('id="t-referencias"')[1].split("</section>")[0]
     assert "Coste por cita" in refs and "Diferencia" in refs and "Número inexistente" in refs
     assert "2025 (1 semanas)" in refs and "con las citas completas" in refs
+
+
+# ================================================================== tipo VN/VO, empresas excluidas y equivalencias
+
+def _lead_tipo(campana, sede="", equipo="", tipo="Nuevo", origen="Facebook"):
+    return {**_lead(campana=campana, tipo=tipo), "sede": sede, "equipo": equipo, "origen": origen}
+
+
+@pytest.mark.parametrize("campana, sede, equipo, tipo, esperado, por", [
+    # 1. El nombre de la campaña manda, aunque Walcu diga «Nuevo» o la sede sea de VO
+    ("VW [VO][2025] Boutique ocasion-copy", "", "", "Nuevo", "VO", "campana"),
+    ("VW [VN][2026] Golf noviembre", "Carpa VO", "VO", "VO", "VN", "campana"),
+    ("VO [2025] Avisa Days marzo - leadgen", "", "", "Nuevo", "VO", "campana"),
+    ("VN [2025] T-ROC febrero", "Carpa VO", "", "VO", "VN", "campana"),
+    ("Seminuevos con garantía", "", "", "Nuevo", "VO", "campana"),
+    ("Boutique", "", "", "Nuevo", "VO", "campana"),
+    ("Ocasión Black Friday", "", "", "Nuevo", "VO", "campana"),
+    # 2. Si el nombre no lo dice: sede o equipo de VO
+    ("Lanzamiento", "Carpa VO", "", "Nuevo", "VO", "sede_equipo"),
+    ("Lanzamiento", "CARPA  vo", "", "Nuevo", "VO", "sede_equipo"),
+    ("Avisa Days marzo 2025-VW", "Sede central", "VO", "Nuevo", "VO", "sede_equipo"),
+    ("VW [VN] y [VO] Feria", "Carpa VO", "", "Nuevo", "VO", "sede_equipo"),     # dos etiquetas: no dice
+    # 3. El campo «Tipo de vehículo solicitado»
+    ("Lanzamiento", "Sede central", "Ventas VN", "Km0", "VO", "campo"),
+    ("Volkswagen Days", "", "", "Nuevo", "VN", "campo"),          # «Volkswagen» no empieza por VO
+    # 4. Por defecto
+    ("Lanzamiento Julio", "", "", "", "VN", "defecto"),
+])
+def test_tipo_por_campana_sede_equipo_y_campo(wa, conc, campana, sede, equipo, tipo, esperado, por):
+    ag, filas = _agregar(wa, conc, _lead_tipo(campana, sede, equipo, tipo))
+    assert [k[3] for k in filas] == [esperado]
+    assert ag.tipo_por == {por: 1}
+
+
+def test_tipo_sale_de_la_configuracion(wa):
+    cfg = wa.cargar_config()
+    assert cfg["sedes_vo"] == ["Carpa VO"] and cfg["equipos_vo"] == ["VO"]
+    assert {"ocasión", "boutique", "seminuevo"} <= set(cfg["palabras_vo"])
+    assert {"sede": "Sede", "equipo": "Equipo"}.items() <= cfg["columnas"].items()
+    texto = (Path(__file__).resolve().parent.parent / "scripts" / "walcu_agregar.py").read_text(encoding="utf-8")
+    assert "Carpa" not in texto and "Covey" not in texto
+
+
+def test_empresas_del_grupo_se_excluyen_cuentan_y_avisan(tmp_path, conc, capsys, wa):
+    assert conc.empresas_excluidas == ("covey",)
+    entrada = tmp_path / "leads.csv"
+    covey = [["X", "", "", origen, "VW [VO][2026] Boutique", "VO", "07/11/2026", "N-7", "", "", "", "", sede, equipo,
+              "C"] for origen, sede, equipo in (("Facebook", "Covey Autocasión", ""), ("Facebook", "", "Equipo COVEY"),
+                                                ("Web Covey", "", ""))]
+    with entrada.open("w", encoding="utf-8", newline="") as f:
+        csv.writer(f, delimiter=";").writerows([EXPORTACION, *_leads(conc), *covey])
+    salida = tmp_path / "walcu.csv"
+    assert wa.main([str(entrada), str(salida)]) == 0
+    registro = capsys.readouterr().out
+    texto = salida.read_text(encoding="utf-8")
+    assert "de empresas del grupo con su propio marketing (no cuentan): 3" in registro
+    assert "Aviso: 3 leads de empresas del grupo con su propio marketing excluidos" in registro
+    assert "Boutique" not in texto
+    # Sede y equipo solo sirven para el tipo y la exclusión: nunca salen
+    for valor in ("Sede central", "Ventas VN", "Covey", "Carpa"):
+        assert valor not in texto and valor not in registro
+
+
+def test_posventa_es_otra_marca(conc):
+    for nombre in ("PV [2025] Revisión invierno", "VW [PV] [2025] Neumáticos", "Campaña PV"):
+        assert conc.otra_marca(nombre), nombre
+    for nombre in ("VW [VN][2026] PVP especial", "Polo VIVE"):
+        assert not conc.otra_marca(nombre), nombre
+
+
+PARES_ENCARGO = [
+    ("VW [VO][2025] Boutique ocasion-copy", "VW [VO] [2025] Boutique Ocasión", False),
+    ("VW [VN] [2025] Gama ahorro", "VW [VN] [2026] Gama ahorro", True),
+    ("VN [2025] T-ROC febrero", "VN [2025] T-Roc febrero - leadgen", False),
+    ("Avisa Days marzo 2025-VW", "VO [2025] Avisa Days marzo - leadgen", True),
+    ("Avisa Days junio 2025-VW", "VO [2025] Avisa Days junio Campaña", True),
+    ("VW [VN] [2025] Caddy eHybrid-OK", "VW [VN] [2025] Caddy eHybrid Campaña", False),
+    ("VW [VN] [2025] Test Drive ID3-ID4", "VW [VN] [2025] Test Drive ID3-ID4 Campaña", False),
+    ("VW [VN][2026] ID Polo B", "Test - VW [VN][2026] ID Polo", True),
+    ("VW [VN][2026] ABRIL 2", "VW [VN][2026] ABRIL", True),
+    ("Sin título 22/1/25, 15:18", "VN [2025] Polo Match enero Campaña", True),
+]
+
+
+@pytest.mark.parametrize("walcu_nombre, meta_nombre, a_mano", PARES_ENCARGO)
+def test_equivalencias_del_encargo(walcu_nombre, meta_nombre, a_mano):
+    c = ref.cargar()
+    n = c.normalizar(walcu_nombre)
+    assert c.equivalencias.get(n, n) == c.normalizar(meta_nombre)
+    assert (n in c.equivalencias) == a_mano              # las demás, por regla
+
+
+def test_sufijos_por_regla_y_corchetes():
+    c = ref.cargar()
+    for nombre in ("VW [VN] [2025] Taigo marzo Campaña", "VW [VN][2025] Taigo marzo - leadgen",
+                   "VW [VN] [2025] Taigo marzo - landing", "VW [VN] [2025] Taigo marzo-OK", "vw [vn][2025] taigo marzo"):
+        assert c.normalizar(nombre) == "vw [vn][2025] taigo marzo", nombre
+    assert c.normalizar("VW [VN][2026] ID Polo B") != c.normalizar("VW [VN][2026] ID Polo")   # « B», a mano
+
+
+def test_lanzamiento_general_de_vn_sin_campana_de_meta(pg):
+    _escenario(pg)
+    _walcu(pg, "2025-03-10,Facebook,Lanzamiento,VN,5,5,0,0,1,0,0",
+           "2025-03-10,Facebook,Lanzamiento Julio,VO,2,2,0,0,0,0,0",
+           *(f for f in ESCENARIO if "AiVORA" not in f), nombre="lanzamiento.csv")
+    ref.actualizar(pg)
+    motivos = dict(pg.execute("SELECT campana, motivo FROM panel_walcu_sin_cruce WHERE campana LIKE 'Lanzamiento%'"))
+    assert set(motivos) == {"Lanzamiento", "Lanzamiento Julio"}
+    assert all("sin campaña de Meta" in m and "añadir" not in m for m in motivos.values())
+
+
+def test_referencias_excluyen_empresas_del_grupo(pg):
+    _escenario(pg)
+    _meta(pg, date(2025, 3, 15), "71", "Covey Autocasión [2025] Marzo", 500, leads=20)
+    _walcu(pg, "2025-03-10,Facebook,Covey Autocasión [2025] Marzo,VO,20,20,0,0,3,1,0",
+           *(f for f in ESCENARIO if "AiVORA" not in f), nombre="con_covey.csv")
+    resumen = ref.actualizar(pg)
+    assert resumen["otras_marcas"] == {"meta_campanas": 1, "meta_gasto_cents": 50_000, "walcu_filas": 1,
+                                       "walcu_leads": 20}
+    r = ref.leer_referencias(pg)
+    assert r[(2025, "todo")]["gasto_cents"] == 55_000 and r[(2025, "todo")]["leads"] == 47   # como sin Covey

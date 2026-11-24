@@ -25,8 +25,9 @@ Rehace:
 - panel_walcu_sin_cruce: lo que no casa, con el motivo.
 
 Las campañas de otras marcas del grupo (propio.prefijos_excluidos y propio.palabras_excluidas de
-config/concesionario.yaml; Concesionario.otra_marca), de Meta y de Walcu, no entran en nada de lo anterior:
-se cuentan y se avisa.
+config/concesionario.yaml; Concesionario.otra_marca) y las de empresas del grupo con su propio marketing
+(propio.empresas_excluidas, si su nombre lleva ese texto; Concesionario.otra_empresa), de Meta y de Walcu,
+no entran en nada de lo anterior: se cuentan y se avisa.
 
 Las referencias de 2025 son la «media» de las reglas c y d (alertas/criterios.py).
 
@@ -71,6 +72,7 @@ class Cruce:
     excluidos: frozenset[str]
     sufijo: re.Pattern
     equivalencias: dict[str, str]        # nombre de Walcu normalizado → nombre de Meta normalizado o «id:…»
+    sin_equivalencia: frozenset[str] = frozenset()   # nombres de Walcu normalizados sin campaña de Meta
     dias_cita: int = 14                  # cohorte.lead_a_cita_dias
     dias_venta: int = 60                 # cohorte.cita_a_venta_dias
 
@@ -80,8 +82,9 @@ class Cruce:
         return antiguedad >= self.dias_cita, antiguedad >= self.dias_venta
 
     def normalizar(self, nombre: str | None) -> str:
-        """Minúsculas, sin tildes, espacios simplificados y sin sufijos («-copy», «copia», «-OK»)."""
-        t = cmp.plegar(nombre)
+        """Minúsculas, sin tildes, espacios simplificados, sin espacios entre corchetes («[VO] [2025]» =
+        «[VO][2025]») y sin sufijos («-copy», «copia», «-OK», « Campaña», « - leadgen», « - landing»)."""
+        t = re.sub(r"\]\s+\[", "][", cmp.plegar(nombre))
         while True:
             nuevo = self.sufijo.sub("", t).strip(" -_.")
             nuevo = re.sub(r"\s+", " ", nuevo)
@@ -119,7 +122,8 @@ def cargar(fichero: Path | None = None) -> Cruce:
                          "(números de días)") from None
     if not 0 <= dias_cita <= dias_venta:
         raise ErrorCruce("config/campanas_walcu.yaml: cohorte.lead_a_cita_dias debe ser ≥ 0 y ≤ cita_a_venta_dias")
-    return Cruce(base.origenes_meta, base.excluidos, base.sufijo, equivalencias, dias_cita, dias_venta)
+    return Cruce(base.origenes_meta, base.excluidos, base.sufijo, equivalencias,
+                 frozenset(base.normalizar(str(n)) for n in cfg.get("sin_equivalencia") or []), dias_cita, dias_venta)
 
 
 def lunes(d: date) -> date:
@@ -156,7 +160,8 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
         dia_meta = dia if dia_meta is None or dia > dia_meta else dia_meta
     titulo = {cid: n for cid, (_, n) in nombres.items()}
     # Otras marcas: fuera de todo, por el nombre vigente de la campaña
-    otras = {cid for cid in {c for _, c in meta} if conc.otra_marca(titulo.get(cid))}
+    otras = {cid for cid in {c for _, c in meta}
+             if conc.otra_marca(titulo.get(cid)) or conc.otra_empresa(titulo.get(cid))}
     excluidas = {"meta_campanas": len(otras), "meta_gasto_cents": sum(v[0] for (_, c), v in meta.items() if c in otras),
                  "walcu_filas": 0, "walcu_leads": 0}
     meta = {k: v for k, v in meta.items() if k[1] not in otras}
@@ -173,7 +178,7 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
     semanas_walcu: set[date] = set(cargada)                # semanas con carga de Walcu
     for semana, origen, camp, tipo, *vals in pg.execute(
             f"SELECT semana, origen, campana, tipo, {', '.join(CAMPOS_WALCU)} FROM walcu_campana_semana_vigente"):
-        if conc.otra_marca(camp):
+        if conc.otra_marca(camp) or conc.otra_empresa(camp):
             excluidas["walcu_filas"] += 1
             excluidas["walcu_leads"] += int(vals[0])
             continue
@@ -190,6 +195,9 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
             sin_cruce[camp] = "el lead no lleva campaña en Walcu"
             continue
         n = cruce.normalizar(camp)
+        if n in cruce.sin_equivalencia and n not in por_nombre:
+            sin_cruce[camp] = "campaña de Walcu sin campaña de Meta (sin_equivalencia en config/campanas_walcu.yaml)"
+            continue
         destino, como = cruce.equivalencias.get(n), "equivalencia"
         if destino is None:
             destino, como = n, "nombre"
@@ -468,7 +476,8 @@ def main(argv=None) -> int:
               f"{resumen['leads_facebook_con_campana_de_meta_pct']} %.")
         x = resumen["otras_marcas"]
         if x["meta_campanas"] or x["walcu_filas"]:
-            print(f"Aviso: campañas de otras marcas excluidas (prefijos_excluidos y palabras_excluidas de config/concesionario.yaml): "
+            print(f"Aviso: campañas de otras marcas o empresas del grupo excluidas (prefijos_excluidos, palabras_excluidas y "
+                  "empresas_excluidas de config/concesionario.yaml): "
                   f"{x['meta_campanas']} de Meta ({_fmt(x['meta_gasto_cents'] / 100, '€')} de gasto) y "
                   f"{x['walcu_filas']} filas de Walcu ({x['walcu_leads']} leads).")
     return 0

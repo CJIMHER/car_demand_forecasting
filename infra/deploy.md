@@ -472,8 +472,9 @@ Cada semana:
    semana del lead (lunes de la semana ISO). Exportar al menos los últimos 60 días: las citas y las ventas
    de un lead cuentan en la semana del lead y llegan después; recargar una semana la sustituye. Descarta los
    leads de los comerciales de `~/cdf_walcu/comerciales_excluidos.txt` (solo en el Mac; nunca en el
-   repositorio ni en el servidor). La primera vez, revisar los estados, tipos y motivos que escribe y
-   ajustar `config/walcu_export.yaml`.
+   repositorio ni en el servidor). La exportación tiene que llevar las columnas Sede y Equipo (tipo VN/VO
+   y empresas del grupo excluidas; no se escriben). La primera vez, revisar los estados, tipos y motivos que
+   escribe y ajustar `config/walcu_export.yaml`.
 2. Copiar el CSV al servidor: `scp -i ~/.ssh/cdf_hetzner ~/Descargas/walcu_semanal.csv cdf@<ip>:/opt/cdf/entrada/`.
 3. En el servidor: `make walcu-cargar FICHERO=/opt/cdf/entrada/walcu_semanal.csv`. Si el fichero trae otra
    columna, una semana que no es lunes o algo con aspecto de correo, teléfono o DNI, lo rechaza entero y no

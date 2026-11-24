@@ -32,8 +32,13 @@ propio:
   #   «SE[VO] …»). «Se acaba el stock», «Semana del SUV» o «Seminuevos» no caen.
   # - palabras_excluidas: palabra entera en cualquier posición; «-», «_», «[», «]», espacios… separan
   #   palabras («EXT SK [2026] …», «… marzo 2025-SK», «3-dias-de-ocasion-audi»).
+  # PV: posventa («PV [2025] …», «VW [PV] [2025] …»), tampoco cuenta.
   prefijos_excluidos: [AU, SE, CU]
-  palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA]
+  palabras_excluidas: [SK, SKODA, SEAT, AUDI, CUPRA, PV]
+  # Empresas del grupo con su propio marketing (no cuentan para la marca): los leads de Walcu cuya sede,
+  # equipo u origen contienen uno de estos textos se descartan al agregar (se cuentan y se avisa), y las
+  # campañas de Meta o de Walcu que lo llevan en el nombre no entran en make referencias-meta.
+  empresas_excluidas: [Covey]
   dealer_ids:
     - ESP00710
   # Nombres con que aparece en los scrapers (dealer_name). Comprobar con  make concesionarios

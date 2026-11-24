@@ -12,9 +12,10 @@ semana: el lunes (AAAA-MM-DD) de la semana ISO de la fecha del lead. Las citas y
 en la semana del lead (cohorte), aunque lleguen después.
 
 Solo se leen las columnas de config/walcu_export.yaml (Origen, Detalle campaña, Tipo de vehículo solicitado,
-Fecha Lead, Id negociación creada, Resultado última actividad, Estado, Motivo fracaso y, solo para la zona,
-Código postal; Vendedor, solo si hay comerciales excluidos); las demás (nombre, teléfono, correo…) no se
-leen. En un .xlsx, las celdas de las otras columnas se saltan sin convertirlas.
+Fecha Lead, Id negociación creada, Resultado última actividad, Estado, Motivo fracaso; solo para la zona,
+Código postal; solo para el tipo y las empresas excluidas, Sede y Equipo; Vendedor, solo si hay comerciales
+excluidos); las demás (nombre, teléfono, correo…) no se leen. Sede, equipo, código postal y vendedor no se
+escriben nunca. En un .xlsx, las celdas de las otras columnas se saltan sin convertirlas.
 
 - Comerciales excluidos: fichero local opcional (por defecto ~/cdf_walcu/comerciales_excluidos.txt), un
   nombre por línea. Sus leads se descartan antes de agregar. Lleva nombres: no se versiona ni se copia al
@@ -23,6 +24,12 @@ leen. En un .xlsx, las celdas de las otras columnas se saltan sin convertirlas.
 - Cita: el lead tiene negociación creada, salvo que su «Resultado última actividad» sea una de
   actividades_no_cita (PRESUPUESTO POR TELÉFONO). Venta: además, su Estado contiene uno de estados_venta
   («… (Cerrada / Vendido)»).
+- Tipo (VN o VO), por este orden: 1. el nombre de la campaña ([VN]/[VO], VN o VO al principio, o una de
+  palabras_vo: «ocasión», «boutique», «seminuevo» → VO); 2. si no lo dice, sede o equipo de VO (sedes_vo,
+  equipos_vo) → VO; 3. el campo «Tipo de vehículo solicitado» (tipos); 4. tipo_por_defecto (VN). Walcu marca
+  «Nuevo» casi todos los leads de campañas de ocasión: el campo no sirve como fuente principal.
+- Empresas del grupo con su propio marketing (propio.empresas_excluidas de config/concesionario.yaml): los
+  leads cuya sede, equipo u origen contienen uno de esos textos se descartan; se cuentan y se avisa.
 - Otras marcas: los leads de campañas de otras marcas del grupo (propio.prefijos_excluidos y
   propio.palabras_excluidas de config/concesionario.yaml) se descartan; se cuentan y se avisa.
 - Zona: por los dos primeros dígitos del código postal, con la zona cercana de config/concesionario.yaml
@@ -59,8 +66,9 @@ import yaml  # noqa: E402
 
 from ingesta import concesionario as cc  # noqa: E402
 from ingesta import walcu  # noqa: E402
-from ingesta.campanas import plegar  # noqa: E402
+from ingesta.campanas import ETIQUETA, plegar  # noqa: E402
 
+PRIMERA_VN_VO = re.compile(r"(vn|vo)(?![a-z0-9])")      # VN o VO al principio del nombre
 SIN_CAMPANA = "(sin campaña)"
 OMITIDA = "(campaña omitida)"
 OTROS = "otros"
@@ -217,6 +225,11 @@ class Agregador:
         self.inexistente = [plegar(x) for x in cfg.get("motivos_num_inexistente") or [] if plegar(x)]
         self.tipos = {plegar(a): t for t, alias in (cfg.get("tipos") or {}).items() for a in alias or []}
         self.tipo_defecto = str(cfg.get("tipo_por_defecto") or "VN")
+        palabras = [re.escape(plegar(p)) for p in cfg.get("palabras_vo") or [] if plegar(p)]
+        self.palabras_vo = re.compile(r"(?<![a-z0-9])(" + "|".join(palabras) + r")(?![a-z0-9])") if palabras \
+            else None
+        self.sedes_vo = {plegar(s) for s in cfg.get("sedes_vo") or [] if plegar(s)}
+        self.equipos_vo = {plegar(e) for e in cfg.get("equipos_vo") or [] if plegar(e)}
         self.origenes = {plegar(a): nombre for nombre, alias in (cfg.get("origenes") or {}).items()
                          for a in [nombre, *(alias or [])]}
         if conc.web:
@@ -224,11 +237,48 @@ class Agregador:
         self.filas: dict[tuple, Counter] = defaultdict(Counter)
         self.cuentas = Counter()
         self.estados, self.tipos_vistos, self.motivos = Counter(), Counter(), Counter()
+        self.tipo_por = Counter()            # de dónde sale el tipo: campana, sede_equipo, campo, defecto
+
+    def tipo_campana(self, campana: str) -> str | None:
+        """VN o VO por el nombre de la campaña (las reglas de ámbito de config/campanas.yaml): la etiqueta [VN] o
+        [VO]; si no, VN o VO al principio; si no, una palabra de palabras_vo («ocasión», «boutique»,
+        «seminuevo») → VO. None si el nombre no lo dice (o lleva las dos etiquetas)."""
+        t = plegar(campana)
+        etiquetas = set(ETIQUETA.findall(t))
+        if etiquetas:
+            return etiquetas.pop().upper() if len(etiquetas) == 1 else None
+        m = PRIMERA_VN_VO.match(t)
+        if m:
+            return m.group(1).upper()
+        if self.palabras_vo and self.palabras_vo.search(t):
+            return "VO"
+        return None
+
+    def tipo(self, lead: dict, campana: str) -> str:
+        """1. el nombre de la campaña; 2. sede o equipo de VO (sedes_vo, equipos_vo); 3. el campo «Tipo de
+        vehículo solicitado» (tipos); 4. tipo_por_defecto."""
+        tipo = self.tipo_campana(campana)
+        if tipo:
+            self.tipo_por["campana"] += 1
+            return tipo
+        if plegar(lead.get("sede")) in self.sedes_vo or plegar(lead.get("equipo")) in self.equipos_vo:
+            self.tipo_por["sede_equipo"] += 1
+            return "VO"
+        tipo = self.tipos.get(plegar(lead["tipo"]))
+        if tipo:
+            self.tipo_por["campo"] += 1
+            return tipo
+        self.tipo_por["defecto"] += 1
+        self.cuentas["tipo_por_defecto"] += 1
+        return self.tipo_defecto
 
     def anadir(self, lead: dict) -> None:
         self.cuentas["leidos"] += 1
         if self.excluidos and plegar(lead.get("comercial")) in self.excluidos:
             self.cuentas["excluidos"] += 1
+            return
+        if any(self.conc.otra_empresa(lead.get(c)) for c in ("sede", "equipo", "origen")):
+            self.cuentas["otra_empresa"] += 1
             return
         if self.conc.otra_marca(lead["campana"]):
             self.cuentas["otra_marca"] += 1
@@ -243,10 +293,7 @@ class Agregador:
             campana = OMITIDA
             self.cuentas["campanas_omitidas"] += 1
         tipo_crudo = plegar(lead["tipo"])
-        tipo = self.tipos.get(tipo_crudo)
-        if tipo is None:
-            tipo = self.tipo_defecto
-            self.cuentas["tipo_por_defecto"] += 1
+        tipo = self.tipo(lead, campana)
         estado = plegar(lead["estado"])
         motivo = plegar(lead["motivo_fracaso"])
         cita = bool(str(lead["negociacion"] or "").strip())
@@ -280,10 +327,13 @@ class Agregador:
         c = self.cuentas
         return "\n".join([
             f"Leads leídos: {c['leidos']}; de comerciales excluidos (no cuentan): {c['excluidos']}; "
+            f"de empresas del grupo con su propio marketing (no cuentan): {c['otra_empresa']}; "
             f"de campañas de otras marcas (no cuentan): {c['otra_marca']}; "
             f"sin fecha válida (no cuentan): {c['sin_fecha']}; "
             f"con negociación que no cuenta como cita por su última actividad: {c['no_cita']}; "
-            f"con tipo vacío o no reconocido (cuentan como {self.tipo_defecto}): {c['tipo_por_defecto']}; "
+            f"tipo por el nombre de la campaña: {self.tipo_por['campana']}, por sede o equipo de VO: "
+            f"{self.tipo_por['sede_equipo']}, por el tipo de vehículo solicitado: {self.tipo_por['campo']}, "
+            f"por defecto ({self.tipo_defecto}): {self.tipo_por['defecto']}; "
             f"campañas omitidas por parecer un dato personal: {c['campanas_omitidas']}.",
             f"Estados: {lista(self.estados, 1)}",
             f"Tipos de vehículo: {lista(self.tipos_vistos, 1)}",
@@ -319,6 +369,9 @@ def main(argv=None) -> int:
         return 1
     args.salida.write_bytes(contenido)
     print(ag.registro())
+    if ag.cuentas["otra_empresa"]:
+        print(f"Aviso: {ag.cuentas['otra_empresa']} leads de empresas del grupo con su propio marketing excluidos "
+              "(propio.empresas_excluidas de config/concesionario.yaml, en sede, equipo u origen).")
     if ag.cuentas["otra_marca"]:
         print(f"Aviso: {ag.cuentas['otra_marca']} leads de campañas de otras marcas excluidos "
               "(prefijos_excluidos y palabras_excluidas de config/concesionario.yaml).")

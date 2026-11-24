@@ -1,9 +1,10 @@
 # Cruce de las campañas de Meta con las de Walcu (ingesta/referencias_meta.py).
 #
 # Walcu guarda en cada lead el nombre de la campaña («Detalle campaña»); Meta, el suyo. Se unen por el
-# nombre normalizado: minúsculas, sin tildes, con los espacios reducidos a uno y sin los sufijos de esta
-# lista al final del nombre («-copy», «- Copia», «(copy 2)», «-OK»…). Así «SK [VN] [2026] Gama Ahorro-copy» y
-# «sk [vn] [2026] gama ahorro» son la misma campaña.
+# nombre normalizado: minúsculas, sin tildes, con los espacios reducidos a uno, sin espacios entre corchetes
+# («[VO] [2025]» = «[VO][2025]») y sin los sufijos de esta lista al final del nombre («-copy», «- Copia»,
+# «(copy 2)», «-OK», « Campaña», « - leadgen», « - landing»…). Así «VW [VO][2025] Boutique ocasion-copy» y
+# «VW [VO] [2025] Boutique Ocasión» son la misma campaña.
 #
 # Lo que no casa sale en el informe de  make referencias-meta  (y en la tabla panel_walcu_sin_cruce). Para
 # arreglarlo, añadir aquí una equivalencia: nombre en Walcu → nombre en Meta (los dos tal como aparecen; se
@@ -20,9 +21,20 @@ origenes_meta: [Facebook]
 excluidos: [AiVORA]
 
 # Sufijos que se quitan del final del nombre (palabras enteras, con o sin número detrás)
-sufijos: [copy, copia, ok]
+sufijos: [copy, copia, ok, campaña, leadgen, landing]
 
-equivalencias: {}
+# Walcu → Meta, cuando la regla no basta (año distinto, otro nombre, « B», « 2», prefijo «Test - »…)
+equivalencias:
+  "VW [VN] [2025] Gama ahorro": "VW [VN] [2026] Gama ahorro"
+  "Avisa Days marzo 2025-VW": "VO [2025] Avisa Days marzo - leadgen"
+  "Avisa Days junio 2025-VW": "VO [2025] Avisa Days junio Campaña"
+  "VW [VN][2026] ID Polo B": "Test - VW [VN][2026] ID Polo"
+  "VW [VN][2026] ABRIL 2": "VW [VN][2026] ABRIL"
+  "Sin título 22/1/25, 15:18": "VN [2025] Polo Match enero Campaña"
+
+# Campañas de Walcu que no tienen campaña de Meta que les corresponda (generales de VN de Walcu). Salen en
+# el informe con ese motivo, sin pedir una equivalencia.
+sin_equivalencia: [Lanzamiento, Lanzamiento Julio]
 
 # Cohorte: las citas y las ventas se atribuyen a la semana del lead, y llegan días (citas) o semanas
 # (ventas) después. Una semana cuenta para las tasas y costes de cita (lead a cita, coste por cita) si, al

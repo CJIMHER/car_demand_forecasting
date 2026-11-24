@@ -190,7 +190,7 @@ antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la c
   del lead), origen, campaña y tipo
   (ver `scripts/README.md`).
 - `make walcu-cargar FICHERO=/ruta.csv` (servidor): el CSV llega por la entrada estándar al contenedor.
-  Columnas exactamente `mes, origen, campana, tipo, leads, leads_cercana, leads_fuera, leads_sin_zona, citas,
+  Columnas exactamente `semana, origen, campana, tipo, leads, leads_cercana, leads_fuera, leads_sin_zona, citas,
   ventas, num_inexistente`. Rechaza el fichero entero (no carga nada) si sobra o falta una columna, si un
   valor tiene «@», 9 dígitos seguidos, un teléfono con espacios o forma de DNI/NIE, o si un valor no tiene
   formato. Los mensajes dicen fila y columna, nunca el valor. Zonas que no suman leads: aviso. Va comprimido
@@ -199,9 +199,11 @@ antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la c
   AAAA-MM-DD y lunes; si no, se rechaza el fichero. Si no se cumple ventas ≤ citas ≤ leads o las zonas no
   suman los leads, se avisa.
 - `referencias_meta.py` deja fuera las campañas de otras marcas (`propio.prefijos_excluidos` y
-  `propio.palabras_excluidas`, contadas y con aviso) y une Meta y Walcu (origen Facebook; AiVORA fuera) por el nombre normalizado
-  (minúsculas, sin tildes, espacios simplificados y sin `-copy`, `copia`, `-OK`; equivalencias en
-  `config/campanas_walcu.yaml`) y rehace `panel_campana_semana`, `panel_referencia_meta` y
+  `propio.palabras_excluidas`) y las de empresas del grupo con su propio marketing (`propio.empresas_excluidas`,
+  si el nombre lleva ese texto), contadas y con aviso, y une Meta y Walcu (origen Facebook; AiVORA fuera) por
+  el nombre normalizado (minúsculas, sin tildes, espacios simplificados, sin espacios entre corchetes y sin
+  `-copy`, `copia`, `-OK`, ` Campaña`, ` - leadgen`, ` - landing`; equivalencias en
+  `config/campanas_walcu.yaml`; las de `sin_equivalencia` salen en el informe como campañas sin Meta) y rehace `panel_campana_semana`, `panel_referencia_meta` y
   `panel_walcu_sin_cruce`. Lo llaman `campanas.py` (tras cada descarga de Meta y GA4) y la carga de Walcu.
   `make referencias-meta` lo rehace y escribe la tabla por año y tipo (gasto, leads según Meta y Walcu,
   citas, ventas, costes por lead, cita y venta, lead a cita, cita a venta, % fuera de zona y % de número

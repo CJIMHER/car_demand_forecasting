@@ -16,6 +16,10 @@ columnas:
   estado: Estado
   motivo_fracaso: Motivo fracaso
   codigo_postal: Código postal            # solo para la zona; nunca se escribe
+  # Solo para el tipo (sedes_vo, equipos_vo) y las empresas excluidas (config/concesionario.yaml,
+  # propio.empresas_excluidas): nunca se escriben
+  sede: Sede
+  equipo: Equipo
   # Solo se lee si hay comerciales excluidos (fichero local, fuera del repositorio): nunca se escribe
   comercial: Vendedor
 
@@ -28,6 +32,17 @@ estados_venta: [Vendido]
 
 # Número inexistente: el motivo de fracaso contiene alguno de estos textos (valor real: «Número inexistente»)
 motivos_num_inexistente: [Número inexistente]
+
+# Tipo (VN o VO) de cada lead, por este orden:
+#   1. El nombre de la campaña, con las reglas de ámbito de config/campanas.yaml: [VN] o [VO]; si no, VN o VO
+#      al principio del nombre; si no, una de palabras_vo (palabra entera) → VO.
+#   2. Si el nombre no lo dice: sede o equipo del lead en sedes_vo o equipos_vo → VO.
+#   3. El campo «Tipo de vehículo solicitado» (tipos). Walcu marca «Nuevo» casi todos los leads de campañas
+#      de ocasión (2.443 de 2.484 en Facebook): por eso va detrás.
+#   4. tipo_por_defecto.
+palabras_vo: [ocasión, boutique, seminuevo, seminuevos]
+sedes_vo: [Carpa VO]
+equipos_vo: [VO]
 
 # Tipo de vehículo solicitado → VN o VO (valores reales: «Nuevo», «VO», «Km0» y vacío). Vacío → tipo_por_defecto;
 # un valor que no esté aquí también, y se cuenta en el registro

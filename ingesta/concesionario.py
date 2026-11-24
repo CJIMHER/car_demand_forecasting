@@ -57,6 +57,14 @@ class Concesionario:
     #   «3-dias-de-ocasion-audi»). Cualquier carácter que no sea letra ni número separa palabras.
     prefijos_excluidos: tuple[str, ...] = ()
     palabras_excluidas: tuple[str, ...] = ()
+    # Empresas del grupo con su propio marketing: sus leads (sede, equipo u origen que contiene uno de estos
+    # textos) y sus campañas no cuentan
+    empresas_excluidas: tuple[str, ...] = ()
+
+    def otra_empresa(self, texto: str | None) -> bool:
+        """El texto (sede, equipo, origen o nombre de campaña) contiene una de empresas_excluidas."""
+        t = _plegar(texto)
+        return bool(t) and any(e in t for e in self.empresas_excluidas)
 
     def otra_marca(self, campana: str | None) -> bool:
         """La campaña es de otra marca del grupo (prefijos_excluidos o palabras_excluidas)."""
@@ -118,6 +126,8 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         web=str(propio.get("web") or "").strip(),
         prefijos_excluidos=_marcas(propio, "prefijos_excluidos"),
         palabras_excluidas=_marcas(propio, "palabras_excluidas"),
+        empresas_excluidas=tuple(dict.fromkeys(_plegar(e) for e in propio.get("empresas_excluidas") or []
+                                               if _plegar(e))),
     )
 
 
