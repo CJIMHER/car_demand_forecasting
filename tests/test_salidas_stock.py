@@ -299,3 +299,103 @@ def test_ventas_salidas_de_las_ultimas_4_semanas(pg, panel_url, personas):
 def test_diferencia_frente_a_la_mediana():
     assert ps.diferencia(2_100_000, 2_000_000) == pytest.approx(5.0)
     assert ps.diferencia(None, 2_000_000) is None and ps.diferencia(2_000_000, None) is None
+
+
+# ================================================================== candidatos y diagnóstico
+
+def test_cada_candidato_con_el_motivo_de_su_regla():
+    buenos = {"vo": _dias((0, 11), (14, 40))}                          # 12 y 13: captura fallida
+    vistos = {"normal": _dias((0, 5)), "hueco": _dias((0, 10), (14, 40)), "corta": _dias((0, 15), (17, 40)),
+              "pendiente": _dias((0, 38)), "arranque": _dias((0, 0)), "vuelve": _dias((0, 18), (25, 40)),
+              "esta": _dias((0, 11), (14, 40))}                        # el hueco de capturas no es ausencia
+    cands = sl.candidatos({("vo", k): v for k, v in vistos.items()}, buenos, _d(40), REGLAS)
+    motivos = {c.clave[1]: (c.motivo, c.sin_captura) for c in cands}
+    assert motivos == {"normal": (sl.SALIDA, False), "hueco": (sl.AUSENCIA_CORTA, True),
+                       "corta": (sl.AUSENCIA_CORTA, False), "pendiente": (sl.PENDIENTE, False),
+                       "arranque": (sl.ARRANQUE, False), "vuelve": (sl.REAPARICION, False)}
+    # detectar se queda con las salidas, como antes
+    assert [s.clave[1] for s in sl.detectar({("vo", k): v for k, v in vistos.items()}, buenos, _d(40), REGLAS)] \
+        == ["normal"]
+
+
+def _vo_real(vid: str, dealer: str, km: int) -> dict:
+    """Un anuncio VO con el formato real: un registro de ejemplo del scraper pasado por su propio normalize."""
+    import copy
+    import gzip
+    import json
+    from sinteticos import VO
+    if not hasattr(_vo_real, "base"):
+        _vo_real.base = VO.normalize(json.load(gzip.open(RAIZ / "scrapers/vo/examples/sample1.json.gz"))["cars"][0])
+    r = copy.deepcopy(_vo_real.base)
+    r["vehicle_id"] = vid
+    r["business"]["dealer_id"] = dealer
+    r["business"]["mileage_km"] = km
+    return r
+
+
+def test_salida_vo_con_el_formato_real_y_diagnostico_por_regla(pg, datos, capsys):
+    conc = cargar_concesionario()
+    propio = conc.dealer_ids[0]
+    assert _vo_real("ESP00710000000001", propio, 1)["vehicle_id"].startswith("ESP")
+    nuestros = {                                   # id: (km, días en que se ve)
+        "ESP00710000000001": (10_000, ((0, 5),)),                  # salida normal el 6
+        "ESP00710000000002": (20_000, ((0, 10), (14, 30))),        # falta el 11; 12 y 13 sin captura buena
+        "ESP00710000000003": (30_000, ((0, 15), (17, 30))),        # falta un solo día bueno (16)
+        "ESP00710000000004": (40_000, ((0, 28),)),                 # aún sin tres días buenos sin él
+        "ESP00710000000005": (50_000, ((0, 0),)),                  # sale el 1: arranque
+        "ESP00710000000006": (60_000, ((0, 18), (25, 30))),        # sale el 19 y vuelve el 25
+        "ESP00710000000007": (70_000, ((0, 7),)),                  # republicado el 9 como el 8
+        "ESP00710000000008": (70_500, ((9, 30),)),
+    }
+    competidor = _vo_real("ESP00999000000001", "ESP99999", 10_000)    # desaparece el 6: nunca es salida
+    for n in range(31):
+        if n in (12, 13):
+            fallar(datos, "vo", _d(n).isoformat())
+            continue
+        coches = [_vo_real(v, propio, km) for v, (km, tramos) in nuestros.items()
+                  if any(a <= n <= b for a, b in tramos)]
+        if n <= 5:
+            coches.append(dict(competidor))
+        capturar(datos, "vo", _d(n).isoformat(), coches, PERMISIVO)
+    sv.cargar(pg, dia=_d(30))
+    am.precalcular(pg, hasta=_d(30), conc=conc)
+    filas = pg.execute("SELECT id_anuncio, dia, ultimo_dia, provisional, tipo, fuente FROM panel_salidas_stock"
+                       ).fetchall()
+    assert filas == [("ESP00710000000001", _d(6), _d(5), False, "VO", "vo")]
+
+    from analitica import versiones
+    h = am.Hechos(pg, conc)
+    diag = sl.diagnostico(h, versiones.cargar(conc.marca), REGLAS, _d(30))
+    assert set(diag) == {"vo"}
+    vo = {f["dia"]: f for f in diag["vo"]}
+    assert len(vo) == 31 and not vo[_d(12)]["captura_buena"] and vo[_d(12)]["anuncios"] == 0
+    assert (vo[_d(0)]["anuncios"], vo[_d(0)]["ids_distintos"], vo[_d(0)]["nuevos"]) == (7, 7, 7)
+    assert (vo[_d(9)]["anuncios"], vo[_d(9)]["ids_distintos"], vo[_d(9)]["nuevos"]) == (5, 5, 1)
+    # Cada candidato, en el último día en que se vio y en la columna de su regla
+    esperado = {_d(5): "salidas", _d(10): "sin_captura", _d(15): "ausencia_corta", _d(28): "pendiente",
+                _d(0): "arranque", _d(18): "reaparicion", _d(7): "republicacion"}
+    columnas = [k for k, _ in sl.DESCARTES] + ["salidas"]
+    for dia, f in vo.items():
+        assert f["desaparecen"] == sum(f[k] for k in columnas), dia
+        assert {k for k in columnas if f[k]} == ({esperado[dia]} if dia in esperado else set()), dia
+        assert all(f[k] <= 1 for k in columnas)
+    totales = {k: sum(f[k] for f in diag["vo"]) for k in ["desaparecen", *columnas]}
+    assert totales == {"desaparecen": 7, "sin_captura": 1, "ausencia_corta": 1, "pendiente": 1, "arranque": 1,
+                       "reaparicion": 1, "republicacion": 1, "salidas": 1}
+
+    # La orden de make salidas-diagnostico: solo lectura, sin identificadores ni datos personales
+    antes = [pg.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+             for t in ("panel_salidas_stock", "fuentes_estado", "stock_externo_snapshot")]
+    assert sl.main(["diagnostico", "--hasta", _d(30).isoformat()]) == 0
+    salida = capsys.readouterr().out
+    assert "== vo (VO)" in salida and "Salidas por fuente: vo 1 (0 provisionales)" in salida
+    assert "Total vo: 7 desaparecen; sin_captura 1, ausencia_corta 1, pendiente 1, arranque 1, reaparicion 1, " \
+           "republicacion 1; salidas 1" in salida
+    assert "ESP" not in salida and "Concesionario" not in salida
+    assert antes == [pg.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+                     for t in ("panel_salidas_stock", "fuentes_estado", "stock_externo_snapshot")]
+
+
+def test_makefile_tiene_el_diagnostico_de_salidas():
+    texto = (RAIZ / "Makefile").read_text()
+    assert "salidas-diagnostico:" in texto and "python -m analitica.salidas diagnostico" in texto

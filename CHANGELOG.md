@@ -1,5 +1,21 @@
 # Cambios
 
+## 2026-11-24 · Salidas de VO: diagnóstico (rama hito-1b-salidas-vo)
+
+- **Revisión de «0 salidas de VO»**: no es un fallo de `analitica/salidas.py`. Los identificadores de VO
+  (`carid`) son estables y es_propio se marca igual que en el precio provisional. En producción hay solo
+  10–14 VO nuestros al día (15 anuncios distintos en todo el histórico), no 149: 149 es la suma de las filas
+  de `panel_precio_vo` de sus 13 días. Desde el 13-11 ningún VO nuestro ha dejado de publicarse. Los dos que
+  faltan (vistos el 1-11 y no después, uno de ellos vuelve el 24-11) caen en el hueco de capturas del 2 al 12
+  y el arranque los descarta.
+- **`make salidas-diagnostico`** (solo lectura): por fuente y día, anuncios nuestros, identificadores
+  distintos, nuevos, los que desaparecen y qué regla descarta cada uno, y las salidas por fuente. Solo
+  recuentos.
+- `salidas.candidatos`: la clasificación de cada desaparición con su motivo; la usan el precálculo
+  (`detectar`, sin cambios de resultado) y el diagnóstico, así que los dos cuadran.
+- Pruebas con capturas VO en el formato real del scraper: una salida normal de VO sale, y el diagnóstico
+  cuenta bien cada regla.
+
 ## 2026-11-24 · Google Trends: la categoría 47 con cualquiera de sus nombres (rama hito-1b-gtrends-categoria)
 
 - **Arreglo**: `make gtrends-subir` rechazaba los 28 CSV porque Trends escribe ahora «Categoría: Automóviles y

@@ -16,7 +16,7 @@ PANEL_RUN = $(COMPOSE) --profile panel run --rm --no-deps panel python -m panel.
 PYTHON ?= .venv/bin/python
 
 .PHONY: help comprobar-entorno deploy migrar cargar comprobar recuento concesionarios remarcar-propio \
-        estado copia restaurar-prueba test hora logs ps psql precalcular panel-deploy panel-rol \
+        estado copia restaurar-prueba test hora logs ps psql precalcular salidas-diagnostico panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
         ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas gtrends gtrends-enlaces gtrends-subir \
         meta-historico walcu-cargar walcu-agregar referencias-meta prevision
@@ -82,6 +82,9 @@ panel-logs: ## Registros del panel y de Caddy
 
 precalcular: ## Precálculo del panel; sin argumentos rehace todo el histórico, DIA=AAAA-MM-DD solo ese día
 	$(JOBS) python -m analitica.mercado $${DIA:+--dia $$DIA}
+
+salidas-diagnostico: ## Salidas de nuestro stock día a día, por fuente y por regla que las descarta (solo lectura); HASTA=AAAA-MM-DD
+	$(JOBS) python -m analitica.salidas diagnostico $${HASTA:+--hasta $$HASTA}
 
 prevision: ## Previsión de leads, citas y ventas de Meta con su validación (también cada noche tras el precálculo)
 	$(JOBS) python -m analitica.prevision

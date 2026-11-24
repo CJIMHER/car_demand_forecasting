@@ -74,7 +74,14 @@ CRM. Solo anuncios propios; para los de otros concesionarios desaparecer no es v
 - Cada noche (`--ultimos 8`) se recalcula la ventana de los últimos `dias_reaparicion` + `dias_ausente` días;
   `make precalcular` sin argumentos, todo el histórico. Umbrales en `config/concesionario.yaml`
   (`salidas_stock`); sin la sección no se calcula y el resumen lo dice.
-- Pruebas: `tests/test_salidas_stock.py`.
+- `make salidas-diagnostico [HASTA=AAAA-MM-DD]` (solo lectura, transacción `read_only`): por fuente (vo, vn,
+  vn_otros) y día, anuncios nuestros, identificadores distintos, nuevos, los que no están el siguiente día con
+  captura buena y en qué columna acaba cada uno (sin K días buenos por días sin captura buena, vuelve antes
+  de K días buenos, aún pendiente, arranque, reaparece antes de R días, republicación o salida); al final, las
+  salidas por fuente. Usa la misma clasificación que el precálculo (`candidatos`), así que cuadra con
+  `panel_salidas_stock`. Solo recuentos: ni identificadores ni nombres.
+- Pruebas: `tests/test_salidas_stock.py` (con capturas VO en el formato real del scraper: el registro de
+  ejemplo de `scrapers/vo/examples` pasado por su `normalize`).
 
 ## precio.py · precio provisional de nuestros VO (en el mismo precálculo)
 
