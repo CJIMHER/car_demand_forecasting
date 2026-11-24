@@ -192,7 +192,8 @@ antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la c
   formato. Los mensajes dicen fila y columna, nunca el valor. Zonas que no suman leads: aviso. Va comprimido
   al bucket (`walcu/agregado/<día>/`) y después a `walcu_campana_mes` (solo añadir; recargar un mes lo
   sustituye en `walcu_campana_mes_vigente`; el mismo fichero dos veces no se carga).
-- `referencias_meta.py` une Meta y Walcu (origen Facebook; AiVORA fuera) por el nombre normalizado
+- `referencias_meta.py` deja fuera las campañas de otras marcas (`propio.prefijos_excluidos`, contadas y con
+  aviso) y une Meta y Walcu (origen Facebook; AiVORA fuera) por el nombre normalizado
   (minúsculas, sin tildes, espacios simplificados y sin `-copy`, `copia`, `-OK`; equivalencias en
   `config/campanas_walcu.yaml`) y rehace `panel_campana_mes`, `panel_referencia_meta` y
   `panel_walcu_sin_cruce`. Lo llaman `campanas.py` (tras cada descarga de Meta y GA4) y la carga de Walcu.

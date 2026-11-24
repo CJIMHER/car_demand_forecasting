@@ -1,8 +1,8 @@
 Histórico de Meta, cargas de Walcu agregadas y referencias de coste, en la rama `hito-1b-walcu-meta-hist`
 (desde `main` en `7139d1f`), sin push y sin conectarme al servidor.
 
-**Pruebas:** suite completa con Postgres (`.venv/bin/python -m pytest -q`): 557 en verde y 1 saltada (la de
-`cryptography`, que falta en el entorno local). Las nuevas están en `tests/test_walcu_meta_hist.py` (48).
+**Pruebas:** suite completa con Postgres (`.venv/bin/python -m pytest -q`): 574 en verde y 1 saltada (la de
+`cryptography`, que falta en el entorno local). Las nuevas están en `tests/test_walcu_meta_hist.py` (65).
 
 **Paso 0 (ordenar el repositorio):** `hito-1b-gtrends` ya estaba rebasada sobre `hito-1b-ga4-canales` con la
 0016 detrás de la 0015 (sesión anterior). La fusioné en `main` con `--ff-only` (`7139d1f`, ya en GitHub) y
@@ -127,10 +127,10 @@ Cada semana: `make walcu-agregar` en el Mac, `scp` y `make walcu-cargar`. Lo exp
 4. **Zonas que no suman** (10 filas de tu CSV) y más citas que leads: aviso, no rechazo.
 5. **Se sube el CSV al bucket** (comprimido) antes de guardarlo, como los demás brutos. Si el bucket falla, no
    se carga.
-6. **Valores de Walcu en configuración.** Los estados de venta, los motivos de número inexistente, los tipos
-   y los alias de origen del script van en `config/walcu_export.yaml`, con valores supuestos («vendido»,
-   «ganado»; «inexistente», «erróneo»; km0 → VO; sin tipo → VN). **Hay que comprobarlos con una exportación
-   real**: el script muestra los valores que encuentra.
+6. **Valores de Walcu en configuración** (`config/walcu_export.yaml`), ya con los reales: venta = Estado que
+   contiene «Vendido» («Negociación creada (Cerrada / Vendido)», «En curso (Cerrada / Vendido)»); número
+   inexistente = Motivo fracaso «Número inexistente»; tipo «Nuevo» → VN, «VO» y «Km0» → VO, vacío → VN. Un
+   tipo que no esté en la lista también cuenta como VN, y el registro dice cuántos.
 7. **Venta = negociación + estado de venta** (así no puede haber más ventas que citas).
 8. **Web propia como origen**: `propio.web` en `config/concesionario.yaml`, para que el dominio no esté en el
    código.
@@ -155,11 +155,21 @@ Cada semana: `make walcu-agregar` en el Mac, `scp` y `make walcu-cargar`. Lo exp
 18. **Presupuesto por teléfono** tampoco cuenta como venta (venta = cita con estado de venta).
 19. **`make meta-historico` sin credenciales** termina con error (lo lanza alguien a mano). La carga diaria
     sigue anotando «sin_credenciales».
+20. **Otras marcas**: `propio.prefijos_excluidos` en `config/concesionario.yaml` = SK, AU, SE, CU y **SEAT**.
+    Añadí SEAT porque el prefijo cuenta como palabra entera («SE» no quita «Semana…», «Seminuevos…» ni
+    «SEAT…»), y tu CSV trae «SEAT [VN] [2026] Arona». Se aplica en `walcu_agregar.py` (leads descartados,
+    contados y con aviso) y en `make referencias-meta` (campañas de Meta y filas de Walcu fuera del cruce, del
+    último mes y de las referencias, contadas y con aviso). No se rechaza ningún fichero.
 
 ## Para revisar
 
-- **Marcas.** Tu CSV de Walcu trae campañas de otras marcas del grupo (SK, AU, SEAT, CU…), y la cuenta de Meta
-  puede traerlas también. No filtro por marca porque el encargo no lo pide, pero las referencias por tipo las
-  incluyen. Si deben ser solo Volkswagen, se puede añadir un filtro por marca en `config/campanas_walcu.yaml`.
+- **Otras marcas que no empiezan por el prefijo.** En tu CSV de 535 filas el filtro solo quita 3 filas (3
+  leads). Siguen contando, porque no empiezan por un prefijo: «EXT SK [2026] SKODA DAYS», «VN [2025] SEAT
+  Ibiza/Ateca febrero», «Avisa Days marzo 2025-SK», «3-dias-de-ocasion-audi» y dos de AiVORA con Audi (estas
+  dos no cuentan en las referencias de Meta de todos modos). Se pueden quitar con más prefijos (EXT) o con
+  equivalencias, o dejarlos como están.
+- **Marketing y criterios.** El filtro de marca está en la agregación de Walcu y en las referencias, como se
+  pidió. Las campañas de Meta de otras marcas siguen en el bloque de campañas de 28 días y en los criterios
+  (`ingesta/campanas.py`). Si no deben salir ahí, es un cambio pequeño.
 - **Atribución de AiVORA.** AiVORA tiene leads con campaña «(sin campaña)». Quedan fuera de las referencias
   de Meta, como pide el encargo.

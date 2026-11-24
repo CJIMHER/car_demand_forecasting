@@ -23,7 +23,11 @@ campaña y tipo, y escribe el CSV que carga `make walcu-cargar` en el servidor.
   existe, no se excluye nada; si se indica uno que no existe, no se escribe nada.
 - Cita: el lead tiene negociación creada, salvo que su «Resultado última actividad» esté en
   `actividades_no_cita` (PRESUPUESTO POR TELÉFONO). Venta: cita y un estado de `estados_venta`. Número
-  inexistente: el motivo de fracaso contiene uno de `motivos_num_inexistente`. Tipo VN/VO por `tipos`.
+  inexistente: el motivo de fracaso contiene uno de `motivos_num_inexistente`. Tipo VN/VO por `tipos`. Venta:
+  el Estado contiene «Vendido»; número inexistente: «Número inexistente»; tipo: «Nuevo» → VN, «VO» y «Km0» →
+  VO, vacío → VN (valores reales de la exportación).
+- **Otras marcas**: los leads de campañas cuyo nombre empieza por un prefijo de `propio.prefijos_excluidos`
+  (`config/concesionario.yaml`; como palabra entera) se descartan, se cuentan y se avisa.
 - Zona por el código postal con la zona cercana de `config/concesionario.yaml` (nada de provincias en el
   código). El código postal no se escribe nunca.
 - Orígenes: los de `config/walcu_export.yaml` y la web propia (`propio.web` de

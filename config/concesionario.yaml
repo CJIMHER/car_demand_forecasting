@@ -25,6 +25,10 @@ propio:
   # Web propia: así aparece como origen de los leads en Walcu (scripts/walcu_agregar.py la conserva
   # como origen; los que no están en config/walcu_export.yaml van a «otros»)
   web: volkswagen.avisa.es
+  # Campañas de otras marcas del grupo: las que empiezan por uno de estos prefijos (como palabra: «SK [VN] …»,
+  # «AU[VO] …»; «SE» no quita «Semana…» ni «SEAT…») no cuentan en la agregación de Walcu
+  # (scripts/walcu_agregar.py) ni en el cruce y las referencias (make referencias-meta). Se cuentan y se avisa.
+  prefijos_excluidos: [SK, AU, SE, CU, SEAT]
   dealer_ids:
     - ESP00710
   # Nombres con que aparece en los scrapers (dealer_name). Comprobar con  make concesionarios

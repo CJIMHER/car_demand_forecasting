@@ -18,7 +18,10 @@ leen. En un .xlsx, las celdas de las otras columnas se saltan sin convertirlas.
   repositorio ni al servidor, y el registro solo dice cuántos leads se han excluido. Si el fichero por
   defecto no existe, no se excluye nada; si se pasa uno con --excluidos y no existe, no se escribe nada.
 - Cita: el lead tiene negociación creada, salvo que su «Resultado última actividad» sea una de
-  actividades_no_cita (PRESUPUESTO POR TELÉFONO). Venta: además, su estado es de venta (estados_venta).
+  actividades_no_cita (PRESUPUESTO POR TELÉFONO). Venta: además, su Estado contiene uno de estados_venta
+  («… (Cerrada / Vendido)»).
+- Otras marcas: los leads de campañas cuyo nombre empieza por un prefijo de propio.prefijos_excluidos
+  (config/concesionario.yaml) se descartan; se cuentan y se avisa.
 - Zona: por los dos primeros dígitos del código postal, con la zona cercana de config/concesionario.yaml
   (la provincia propia y provincias_cercanas): cercana, fuera o sin zona (sin código postal válido).
 - Número inexistente: el motivo de fracaso contiene alguno de motivos_num_inexistente.
@@ -203,10 +206,11 @@ def zona(cp: str, cercanas: tuple[str, ...]) -> str:
 
 class Agregador:
     def __init__(self, cfg: dict, conc: cc.Concesionario, excluidos: frozenset[str] = frozenset()):
+        self.conc = conc
         self.cercanas = conc.zona_cercana
         self.excluidos = excluidos
         self.no_cita = {plegar(x) for x in cfg.get("actividades_no_cita") or []}
-        self.ventas = {plegar(x) for x in cfg.get("estados_venta") or []}
+        self.ventas = {plegar(x) for x in cfg.get("estados_venta") or [] if plegar(x)}     # «contiene»
         self.inexistente = [plegar(x) for x in cfg.get("motivos_num_inexistente") or [] if plegar(x)]
         self.tipos = {plegar(a): t for t, alias in (cfg.get("tipos") or {}).items() for a in alias or []}
         self.tipo_defecto = str(cfg.get("tipo_por_defecto") or "VN")
@@ -222,6 +226,9 @@ class Agregador:
         self.cuentas["leidos"] += 1
         if self.excluidos and plegar(lead.get("comercial")) in self.excluidos:
             self.cuentas["excluidos"] += 1
+            return
+        if self.conc.otra_marca(lead["campana"]):
+            self.cuentas["otra_marca"] += 1
             return
         d = fecha(lead["fecha"])
         if d is None:
@@ -247,7 +254,7 @@ class Agregador:
         a["leads"] += 1
         a[f"leads_{zona(lead['codigo_postal'], self.cercanas)}"] += 1
         a["citas"] += cita
-        a["ventas"] += cita and estado in self.ventas
+        a["ventas"] += cita and any(v in estado for v in self.ventas)
         a["num_inexistente"] += any(m in motivo for m in self.inexistente)
         self.estados[estado or "(vacío)"] += 1
         self.tipos_vistos[tipo_crudo or "(vacío)"] += 1
@@ -270,9 +277,10 @@ class Agregador:
         c = self.cuentas
         return "\n".join([
             f"Leads leídos: {c['leidos']}; de comerciales excluidos (no cuentan): {c['excluidos']}; "
+            f"de campañas de otras marcas (no cuentan): {c['otra_marca']}; "
             f"sin fecha válida (no cuentan): {c['sin_fecha']}; "
             f"con negociación que no cuenta como cita por su última actividad: {c['no_cita']}; "
-            f"con tipo no reconocido (cuentan como {self.tipo_defecto}): {c['tipo_por_defecto']}; "
+            f"con tipo vacío o no reconocido (cuentan como {self.tipo_defecto}): {c['tipo_por_defecto']}; "
             f"campañas omitidas por parecer un dato personal: {c['campanas_omitidas']}.",
             f"Estados: {lista(self.estados, 1)}",
             f"Tipos de vehículo: {lista(self.tipos_vistos, 1)}",
@@ -308,6 +316,9 @@ def main(argv=None) -> int:
         return 1
     args.salida.write_bytes(contenido)
     print(ag.registro())
+    if ag.cuentas["otra_marca"]:
+        print(f"Aviso: {ag.cuentas['otra_marca']} leads de campañas de otras marcas excluidos "
+              "(prefijos_excluidos de config/concesionario.yaml).")
     print(f"Escrito {args.salida.name}: {len(v.filas)} filas." + "".join(f"\nAviso: {a}." for a in v.avisos))
     print(f"Para cargarlo en el servidor: make walcu-cargar FICHERO=<ruta en el servidor>/{args.salida.name}")
     return 0

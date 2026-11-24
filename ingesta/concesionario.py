@@ -48,6 +48,16 @@ class Concesionario:
     provincias_cercanas: tuple[str, ...] = ()
     # Dominio de la web propia, tal como aparece como origen de los leads en Walcu (scripts/walcu_agregar.py)
     web: str = ""
+    # Prefijos de campañas de otras marcas del grupo (Walcu y Meta los traen mezclados): las campañas cuyo
+    # nombre empieza por uno de ellos, como palabra («SK [VN] …», «AU[VO] …»), no cuentan
+    prefijos_excluidos: tuple[str, ...] = ()
+
+    def otra_marca(self, campana: str | None) -> bool:
+        """La campaña empieza por un prefijo de otra marca (sin mayúsculas ni tildes, como palabra entera)."""
+        if not self.prefijos_excluidos:
+            return False
+        texto = _plegar(campana)
+        return any(texto.startswith(p) and not texto[len(p):len(p) + 1].isalnum() for p in self.prefijos_excluidos)
 
     @property
     def zona_cercana(self) -> tuple[str, ...]:
@@ -97,7 +107,15 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         tramos_km=_tramos(cfg, "km"),
         provincias_cercanas=cercanas,
         web=str(propio.get("web") or "").strip(),
+        prefijos_excluidos=tuple(dict.fromkeys(_plegar(p) for p in propio.get("prefijos_excluidos") or []
+                                               if _plegar(p))),
     )
+
+
+def _plegar(texto) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(texto or ""))
+    return " ".join("".join(c for c in t if not unicodedata.combining(c)).casefold().split())
 
 
 def _tramos(cfg: dict, clave: str) -> tuple[tuple[int | None, str], ...]:

@@ -17,6 +17,9 @@ Rehace:
   VO en proporción a sus leads de Walcu de ese mes y, si no tiene, solo cuenta en «todo».
 - panel_walcu_sin_cruce: lo que no casa, con el motivo.
 
+Las campañas de otras marcas del grupo (nombre que empieza por un prefijo de propio.prefijos_excluidos de
+config/concesionario.yaml), de Meta y de Walcu, no entran en nada de lo anterior: se cuentan y se avisa.
+
 Las referencias de 2025 son la «media» de las reglas c y d (alertas/criterios.py).
 
 Lo llaman ingesta/campanas.py (tras cada descarga de Meta, de GA4 y con make campanas) y la carga de
@@ -38,6 +41,7 @@ import psycopg
 import yaml
 
 from ingesta import campanas as cmp
+from ingesta import concesionario as cc
 
 RAIZ = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger("ingesta.referencias_meta")
@@ -98,10 +102,12 @@ def _mes(d: date) -> date:
 
 # --------------------------------------------------------------------------- cálculo
 
-def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cruce: Cruce | None = None) -> dict:
+def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cruce: Cruce | None = None,
+               conc: cc.Concesionario | None = None) -> dict:
     """Rehace panel_campana_mes, panel_referencia_meta y panel_walcu_sin_cruce (origen real)."""
     campanas = campanas or cmp.cargar()
     cruce = cruce or cargar()
+    conc = conc or cc.cargar()
     # ---- Meta por campaña y mes
     meta: dict[tuple[date, str], list[int]] = {}
     nombres: dict[str, tuple[date, str]] = {}          # campaña → (último día, nombre vigente)
@@ -122,6 +128,12 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
             por_nombre[cruce.normalizar(nombre)].add(cid)
         dia_meta = dia if dia_meta is None or dia > dia_meta else dia_meta
     titulo = {cid: n for cid, (_, n) in nombres.items()}
+    # Otras marcas: fuera de todo, por el nombre vigente de la campaña
+    otras = {cid for cid in {c for _, c in meta} if conc.otra_marca(titulo.get(cid))}
+    excluidas = {"meta_campanas": len(otras), "meta_gasto_cents": sum(v[0] for (_, c), v in meta.items() if c in otras),
+                 "walcu_filas": 0, "walcu_leads": 0}
+    meta = {k: v for k, v in meta.items() if k[1] not in otras}
+    por_nombre = defaultdict(set, {n: ids - otras for n, ids in por_nombre.items() if ids - otras})
     clasif = {cid: campanas.clasificar(titulo.get(cid) or "(sin nombre)") for cid in {c for _, c in meta}}
     gasto_mes: dict[tuple[date, str], int] = {k: v[0] for k, v in meta.items()}
     # ---- Walcu (Facebook) por campaña, mes y tipo
@@ -130,6 +142,10 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
     for mes, origen, camp, tipo, *vals in pg.execute(
             f"SELECT mes, origen, campana, tipo, {', '.join(CAMPOS_WALCU)} FROM walcu_campana_mes_vigente"):
         meses_walcu.add(mes)
+        if conc.otra_marca(camp):
+            excluidas["walcu_filas"] += 1
+            excluidas["walcu_leads"] += int(vals[0])
+            continue
         if not cruce.es_meta(origen):
             continue
         a = walcu[(mes, camp, tipo)]
@@ -280,8 +296,12 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
                             "leads, motivo) VALUES (%s, %s, %s, %s, %s, %s, %s)", informe)
     leads_fb = sum(v[0] for v in walcu.values())
     leads_cruce = sum(v[0] for (m, c, _), v in walcu.items() if c in asignada)
+    if excluidas["meta_campanas"] or excluidas["walcu_filas"]:
+        LOG.warning("Otras marcas excluidas: %s campañas de Meta y %s filas de Walcu (%s leads)",
+                    excluidas["meta_campanas"], excluidas["walcu_filas"], excluidas["walcu_leads"])
     return {"campanas_mes": len(filas), "sin_cruce": len(informe), "referencias": len(ref),
-            "leads_facebook_con_campana_de_meta_pct": round(leads_cruce / leads_fb * 100, 1) if leads_fb else None}
+            "leads_facebook_con_campana_de_meta_pct": round(leads_cruce / leads_fb * 100, 1) if leads_fb else None,
+            "otras_marcas": excluidas}
 
 
 # --------------------------------------------------------------------------- informe (make referencias-meta)
@@ -378,6 +398,11 @@ def main(argv=None) -> int:
         print(informe(pg))
         print(f"\nCampaña y mes: {resumen['campanas_mes']} filas; leads de Facebook con campaña de Meta: "
               f"{resumen['leads_facebook_con_campana_de_meta_pct']} %.")
+        x = resumen["otras_marcas"]
+        if x["meta_campanas"] or x["walcu_filas"]:
+            print(f"Aviso: campañas de otras marcas excluidas (prefijos_excluidos de config/concesionario.yaml): "
+                  f"{x['meta_campanas']} de Meta ({_fmt(x['meta_gasto_cents'] / 100, '€')} de gasto) y "
+                  f"{x['walcu_filas']} filas de Walcu ({x['walcu_leads']} leads).")
     return 0
 
 

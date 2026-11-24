@@ -29,6 +29,11 @@
   el servidor); sus leads se descartan antes de agregar y el registro solo dice cuántos. Un lead con
   negociación no cuenta como cita si su «Resultado última actividad» es PRESUPUESTO POR TELÉFONO
   (`actividades_no_cita` en `config/walcu_export.yaml`).
+- **Valores reales de Walcu** (`config/walcu_export.yaml`): venta = Estado que contiene «Vendido»; número
+  inexistente = «Número inexistente»; tipo «Nuevo» → VN, «VO» y «Km0» → VO, vacío → VN.
+- **Otras marcas del grupo**: `propio.prefijos_excluidos` (SK, AU, SE, CU, SEAT) en `config/concesionario.yaml`;
+  las campañas que empiezan por uno (como palabra) no cuentan en `walcu_agregar.py` ni en
+  `make referencias-meta`. Se cuentan y se avisa; no se rechaza el fichero.
 - **Marketing**: bloques «Campañas del último mes» (gasto, leads de Walcu y según Meta, citas, ventas, coste
   por lead, por cita y por venta, y la decisión) y «Referencias históricas».
 - **Pruebas**: `tests/test_walcu_meta_hist.py` (validador con correo, columna de más, teléfonos, DNI y NIE;

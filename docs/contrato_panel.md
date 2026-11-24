@@ -419,7 +419,8 @@ Es una comparación con un modelo, no un experimento.
 
 - **Grano**: mes × campaña de Meta (o campaña de Walcu sin campaña de Meta: `campana_id` vacío).
 - **Fuente**: `campanas_meta_dia_vigente` (nivel campaña) y `walcu_campana_mes_vigente` (origen Facebook;
-  AiVORA fuera), unidas por el nombre normalizado (`config/campanas_walcu.yaml`). Las rehace
+  AiVORA fuera), unidas por el nombre normalizado (`config/campanas_walcu.yaml`), sin las campañas de otras
+  marcas (`propio.prefijos_excluidos` de `config/concesionario.yaml`). Las rehace
   `ingesta/referencias_meta.py` tras cada descarga de Meta y GA4, tras cada carga de Walcu y con
   `make referencias-meta`. `dia`: el último día con datos de Meta.
 

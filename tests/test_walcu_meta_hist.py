@@ -367,19 +367,22 @@ def _leads(conc):
     cerca, lejos = conc.zona_cercana[0] + "001", ("28" if conc.zona_cercana[0] != "28" else "08") + "001"
     return [
         ["Ana Pérez", "612345678", "ana@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
-         "03/11/2026 10:15", "N-1", "Visita en exposición", "Vendido", "", cerca, "Comercial Uno"],
+         "03/11/2026 10:15", "N-1", "Visita en exposición", "Negociación creada (Cerrada / Vendido)", "", cerca,
+         "Comercial Uno"],
         ["Luis Gómez", "699111222", "luis@correo.es", "facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
          "04/11/2026 11:00", "", "", "Perdido", "Número inexistente", lejos, "Comercial Dos"],
-        ["Eva Ruiz", "600000001", "eva@correo.es", "AiVORA", "", "Ocasión", "2026-10-30 09:00", "N-2", "", "En curso",
+        ["Eva Ruiz", "600000001", "eva@correo.es", "AiVORA", "", "VO", "2026-10-30 09:00", "N-2", "", "En curso",
          "", "", "Comercial Uno"],
-        ["Raro", "600000002", "r@correo.es", "Portal raro", "Llamar al 612345678", "Seminuevo", "30/10/2026", "", "", "",
+        ["Raro", "600000002", "r@correo.es", "Portal raro", "Llamar al 612345678", "Km0", "30/10/2026", "", "", "",
          "", "1234", "Comercial Tres"],
         # Negociación creada, pero la última actividad es un presupuesto por teléfono: no es cita (ni venta)
         ["Pepe Mora", "600000003", "p@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
-         "05/11/2026 12:00", "N-3", "Presupuesto por teléfono", "Vendido", "", cerca, "Comercial Dos"],
+         "05/11/2026 12:00", "N-3", "Presupuesto por teléfono", "En curso (Cerrada / Vendido)", "", cerca,
+         "Comercial Dos"],
         # Lead de un comercial excluido (cuando lo está): se descarta antes de agregar
         ["Sara Gil", "600000004", "s@correo.es", "Facebook", "VW [VN][2026] Golf noviembre", "Nuevo",
-         "06/11/2026 12:00", "N-4", "Visita en exposición", "Vendido", "", cerca, "Comercial Excluido"],
+         "06/11/2026 12:00", "N-4", "Visita en exposición", "En curso (Cerrada / Vendido)", "", cerca,
+         "Comercial Excluido"],
     ]
 
 
@@ -515,6 +518,112 @@ def _vacio(tmp_path):
 
 def test_actividades_que_no_cuentan_como_cita_en_la_configuracion(wa):
     assert wa.cargar_config()["actividades_no_cita"] == ["PRESUPUESTO POR TELÉFONO"]
+
+
+# ---- valores reales de la exportación y otras marcas
+
+def _lead(campana="VW [VN][2026] Golf noviembre", tipo="Nuevo", negociacion="N-9", estado="", motivo="",
+          actividad="Visita en exposición"):
+    return {"origen": "Facebook", "campana": campana, "tipo": tipo, "fecha": "10/11/2026 10:00",
+            "negociacion": negociacion, "resultado_actividad": actividad, "estado": estado, "motivo_fracaso": motivo,
+            "codigo_postal": "", "comercial": ""}
+
+
+def _agregar(wa, conc, *leads):
+    ag = wa.Agregador(wa.cargar_config(), conc)
+    for lead in leads:
+        ag.anadir(lead)
+    return ag, _filas(ag.csv().decode())
+
+
+@pytest.mark.parametrize("estado, venta", [
+    ("Negociación creada (Cerrada / Vendido)", 1), ("En curso (Cerrada / Vendido)", 1),
+    ("En curso", 0), ("Negociación creada (Cerrada / Perdido)", 0), ("", 0),
+])
+def test_venta_es_un_estado_que_contiene_vendido(wa, conc, estado, venta):
+    _, filas = _agregar(wa, conc, _lead(estado=estado))
+    assert filas[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]["ventas"] == str(venta)
+
+
+@pytest.mark.parametrize("motivo, n", [("Número inexistente", 1), ("NUMERO INEXISTENTE", 1), ("No contesta", 0)])
+def test_numero_inexistente(wa, conc, motivo, n):
+    _, filas = _agregar(wa, conc, _lead(motivo=motivo, negociacion=""))
+    assert filas[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]["num_inexistente"] == str(n)
+
+
+@pytest.mark.parametrize("tipo, esperado", [("Nuevo", "VN"), ("VO", "VO"), ("Km0", "VO"), ("", "VN")])
+def test_tipo_de_vehiculo_solicitado(wa, conc, tipo, esperado):
+    ag, filas = _agregar(wa, conc, _lead(tipo=tipo))
+    assert list(filas) == [("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", esperado)]
+    assert ag.cuentas["tipo_por_defecto"] == (1 if tipo == "" else 0)
+
+
+def test_valores_reales_en_la_configuracion(wa):
+    cfg = wa.cargar_config()
+    assert cfg["estados_venta"] == ["Vendido"] and cfg["motivos_num_inexistente"] == ["Número inexistente"]
+    assert cfg["tipos"] == {"VN": ["Nuevo"], "VO": ["VO", "Km0"]} and cfg["tipo_por_defecto"] == "VN"
+
+
+OTRAS = ["SK [VN] [2026] Mayo", "AU[VO][2026] ABRIL", "SE [VN] [2025] Gama ahorro", "CU [VN] [2026] Marzo Cuota",
+         "SEAT [VN] [2026] Arona", "sk [vo][2025] Boutique ocasion"]
+NUESTRAS = ["VW [VN][2026] Golf noviembre", "Semana del SUV", "Special Days", "Seminuevos garantía", "Auto Days",
+            "Skyline promo"]
+
+
+def test_prefijos_de_otras_marcas_en_la_configuracion(conc):
+    assert conc.prefijos_excluidos == ("sk", "au", "se", "cu", "seat")
+    for nombre in OTRAS:
+        assert conc.otra_marca(nombre), nombre
+    for nombre in NUESTRAS:                   # como palabra entera: «Semana», «Skyline» o «Auto» no son prefijos
+        assert not conc.otra_marca(nombre), nombre
+
+
+def test_sin_prefijos_no_se_excluye_nada(tmp_path):
+    texto = (Path(__file__).resolve().parent.parent / "config" / "concesionario.yaml").read_text(encoding="utf-8")
+    f = tmp_path / "concesionario.yaml"
+    f.write_text(texto.replace("  prefijos_excluidos: [SK, AU, SE, CU, SEAT]\n", ""), encoding="utf-8")
+    otro = cargar_concesionario(f)
+    assert otro.prefijos_excluidos == () and not any(otro.otra_marca(n) for n in OTRAS)
+
+
+def test_script_excluye_otras_marcas_cuenta_y_avisa(tmp_path, conc, capsys, wa):
+    entrada = tmp_path / "leads.csv"
+    filas = _leads(conc) + [["X", "", "", "Facebook", nombre, "Nuevo", "07/11/2026", "", "", "", "", "", "C"]
+                            for nombre in OTRAS]
+    with entrada.open("w", encoding="utf-8", newline="") as f:
+        csv.writer(f, delimiter=";").writerows([EXPORTACION, *filas])
+    salida = tmp_path / "walcu.csv"
+    assert wa.main([str(entrada), str(salida)]) == 0
+    registro = capsys.readouterr().out
+    texto = salida.read_text(encoding="utf-8")
+    assert not any(n in texto for n in OTRAS)
+    assert "de campañas de otras marcas (no cuentan): 6" in registro
+    assert "Aviso: 6 leads de campañas de otras marcas excluidos" in registro
+    golf = _filas(texto)[("2026-11", "Facebook", "VW [VN][2026] Golf noviembre", "VN")]
+    assert golf["leads"] == "4"                              # las nuestras no se tocan
+
+
+def test_referencias_excluyen_otras_marcas_y_lo_cuentan(pg):
+    _escenario(pg)
+    _meta(pg, date(2025, 3, 15), "70", "SK [VN] [2025] Gama ahorro", 999, leads=50)
+    _walcu(pg, "2025-03,Facebook,SK [VN] [2025] Gama ahorro,VN,60,60,0,0,9,3,0",
+           "2025-03,Facebook,AU [VO][2025] Boutique ocasion,VO,8,8,0,0,1,0,0",
+           "2025-03,Facebook,VW [VN][2025] T-Roc marzo,VN,20,14,4,2,4,1,2",
+           "2025-03,Facebook,VW [2025] Black Friday,VN,15,10,5,0,3,1,0",
+           "2025-03,Facebook,VW [2025] Black Friday,VO,5,5,0,0,2,1,0",
+           "2025-03,Facebook,Leads sin campaña de Meta,VN,7,7,0,0,0,0,0",
+           "2026-11,Facebook,VW [VO][2026] Golf noviembre-copy,VO,10,8,2,0,2,1,1", nombre="con_otras.csv")
+    resumen = ref.actualizar(pg)
+    assert resumen["otras_marcas"] == {"meta_campanas": 1, "meta_gasto_cents": 99_900, "walcu_filas": 2,
+                                       "walcu_leads": 68}
+    r = ref.leer_referencias(pg)
+    # Las mismas cifras que sin las otras marcas
+    assert r[(2025, "todo")]["gasto_cents"] == 55_000 and r[(2025, "todo")]["leads"] == 47
+    assert r[(2025, "VN")]["citas"] == 7
+    assert not pg.execute("SELECT count(*) FROM panel_campana_mes WHERE titulo LIKE 'SK %' OR titulo LIKE 'AU %'"
+                          ).fetchone()[0]
+    assert not pg.execute("SELECT count(*) FROM panel_walcu_sin_cruce WHERE campana LIKE 'SK %' OR campana LIKE 'AU %'"
+                          ).fetchone()[0]
 
 
 def test_los_ficheros_de_excluidos_no_se_versionan():

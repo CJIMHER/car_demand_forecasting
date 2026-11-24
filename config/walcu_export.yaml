@@ -22,16 +22,18 @@ columnas:
 # Un lead con negociación creada NO cuenta como cita si su «Resultado última actividad» es uno de estos
 actividades_no_cita: ["PRESUPUESTO POR TELÉFONO"]
 
-# Venta = negociación cerrada como vendida: lead que cuenta como cita y con uno de estos estados
-estados_venta: [vendido, vendida, ganado, ganada, venta]
+# Venta = negociación cerrada como vendida: lead que cuenta como cita y cuyo Estado CONTIENE alguno de estos
+# textos. Valores reales: «Negociación creada (Cerrada / Vendido)» y «En curso (Cerrada / Vendido)»
+estados_venta: [Vendido]
 
-# Número inexistente: el motivo de fracaso contiene alguno de estos textos
-motivos_num_inexistente: [inexistente, "no existe", erroneo, "telefono incorrecto", "numero incorrecto"]
+# Número inexistente: el motivo de fracaso contiene alguno de estos textos (valor real: «Número inexistente»)
+motivos_num_inexistente: [Número inexistente]
 
-# Tipo de vehículo solicitado → VN o VO. Lo que no esté aquí (o vacío) cuenta como tipo_por_defecto
+# Tipo de vehículo solicitado → VN o VO (valores reales: «Nuevo», «VO», «Km0» y vacío). Vacío → tipo_por_defecto;
+# un valor que no esté aquí también, y se cuenta en el registro
 tipos:
-  VN: [nuevo, nuevos, vn, "vehiculo nuevo"]
-  VO: [ocasion, "vehiculo de ocasion", seminuevo, usado, vo, km0, "km 0", "kilometro cero"]
+  VN: [Nuevo]
+  VO: [VO, Km0]
 tipo_por_defecto: VN
 
 # Orígenes que se conservan con su nombre (alias → nombre). La web propia sale de config/concesionario.yaml
