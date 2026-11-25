@@ -327,9 +327,15 @@ def test_reglas_b_y_c_con_los_leads_de_meta_semana_real(pg):
         assert resumen["reglas"][r] == "real: 0 disparadas", r
     for r in ("meta_b", "meta_c", "meta_f"):
         assert resumen["reglas"][r].startswith("real"), r
-    a = {(x["regla"], x["clave"]): x for x in alertas(pg, dia=SEMANA)}
-    assert set(a) == {("meta_b", "R0"), ("meta_c", "R0"), ("meta_b", "R1"), ("meta_c", "R1")}
-    assert {x["rol"] for x in a.values()} == {"marketing"} and {x["origen"] for x in a.values()} == {"real"}
+    todas = alertas(pg, dia=SEMANA)
+    assert {x["rol"] for x in todas} == {"marketing", "tecnico"}          # técnico, con el detalle
+    m = {(x["regla"], x["clave"]): x for x in todas if x["rol"] == "marketing"}
+    a = {(x["regla"], x["clave"]): x for x in todas if x["rol"] == "tecnico"}     # el detalle
+    assert set(a) == set(m) == {("meta_b", "R0"), ("meta_c", "R0"), ("meta_b", "R1"), ("meta_c", "R1")}
+    assert {x["origen"] for x in a.values()} == {"real"}
+    assert m[("meta_b", "R0")]["texto"] == (
+        "Campaña «VW [VN][2026] T-Roc noviembre» · revisar: Hacen clic, pero pocos dejan sus datos. Qué hacer: "
+        "Revisar la llamada a la acción, el copy y las audiencias. Revisar el formulario.")
     assert ("clic a lead: 14 leads según Meta de 531 clics = 2,64 % (umbral 3 %)"
             in a[("meta_b", "R0")]["texto"])
     assert a[("meta_c", "R0")]["texto"] == (

@@ -95,6 +95,10 @@ panel anota la petición en `acciones` y cdf_jobs envía el aviso en el minuto s
 tiene el token). La misma acción sobre el mismo vehículo no se repite en 7 días. Con datos de ejemplo,
 el aviso va solo al técnico con «[EJEMPLO]». Nada se escribe en Walcu.
 
+Textos por rol: una regla con `texto_tecnico` en `reglas.yaml` da ese texto (cifras frente a umbrales, la regla) al
+rol técnico y `texto` a los demás. Las de las campañas de Meta llevan en `texto` el diagnóstico y las acciones de
+`config/mensajes_marketing.yaml` (`panel/mensajes.py`), sin umbrales ni nombres de reglas.
+
 ## Órdenes
 
     make alertas                    lo mismo que el cron de las 09:15

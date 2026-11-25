@@ -123,6 +123,8 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         conc = app.state.conc
         contexto = {"request": request, "csrf": csrf, "conc": conc, "usuario": usuario,
                     "rol": permisos.ROLES.get(usuario["rol"]) if usuario else None,
+                    # El rol técnico ve el detalle (umbrales, reglas, método); los demás, qué pasa y qué hacer
+                    "tecnico": bool(usuario) and usuario["rol"] == "tecnico",
                     "navegacion": (permisos.navegacion(usuario["rol"], estados_de(request, pg), app.state.ejemplo_para)
                                    if usuario else []),
                     "cabecera": mercado.estado_cabecera(pg, app.state.hoy()) if (usuario and pg) else None,
@@ -349,7 +351,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
         mostrar = min(int(n), 10_000) if n.isdigit() else ventas.POR_PAGINA
         return vista_contrato(request, pg, "ventas", "ventas.html", "_ventas.html", lambda: {
             "d": ventas.datos(pg, app.state.conc, modos_de(request, pg), tipo, riesgo == "1", v[:40] or None,
-                              app.state.hoy(), mostrar, modelo_vo[:80] or None)})
+                              app.state.hoy(), mostrar, modelo_vo[:80] or None, ejemplo=app.state.modo_ejemplo)})
 
     @app.post("/ventas/accion")
     def accion_ventas(request: Request, stock_id: str = Form(""), accion: str = Form(""), tipo: str = Form("todo"),
@@ -370,7 +372,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
             return redirigir(f"/ventas?tipo={tipo}{'&riesgo=1' if riesgo == '1' else ''}&v={quote(stock_id, safe='')}")
         mostrar = min(int(n), 10_000) if n.isdigit() else ventas.POR_PAGINA
         d = ventas.datos(pg, app.state.conc, modos_de(request, pg), tipo, riesgo == "1", stock_id, app.state.hoy(),
-                         mostrar)
+                         mostrar, ejemplo=app.state.modo_ejemplo)
         if d["detalle"].get("hay"):
             d["detalle"].update(mensaje=mensaje, mensaje_ok=hecha)
         return pintar(request, "_ventas.html", {"vista": "ventas", "d": d,

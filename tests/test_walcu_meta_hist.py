@@ -401,7 +401,8 @@ def test_sin_semanas_con_las_citas_completas_no_se_para_ni_se_continua(pg, conc)
 def test_regla_d_dice_que_es_el_optimo(pg):
     _, reglas = motor.cargar_reglas()
     d = next(r for r in reglas if r.id == "meta_d")
-    assert "El 33 % es el óptimo: esta alerta saltará a menudo." in d.texto(None)
+    assert "El 33 % es el óptimo: esta alerta saltará a menudo." in d.texto(None, "tecnico")
+    assert "33 %" not in d.texto(None, "marketing")             # marketing: diagnóstico y acciones
 
 
 def test_campana_sin_cruce_con_walcu_usa_los_leads_de_meta(pg, conc):
@@ -850,10 +851,11 @@ def test_marketing_ultimas_4_semanas_marca_las_incompletas_y_referencias(pg, pan
     assert filas_sem.count('class="incompleta"') == 3          # 26-10: ventas; 2-11 y 9-11: citas y ventas
     assert "Sin carga de Walcu" in filas_sem                     # la del 19-10
     assert "Ventas incompletas" in filas_sem and "Citas y ventas incompletas" in filas_sem
-    assert "Cohorte: las citas y las ventas cuentan en la semana del lead" in bloque
+    # Marketing no ve el método (cohortes); solo que las últimas semanas pueden crecer
+    assert "Cohorte" not in bloque and "Las citas y las ventas de las últimas semanas todavía pueden crecer." in bloque
     refs = html.split('id="t-referencias"')[1].split("</section>")[0]
     assert "Coste por cita" in refs and "Diferencia" in refs and "Número inexistente" in refs
-    assert "2025 (1 semanas)" in refs and "con las citas completas" in refs
+    assert "2025 (1 semanas)" in refs and "con las citas completas" not in refs      # el método, solo técnico
 
 
 # ================================================================== tipo VN/VO, empresas excluidas y equivalencias
@@ -1015,7 +1017,9 @@ def test_tarjeta_y_regla_con_los_mismos_leads_y_citas(pg, panel_url, conc):
     # La venta: la semana aún no tiene 60 días
     assert t["Ventas"].startswith("1") and "provisional" in t["Ventas"] and "provisional" in t["€ / venta"]
     # Regla a (fuera de zona: 8 de 18 = 44 % > 35 %): «Revisar:» antes de lo que hay que revisar
-    assert "(umbral 35 %). Revisar: la localización" in t["criterios"]
+    # Marketing ve el diagnóstico y las acciones, sin el umbral ni la regla
+    assert "Aumentan los leads de fuera de la zona del concesionario." in t["criterios"]
+    assert "umbral" not in t["criterios"] and "regla" not in t["criterios"].lower()
 
 
 def test_tarjeta_con_citas_provisionales_y_sin_walcu(pg, panel_url, conc):

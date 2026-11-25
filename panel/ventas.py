@@ -1,5 +1,11 @@
 """Vista «Ventas» (docs/prototipo/Ventas.dc.html): vehículos en stock ordenados por riesgo.
 
+Sin el modo ejemplo explícito (PANEL_MODO_EJEMPLO=1), solo datos reales (contrato.VISTAS_SOLO_REAL). La
+probabilidad de venta a 90 días (panel_riesgo_vehiculo) aún no tiene modelo: sin filas reales, la lista dice
+«Pendiente: modelo de probabilidad de venta (necesita el stock del CRM)» y las tarjetas de arriba salen de fuentes
+reales: nuestro stock publicado (Mercado), el precio provisional (panel_precio_vo), las salidas del mes
+(panel_salidas_stock) y los leads y citas de Walcu por semanas (panel_campana_semana).
+
 Lee panel_riesgo_vehiculo y panel_curva_grupo (contrato), el precio provisional de nuestros VO
 (panel_precio_vo) y las salidas de nuestro stock de las últimas 4 semanas (panel_salidas_stock). Las probabilidades, curvas y medianas
 llegan ya calculadas, con su p10–p90, su versión de modelo y su n; aquí solo se ordenan y se escriben.
@@ -15,12 +21,59 @@ import psycopg
 from ingesta.concesionario import Concesionario
 from panel import alertas as pal
 from panel import contrato
+from panel import direccion as dr
 from panel import formato as fmt
 from panel import negocio as ng
 from panel import precio as pr
 from panel import salidas as sal
 
 POR_PAGINA = 25
+PENDIENTE_RIESGO = "modelo de probabilidad de venta (necesita el stock del CRM)"
+SEMANAS_WALCU = 4
+
+
+def _tarjeta(valor: str, texto: str) -> tuple[str, str]:
+    return valor, texto
+
+
+def _pendiente(fuente: str) -> tuple[str, str]:
+    return fmt.GUION, f"Pendiente de conectar: {fuente}"
+
+
+def tarjetas_reales(pg: psycopg.Connection, org: dict, tipo: str, hoy: date) -> dict:
+    """Tarjetas de arriba con lo que ya tiene fuente real (sin el modelo de probabilidad de venta)."""
+    tarjetas = []
+    pub = dr.publicado(pg, tipo)
+    if pub["hay"]:
+        tarjetas.append(_tarjeta(pub["valor"], f"{pub['etiqueta'].lower()} en la web"
+                                 + (f" ({pub['sub'].split(' · ')[0]})" if tipo == "todo" else "")))
+    else:
+        tarjetas.append(_pendiente("stock publicado (scrapers)"))
+    if tipo != "VN":
+        dia = ng.ultimo_dia(pg, pr.TABLA, contrato.REAL)
+        if dia is None:
+            tarjetas.append(_pendiente("precio provisional de nuestros VO"))
+        else:
+            n = pg.execute(f"SELECT count(*) FROM {pr.TABLA} WHERE origen = 'real' AND dia = %s AND orden IN (1, 2)",
+                           (dia,)).fetchone()[0]
+            tarjetas.append(_tarjeta(fmt.miles(n), "VO con el precio a bajar o revisar frente al mercado"))
+    kpi, _ = sal.mensual(pg, contrato.REAL if org.get("salidas") == contrato.REAL else None, tipo, hoy)
+    tarjetas.append(_tarjeta(kpi["valor"], kpi["etiqueta"].lower() + " (estimación de ventas)") if kpi.get("hay")
+                    else _pendiente("salidas de nuestro stock publicado"))
+    suf = "" if tipo == "todo" else f"_{tipo.lower()}"
+    fila = pg.execute(
+        f"""SELECT count(DISTINCT semana), coalesce(sum(leads{suf}), 0), coalesce(sum(citas{suf}), 0)
+            FROM panel_campana_semana WHERE origen = 'real' AND walcu AND dia = (
+                SELECT max(dia) FROM panel_campana_semana WHERE origen = 'real')
+            AND semana >= (SELECT max(semana) FROM panel_campana_semana WHERE origen = 'real' AND walcu) - %s""",
+        (7 * (SEMANAS_WALCU - 1),)).fetchone()
+    if fila and fila[0]:
+        tarjetas.append(_tarjeta(fmt.miles(fila[1]), f"leads de las campañas de Meta en {fila[0]} semanas, con "
+                                                     f"{fmt.miles(fila[2])} citas (Walcu)"))
+    else:
+        tarjetas.append(_pendiente("leads y citas de Walcu por semanas"))
+    hay = any(v != fmt.GUION for v, _ in tarjetas)
+    return ng.bloque(contrato.REAL if hay else None, hay=True, tarjetas=tarjetas)
 # Botones del detalle: acción → (texto del botón, quién recibe el aviso, cómo se dice hecha)
 ACCIONES = {"campana": ("Pedir campaña a marketing", "marketing", "Campaña pedida a marketing"),
             "revisar_precio": ("Revisar precio", "ventas", "Revisión de precio pedida")}
@@ -47,11 +100,13 @@ def _fila(v: dict) -> dict:
 
 
 def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, solo_riesgo: bool,
-          sel: str | None, hoy: date, mostrar: int = POR_PAGINA, modelo_vo: str | None = None) -> dict:
+          sel: str | None, hoy: date, mostrar: int = POR_PAGINA, modelo_vo: str | None = None,
+          ejemplo: bool = True) -> dict:
     """`mostrar`: cuántas filas de la lista se pintan (de 25 en 25; siempre incluye el vehículo elegido).
     Los filtros y el resumen se aplican a todos los vehículos, no solo a los mostrados. `modelo_vo`: filtro
-    por modelo del bloque «Precio de nuestros VO»; viaja en todos los enlaces de la vista."""
-    org = contrato.origenes(modos, "ventas")
+    por modelo del bloque «Precio de nuestros VO»; viaja en todos los enlaces de la vista. `ejemplo`: modo
+    ejemplo explícito; sin él, solo filas reales."""
+    org = contrato.origenes(modos, "ventas", ejemplo)
     riesgo = "&riesgo=1" if solo_riesgo else ""
     extra_vo = f"&{pr.PARAMETRO}={quote(modelo_vo, safe='')}" if modelo_vo else ""
     extra = riesgo + extra_vo
@@ -75,6 +130,8 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, s
             (sum(1 for v in del_tipo if v["dias_exposicion"] > 90), "llevan más de 90 días"),
             (sum(1 for v in del_tipo if v["campana_activa"]), "tienen ya una campaña activa"),
         ])
+    elif org["lista"] is None:
+        resumen = tarjetas_reales(pg, org, tipo, hoy)
     else:
         resumen = ng.bloque(org["resumen"], hay=False)
     visibles = [v for v in del_tipo if not solo_riesgo or float(v["p_venta90_p50"]) < 0.5]
@@ -98,6 +155,8 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, s
                "url": f"/ventas?tipo={tipo}{extra}" + (f"&v={elegido['stock_id']}" if elegido else "") + f"&n={siguiente}"}
     lista = ng.bloque(org["lista"], hay=bool(todos), filas=filas, n_total=len(del_tipo), mas=mas,
                       recuento=f"{fmt.miles(len(filas))} de {fmt.miles(len(visibles))}")
+    if org["lista"] is None:
+        lista["pendiente"] = PENDIENTE_RIESGO
 
     # Detalle del vehículo elegido con la curva de su grupo
     detalle = ng.bloque(org["detalle"], hay=False)
@@ -153,7 +212,9 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, s
     precio = pr.bloque(pg, conc, org["precio"], modelo_vo, f"/ventas?tipo={tipo}{riesgo}", "#ventas")
     salidas = sal.recientes(pg, conc, org["salidas"], tipo, hoy)
     stock_crm = pr.stock_crm(pg, org["stock_crm"])
-    return {**base, "resumen": resumen, "lista": lista, "detalle": detalle, "dia": dia, "alertas": alertas,
+    if org["lista"] is None:
+        detalle["pendiente"] = PENDIENTE_RIESGO
+    return {**base, "con_riesgo": org["lista"] is not None, "resumen": resumen, "lista": lista, "detalle": detalle, "dia": dia, "alertas": alertas,
             "mostrar": mostrar, "precio": precio, "salidas": salidas, "stock_crm": stock_crm}
 
 

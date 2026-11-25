@@ -158,3 +158,16 @@
   {% else %}{{ sin_datos() }}{% endif %}
 </section>
 {%- endmacro %}
+
+{# Mensaje de acción (panel/mensajes.py): diagnóstico y acciones, sin umbrales ni reglas #}
+{% macro accion(m) %}
+<div class="mensaje-accion">
+  {% for t in m.diagnosticos %}<p class="diagnostico-negocio">{{ t }}</p>{% endfor %}
+  {% if m.acciones %}<ul class="acciones">{% for a in m.acciones %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endmacro %}
+
+{# Detalle para auditar (cifras frente a umbrales, reglas, método): solo el rol técnico #}
+{% macro detalle_tecnico(tecnico) %}
+{% if tecnico %}<details class="detalle-tecnico"><summary>Detalle técnico</summary>{{ caller() }}</details>{% endif %}
+{% endmacro %}

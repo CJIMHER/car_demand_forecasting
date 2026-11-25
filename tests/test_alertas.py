@@ -308,8 +308,9 @@ def test_vehiculo_envejecido(pg, conc):
     evaluar(pg, conc, "vehiculo_envejecido")
     a = alertas(pg, "vehiculo_envejecido")
     assert [(x["clave"], x["rol"]) for x in a] == [("S1", "ventas")]
-    assert a[0]["texto"] == ("T-Roc Life (S1): 100 días en stock, por encima del percentil 75 de su grupo "
-                             "(90 días; 30 coches).")
+    # Ventas: qué pasa y qué hacer, sin el percentil ni el límite (eso, en el texto técnico)
+    assert a[0]["texto"] == ("T-Roc Life (S1): 100 días en stock, más que la mayoría de coches parecidos. "
+                             "Revisar el precio o pedir una campaña.")
 
 
 def test_riesgo_de_inmovilizacion(pg, conc):

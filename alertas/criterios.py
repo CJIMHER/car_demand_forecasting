@@ -742,14 +742,16 @@ def recomendaciones(hoy: date, modelos_e: dict[tuple[str, str], Modelo], juicios
                 if reglas else f"Campaña «{peor.titulo}»: ninguna regla de revisión activa."
             filas.append({"tipo": tipo, "modelo": modelo, "accion": ACCION[peor.decision], "motivo": motivo,
                           "regla": ",".join(r.regla for r in reglas) or None,
-                          "cifras": {"campana_id": peor.campana_id, "reglas": [r.json() for r in reglas]},
+                          # reglas: las de su decisión (motivo); activas: todas, para el mensaje de acción
+                          "cifras": {"campana_id": peor.campana_id, "decision": peor.decision,
+                                     "reglas": [r.json() for r in reglas], "activas": [r.json() for r in activas]},
                           "prioridad": None, "n": peor.leads})
         else:
             m = modelos_e[clave]
             r = m.resultado
             texto = ("Lanzar" if r.decision == "lanzar" else "No lanzar") + f" (regla e): {r.cifras_texto}."
             filas.append({"tipo": tipo, "modelo": modelo, "accion": r.decision, "motivo": texto, "regla": "e",
-                          "cifras": r.cifras, "prioridad": None, "n": m.unidades})
+                          "cifras": {**r.cifras, "estado": r.estado}, "prioridad": None, "n": m.unidades})
     # Priorizar: más stock y mejor posición de precio
     lanzar = sorted((f for f in filas if f["accion"] == "lanzar"),
                     key=lambda f: (-modelos_e[(f["tipo"], f["modelo"])].unidades,

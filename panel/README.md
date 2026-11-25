@@ -55,6 +55,11 @@ botones de Ventas anotan la petición en `acciones` (cdf_panel solo puede leer e
 aviso por Telegram lo envía cdf_jobs: el panel no tiene el token. La misma acción no se repite sobre
 un vehículo en 7 días, y la ficha dice quién la pidió, cuándo y si el aviso salió.
 
+**Qué ve cada rol** (`panel/mensajes.py`, textos en `config/mensajes_marketing.yaml`): dirección, ventas y
+marketing ven los datos y, en cada recomendación, la decisión, un diagnóstico y las acciones, sin umbrales,
+fórmulas, nombres de reglas ni explicaciones de método. El rol técnico (`tecnico` en las plantillas) ve además el
+«Detalle técnico» y las notas de método. Ventas, como Dirección, solo lee filas reales sin `PANEL_MODO_EJEMPLO`.
+
 ## Reglas que cumple
 
 - **Datos**: nunca calcula sobre las tablas de hechos; lee `panel_mercado_*`, que rellena

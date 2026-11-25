@@ -60,6 +60,9 @@ class Concesionario:
     # Empresas del grupo con su propio marketing: sus leads (sede, equipo u origen que contiene uno de estos
     # textos) y sus campañas no cuentan
     empresas_excluidas: tuple[str, ...] = ()
+    # Ciudad del concesionario: la usan los mensajes de acción de Marketing (config/mensajes_marketing.yaml,
+    # «{ciudad}»). Sin ella, la provincia.
+    ciudad: str = ""
 
     def otra_empresa(self, texto: str | None) -> bool:
         """El texto (sede, equipo, origen o nombre de campaña) contiene una de empresas_excluidas."""
@@ -128,6 +131,7 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         palabras_excluidas=_marcas(propio, "palabras_excluidas"),
         empresas_excluidas=tuple(dict.fromkeys(_plegar(e) for e in propio.get("empresas_excluidas") or []
                                                if _plegar(e))),
+        ciudad=str(propio.get("ciudad") or "").strip() or PROVINCIAS[prov],
     )
 
 

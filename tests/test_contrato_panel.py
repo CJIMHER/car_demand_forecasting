@@ -446,7 +446,9 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     assert "Nuevos (VN) · " in camp and "Ocasión (VO) · " in camp and "VN y VO · General · " in camp
     assert "días de vida" in camp and "gasto común" not in camp           # en Todo, la de ambos con sus costes
     # El detalle va en su propia fila, a todo el ancho; en «Decisión» queda solo la decisión
-    assert re.search(r'<tr class="fila-diagnostico">\s*<td colspan="9">\s*<p class="diagnostico">Detalle · [^<]*'
+    # (para técnico, dentro del desplegable «Detalle técnico»)
+    assert re.search(r'<tr class="fila-diagnostico">\s*<td colspan="9">\s*<details class="detalle-tecnico"><summary>'
+                     r'Detalle técnico</summary>\s*<p class="diagnostico">Detalle · [^<]*'
                      r"Dónde falla: el anuncio\. Clics por impresión: [\d,]+ %, frente a [\d,]+ % de referencia "
                      r"\([\d,]+–[\d,]+ %\) en campañas con los mismos \d+ días de vida\. Probabilidad de ir peor: "
                      r"95 % \(n = 31 campañas\)", camp)

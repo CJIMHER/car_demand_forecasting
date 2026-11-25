@@ -6,9 +6,9 @@ tablas tiene una fila real; si no, 'ejemplo' si alguna tiene filas de ejemplo; s
 entra la primera fila real de una tabla, sus filas de ejemplo (y las de las demás tablas del mismo
 bloque) dejan de mostrarse, y conectar una fuente es sustituir filas sin tocar las vistas.
 
-Dirección no mezcla nunca: fuera del modo ejemplo explícito (PANEL_MODO_EJEMPLO=1), sus bloques solo
-leen filas reales y, sin ellas, dicen «Pendiente de conectar: <fuente>» o «Sin datos todavía»
-(VISTAS_SOLO_REAL; panel/direccion.py).
+Dirección y Ventas no mezclan nunca: fuera del modo ejemplo explícito (PANEL_MODO_EJEMPLO=1), sus bloques
+solo leen filas reales y, sin ellas, dicen «Pendiente de conectar: <fuente>», «Pendiente: …» o «Sin datos
+todavía» (VISTAS_SOLO_REAL; panel/direccion.py y panel/ventas.py).
 
 El estado de una vista sale de sus bloques: 'ejemplo' si alguno es de ejemplo, 'real' si alguno es
 real y ninguno de ejemplo, 'vacia' si no hay filas. Quién ve cada estado lo decide permisos.py.
@@ -61,7 +61,9 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "prevision": ("panel_prevision_modelo", "panel_prevision_semana"),   # ventas de Meta, próximas 4 semanas
     },
     "ventas": {
-        "resumen": ("panel_riesgo_vehiculo",),
+        "resumen": ("panel_riesgo_vehiculo",),      # tarjetas del modelo de probabilidad de venta (aún de ejemplo)
+        # Sin él (fuera del modo ejemplo): tarjetas de fuentes reales (stock publicado, precio provisional, salidas
+        # del mes y Walcu por semanas; panel/ventas.py, tarjetas_reales), siempre con origen real
         "lista": ("panel_riesgo_vehiculo",),
         "detalle": ("panel_riesgo_vehiculo", "panel_curva_grupo"),
         "alertas": ALERTAS,
@@ -87,7 +89,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
 }
 VISTAS = tuple(BLOQUES)
 # Vistas que, fuera del modo ejemplo explícito, nunca muestran filas de ejemplo
-VISTAS_SOLO_REAL = ("direccion",)
+VISTAS_SOLO_REAL = ("direccion", "ventas")
 
 
 @dataclass(frozen=True)

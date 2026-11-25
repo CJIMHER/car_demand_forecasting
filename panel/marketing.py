@@ -25,6 +25,7 @@ from ingesta.concesionario import Concesionario
 from panel import alertas as pal
 from panel import contrato
 from panel import formato as fmt
+from panel import mensajes as msj
 from panel import negocio as ng
 
 VENTANA = 28
@@ -207,7 +208,7 @@ def kpis(pg, origen, tipo: str = "todo") -> dict:
     return ng.bloque(origen, tarjetas=tarjetas, desde=fmt.fecha_corta(ini), hasta=fmt.fecha_corta(fin), nota=nota)
 
 
-def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
+def campanas(pg, origen, orden: str, tipo: str = "todo", ciudad: str = "") -> dict:
     v = _ventana(pg, origen)
     if v is None:
         return ng.bloque(origen, hay=False, orden=orden)
@@ -270,6 +271,7 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
                      + ("" if r["estado"] in ("activa", "no_aplica") else " (no salta)")
                      for r in reglas if r["estado"] in ("activa", "sin_volumen") and r["regla"] != "e"
                      or r["estado"] == "no_aplica"]
+        mensaje = msj.de_campana(reglas, decision, ciudad) if decision else None
         salud_texto = (f"Frente a campañas con los mismos días de vida: {ESTADOS[estado]}"
                        + (f" (n = {n_salud} campañas)" if n_salud else "")) if salud.get(cid) else ""
         filas.append({
@@ -284,6 +286,8 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
             "segun_meta": segun_meta, "citas_prov": citas_prov, "ventas_prov": ventas_prov,
             # La decisión sale de los criterios de Meta; la salud frente a su referencia es solo detalle
             "decision": decision, "decision_texto": DECISIONES[decision] if decision else "Sin decidir todavía",
+            # Para todos: diagnóstico y acciones; criterios (cifras frente a umbrales) y salud, solo para técnico
+            "mensaje": mensaje.json() if mensaje else None,
             "criterios": criterios, "salud_texto": salud_texto, "estado": estado if salud.get(cid) else None,
             "fallos": fallos, "alerta": decision in ("revisar", "parar"), "tipo_campana": tipo_campana,
             "sin_mercado": bool(fuera),
@@ -307,17 +311,32 @@ def campanas(pg, origen, orden: str, tipo: str = "todo") -> dict:
                               for o, e in (("venta", "Por coste por venta"), ("gasto", "Por gasto"))])
 
 
-def recomendacion(pg, origen, tipo: str = "todo") -> dict:
-    """VN: por modelo del stock nuevo; VO: del de ocasión; Todo: las dos, cada una con su etiqueta."""
+def mensaje_recomendacion(accion: str, regla: str | None, cifras: dict | None, ciudad: str) -> msj.Mensaje | None:
+    """Diagnóstico y acciones de la recomendación de un modelo: la de su campaña o, sin ella, lanzar o no."""
+    c = cifras or {}
+    if regla == "e" or accion in ("lanzar", "no_lanzar"):
+        return msj.componer(msj.situacion_e(accion, c, c.get("estado")), ciudad) if c else None
+    if "activas" in c or "reglas" in c:
+        return msj.de_campana(c.get("activas", c.get("reglas")) or [], c.get("decision") or
+                              {"aumentar": "subir", "mantener": "continuar"}.get(accion, accion), ciudad)
+    return None
+
+
+def recomendacion(pg, origen, tipo: str = "todo", ciudad: str = "") -> dict:
+    """VN: por modelo del stock nuevo; VO: del de ocasión; Todo: las dos, cada una con su etiqueta. Cada una con
+    su diagnóstico y sus acciones; el motivo con las cifras de las reglas, solo para técnico (sin mensaje, el
+    motivo para todos: filas de ejemplo antiguas)."""
     dia = ng.ultimo_dia(pg, "panel_recomendacion_modelo", origen)
     if dia is None:
         return ng.bloque(origen, hay=False)
     grupos = {k: [] for k, _ in ACCIONES}
-    for tipo_r, modelo, accion, motivo in pg.execute(
-            """SELECT tipo, modelo, accion, motivo FROM panel_recomendacion_modelo
+    for tipo_r, modelo, accion, motivo, regla, cifras in pg.execute(
+            """SELECT tipo, modelo, accion, motivo, regla, cifras FROM panel_recomendacion_modelo
                WHERE origen = %s AND dia = %s AND (%s = 'todo' OR tipo = %s)
                ORDER BY prioridad NULLS LAST, modelo, tipo""", (origen, dia, tipo, tipo)):
+        m = mensaje_recomendacion(accion, regla, cifras, ciudad)
         grupos[COLUMNA.get(accion, accion)].append({"modelo": modelo, "motivo": motivo,
+                                                     "mensaje": m.json() if m else None,
                                                      "tipo": tipo_r if tipo == "todo" else None,
                                                      "accion": CHIP.get(accion)})
     return ng.bloque(origen, columnas=[{"clave": k, "titulo": t, "elementos": grupos[k]} for k, t in ACCIONES
@@ -342,7 +361,7 @@ def atencion(pg, origen) -> dict:
         p = float(p)
         texto = fmt.decimal(p, decimales)
         salida.append({
-            "modelo": m, "texto": ("+" if round(p, decimales) > 0 else "") + texto,
+            "modelo": m, "texto": ("+" if round(p, decimales) > 0 else "") + texto, "interes": msj.interes(p),
             "pos": round(max(p, 0) / tope * 100, 1), "neg": round(max(-p, 0) / tope * 100, 1),
             "detalle": (f"Cuota de búsquedas: {fmt.porcentaje(float(cuota), 1)}, frente a "
                         f"{fmt.porcentaje(float(antes), 1)} en las 4 semanas anteriores · {n_comp} competidores"
@@ -567,7 +586,7 @@ def ultimas_semanas(pg, origen, tipo: str = "todo") -> dict:
         ambito, tipo_campana, modelo = x["ambito"], x["tipo_campana"], x["modelo"]
         filas.append({
             "nombre": x["titulo"], "ambito": ambito,
-            "nota": (AMBITOS[ambito] if ambito else "Sin regla")
+            "nota": (AMBITOS[ambito] if ambito else "Sin clasificar")
                     + (f" · {modelo}" if tipo_campana == "modelo" and modelo else " · General" if tipo_campana else "")
                     + (f" · leads, citas y ventas de {tipo} · {COMUN}" if comun else "")
                     + ("" if con_walcu or not walcu else " · no casa con ningún lead de Walcu"),
@@ -662,8 +681,8 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, 
         "prevision": pp.marketing(pg, org["prevision"], tipo, gasto, objetivos or {}, SEMANAS_PREVISION,
                                   f"/marketing?tipo={tipo}&orden={orden}", "#marketing"),
         "tipo": tipo, "orden": orden, "tipos": ng.selector_tipo("/marketing", tipo, "#marketing", f"&orden={orden}"),
-        "kpis": kpis(pg, org["kpis"], tipo), "recomendacion": recomendacion(pg, org["recomendacion"], tipo),
-        "campanas": campanas(pg, org["campanas"], orden, tipo),
+        "kpis": kpis(pg, org["kpis"], tipo), "recomendacion": recomendacion(pg, org["recomendacion"], tipo, conc.ciudad),
+        "campanas": campanas(pg, org["campanas"], orden, tipo, conc.ciudad),
         "atencion": atencion(pg, org["atencion"]) if tipo != "VO" else None,
         "ocasion": ocasion(pg, org["ocasion"], conc) if tipo == "VO" else None,
         "semanas": semanas(pg, org["semanas"], tipo), "pasadas": pasadas(pg, org["pasadas"], tipo), "origenes": org,

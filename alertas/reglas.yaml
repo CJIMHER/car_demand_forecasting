@@ -17,6 +17,8 @@
 #   n_minimo    clave de config/concesionario.yaml (sección panel) con el n mínimo: por debajo, la
 #               regla no salta
 #   texto       el motivo en una frase, con huecos {así} para las cifras (formato español)
+#   texto_tecnico  (opcional) el que recibe el rol técnico, con el detalle (cifras frente a umbrales, regla);
+#               con él, «texto» es para los demás roles y va sin umbrales ni nombres de reglas
 #
 # Los umbrales son una propuesta inicial (docs/diseno.md, Señales y alertas): se calibran en el piloto.
 version: reglas-2026-11-24b      # b: Walcu por semanas y cohortes de citas y ventas
@@ -106,7 +108,8 @@ reglas:
     nivel: aviso
     umbrales:
       percentil_curva: 75     # días en stock por encima del percentil 75 de la curva de su grupo
-    texto: "{vehiculo} ({stock_id}): {dias} días en stock, por encima del percentil {percentil} de su grupo ({limite} días; {n} coches)."
+    texto: "{vehiculo} ({stock_id}): {dias} días en stock, más que la mayoría de coches parecidos. Revisar el precio o pedir una campaña."
+    texto_tecnico: "{vehiculo} ({stock_id}): {dias} días en stock, por encima del percentil {percentil} de su grupo ({limite} días; {n} coches)."
 
   - id: riesgo_inmovilizacion
     nombre: Riesgo de inmovilización
@@ -155,62 +158,68 @@ reglas:
     nombre: "Campaña: leads que no se convierten en citas (regla a)"
     calculo: criterio_meta
     criterio: a
-    roles: [marketing]
+    roles: [marketing, tecnico]
     fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
-    texto: "Campaña «{titulo}» · {decision} (regla a): {cifras}. Revisar: {revisar}"
+    texto: "Campaña «{titulo}» · {decision}: {mensaje}"
+    texto_tecnico: "Campaña «{titulo}» · {decision} (regla a): {cifras}. Revisar: {revisar}"
 
   - id: meta_b
     nombre: "Campaña: el anuncio no atrae o no convence (regla b)"
     calculo: criterio_meta
     criterio: b
-    roles: [marketing]
+    roles: [marketing, tecnico]
     fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
-    texto: "Campaña «{titulo}» · {decision} (regla b): {cifras}. {revisar}"
+    texto: "Campaña «{titulo}» · {decision}: {mensaje}"
+    texto_tecnico: "Campaña «{titulo}» · {decision} (regla b): {cifras}. {revisar}"
 
   - id: meta_c
     nombre: "Campaña: lead caro (regla c)"
     calculo: criterio_meta
     criterio: c
-    roles: [marketing]
+    roles: [marketing, tecnico]
     fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
-    texto: "Campaña «{titulo}» · {decision} (regla c): {cifras}. {revisar}"
+    texto: "Campaña «{titulo}» · {decision}: {mensaje}"
+    texto_tecnico: "Campaña «{titulo}» · {decision} (regla c): {cifras}. {revisar}"
 
   - id: meta_d
     nombre: "Campaña: leads y citas en precio, pocas ventas (regla d)"
     calculo: criterio_meta
     criterio: d
-    roles: [marketing]
+    roles: [marketing, tecnico]
     fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
     # 33 % es el óptimo, no un mínimo habitual: se avisa en el texto de que saltará a menudo
-    texto: "Campaña «{titulo}» · {decision} (regla d): {cifras}. Revisar: {revisar} El 33 % es el óptimo: esta alerta saltará a menudo."
+    texto: "Campaña «{titulo}» · {decision}: {mensaje}"
+    texto_tecnico: "Campaña «{titulo}» · {decision} (regla d): {cifras}. Revisar: {revisar} El 33 % es el óptimo: esta alerta saltará a menudo."
 
   - id: meta_f
     nombre: "Campaña: cansancio del anuncio (regla f)"
     calculo: criterio_meta
     criterio: f
-    roles: [marketing]
+    roles: [marketing, tecnico]
     fuente: [panel_campana_dia]
     tema: campanas
     nivel: aviso
-    texto: "Campaña «{titulo}» · {decision} (regla f): {cifras}. Revisar: {revisar}"
+    texto: "Campaña «{titulo}» · {decision}: {mensaje}"
+    texto_tecnico: "Campaña «{titulo}» · {decision} (regla f): {cifras}. Revisar: {revisar}"
 
   - id: meta_subir
     nombre: "Campaña: subir presupuesto"
     calculo: criterio_meta
     criterio: subir
-    roles: [marketing]
+    roles: [marketing, tecnico]
     fuente: [panel_campana_dia]
     tema: campanas
     nivel: info
-    texto: "Campaña «{titulo}» · subir presupuesto: {cifras}."
+    texto: "Campaña «{titulo}» · subir presupuesto: {mensaje}"
+    texto_tecnico: "Campaña «{titulo}» · subir presupuesto: {cifras}."
 
   - id: ventana_favorable
     nombre: Ventana favorable para una campaña general

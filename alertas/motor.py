@@ -71,9 +71,13 @@ class Regla:
     nivel: str
     datos: dict                     # la entrada entera del YAML (umbrales, textos, n_minimo…)
 
-    def texto(self, caso: str | None) -> str:
+    def texto(self, caso: str | None, rol: str | None = None) -> str:
+        """El texto de la regla (o de su caso). Con «texto_tecnico», el rol técnico recibe ese (con el detalle:
+        cifras frente a umbrales) y los demás, «texto» (diagnóstico y acciones)."""
         if caso:
             return self.datos["textos"][caso]
+        if rol == TECNICO and self.datos.get("texto_tecnico"):
+            return self.datos["texto_tecnico"]
         return self.datos["texto"]
 
 
@@ -144,8 +148,8 @@ def filas_de(regla: Regla, origen: str, dia: date, res: Resultado, previas: dict
     prefijo = PREFIJO_EJEMPLO if origen == contrato.EJEMPLO else ""
     filas, vistas = [], set()
     for d in res.disparos:
-        texto = prefijo + regla.texto(d.texto).format(**d.huecos)
         for rol in roles:
+            texto = prefijo + regla.texto(d.texto, rol).format(**d.huecos)
             antes = previas.get((rol, d.clave))
             vistas.add((rol, d.clave))
             filas.append({"rol": rol, "clave": d.clave, "tipo": d.tipo, "texto": texto, "cifras": d.cifras,

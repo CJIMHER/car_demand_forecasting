@@ -1,0 +1,110 @@
+# Mensajes de acción de las campañas de Meta y de los modelos sin campaña (panel/mensajes.py): lo que ven
+# dirección, ventas y marketing en el panel y en Telegram. Lenguaje de negocio: qué pasa y qué hacer, sin
+# umbrales, fórmulas ni nombres de reglas (ese detalle solo lo ve el rol técnico, en «Detalle técnico»).
+#
+# Cada situación: decisión (parar, revisar, continuar, subir, lanzar, no_lanzar: ordena de más a menos
+# importante), diagnóstico en una frase y acciones (una por elemento; si varias situaciones repiten una
+# acción, se muestra una vez). «{ciudad}» se sustituye por la ciudad del concesionario
+# (config/concesionario.yaml, propio.ciudad).
+#
+# Las claves las asigna el código a partir de las reglas internas (alertas/criterios.py); en el comentario
+# de cada una, cuál.
+
+situaciones:
+  no_atrae:                       # b: pocos clics por impresión
+    decision: revisar
+    diagnostico: El anuncio no llama la atención.
+    acciones:
+      - Renovar la creatividad (reel, foto) y el mensaje.
+      - Revisar las audiencias.
+  no_convence:                    # b: clics que no se convierten en leads
+    decision: revisar
+    diagnostico: Hacen clic, pero pocos dejan sus datos.
+    acciones:
+      - Revisar la llamada a la acción, el copy y las audiencias.
+      - Revisar el formulario.
+  menos_leads:                    # b: menos leads por impresión que campañas comparables
+    decision: revisar
+    diagnostico: Esta campaña trae menos leads que otras del mismo modelo.
+    acciones:
+      - Revisar la creatividad, la oferta y las audiencias.
+  lead_cita:                      # a: lead a cita baja
+    decision: revisar
+    diagnostico: Llegan leads, pero pocos acaban en cita.
+    acciones:
+      - Revisar la localización de la campaña y la calidad de los datos de los leads (teléfonos que no existen, datos incompletos).
+      - Revisar los motivos de descarte que anotan los comerciales.
+  fuera_zona:                     # a: muchos leads de fuera de zona
+    decision: revisar
+    diagnostico: Aumentan los leads de fuera de la zona del concesionario.
+    acciones:
+      - Revisar las audiencias y la geolocalización de la campaña.
+      - El copy y las imágenes deben incluir la ciudad del concesionario ({ciudad}).
+      - "En el formulario, preguntas obligatorias: el código postal y «¿Quieres venir a {ciudad} a ver el vehículo?»."
+  caro_parar:                     # c: lead caro y cita cara
+    decision: parar
+    diagnostico: Los leads y las citas están saliendo caros.
+    acciones:
+      - Parar la campaña y revisar las audiencias y la creatividad.
+  caro_continuar:                 # c: lead caro, cita en precio
+    decision: continuar
+    diagnostico: Los leads salen caros, pero las citas están en precio.
+    acciones:
+      - Continuar y vigilar el coste.
+  lead_caro:                      # c: lead caro sin coste por cita con el que comparar todavía
+    decision: revisar
+    diagnostico: Los leads están saliendo caros y aún no se puede saber si las citas compensan.
+    acciones:
+      - Revisar las audiencias y la creatividad.
+      - Vigilar el coste por cita cuando lleguen las citas.
+  cita_venta:                     # d: cita a venta baja
+    decision: revisar
+    diagnostico: Las citas no se convierten en ventas.
+    acciones:
+      - "Revisar la acción comercial: seguimiento, oferta y motivos de descarte."
+      - Revisar el precio frente a la competencia de la zona.
+  cansancio:                      # f: cansancio del anuncio
+    decision: revisar
+    diagnostico: El anuncio da señales de cansancio.
+    acciones:
+      - Renovar la creatividad (reel, foto, copy) antes de seguir invirtiendo.
+  subir:                          # subir presupuesto
+    decision: subir
+    diagnostico: La campaña va bien en coste, citas y ventas.
+    acciones:
+      - Se puede subir el presupuesto.
+  en_linea:                       # ninguna señal: continuar
+    decision: continuar
+    diagnostico: La campaña va en línea, sin señales de alarma.
+    acciones:
+      - Continuar.
+  pocos_datos:                    # campaña recién empezada o con poco volumen todavía
+    decision: continuar
+    diagnostico: Aún hay pocos datos para juzgar la campaña.
+    acciones:
+      - Esperar unos días.
+  sin_stock:                      # e: no lanzar por stock
+    decision: no_lanzar
+    diagnostico: Hay poco stock de este modelo para lanzar una campaña.
+    acciones:
+      - Esperar a tener más unidades.
+  precio_alto:                    # e: no lanzar por precio
+    decision: no_lanzar
+    diagnostico: Nuestro precio está por encima del mercado cercano.
+    acciones:
+      - Revisar el precio antes de lanzar.
+  sin_comparables:                # e: sin competencia comparable para juzgar el precio
+    decision: no_lanzar
+    diagnostico: No hay coches comparables en el mercado cercano para saber si nuestro precio compite.
+    acciones:
+      - Revisar el precio frente a la competencia antes de lanzar.
+  lanzar:                         # e: se puede lanzar
+    decision: lanzar
+    diagnostico: Hay stock y nuestro precio compite en el mercado cercano.
+    acciones:
+      - Se puede lanzar una campaña.
+
+# Interés de búsqueda (Google Trends) frente a sus rivales: variación en puntos a partir de la cual es «sube» o
+# «baja» (entre medias, «estable»)
+interes:
+  umbral_puntos: 1

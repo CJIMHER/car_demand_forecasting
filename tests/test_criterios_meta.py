@@ -386,13 +386,21 @@ def test_motor_alertas_decision_y_recomendacion(pg, conc):
     _buena(pg, cid="BUENA")
     campana(pg, "MALA", leads=40, citas=1, gasto=50_000, modelo="T-Roc", titulo="T-Roc noviembre")   # a y c
     motor.evaluar(pg, HOY, conc, reglas(*META))
-    a = {(x["regla"], x["clave"]): x for x in alertas(pg)}
-    assert set(a) >= {("meta_a", "MALA"), ("meta_c", "MALA"), ("meta_subir", "BUENA")}
-    assert {x["rol"] for x in a.values()} == {"marketing"}
+    todas = alertas(pg)
+    assert {x["rol"] for x in todas} == {"marketing", "tecnico"}
+    a = {(x["regla"], x["clave"]): x for x in todas if x["rol"] == "marketing"}
+    t = {(x["regla"], x["clave"]): x for x in todas if x["rol"] == "tecnico"}
+    assert set(a) >= {("meta_a", "MALA"), ("meta_c", "MALA"), ("meta_subir", "BUENA")} and set(t) == set(a)
+    # Marketing: diagnóstico y acciones, sin umbrales ni reglas; técnico: el detalle
     assert a[("meta_a", "MALA")]["texto"].startswith(
+        "Campaña «T-Roc noviembre» · revisar: Llegan leads, pero pocos acaban en cita. Qué hacer: ")
+    assert "regla" not in a[("meta_a", "MALA")]["texto"] and "umbral" not in a[("meta_a", "MALA")]["texto"]
+    assert t[("meta_a", "MALA")]["texto"].startswith(
         "Campaña «T-Roc noviembre» · revisar (regla a): lead a cita: 1 de 40 = 2,5 % (umbral 5 %). Revisar: ")
     assert a[("meta_a", "MALA")]["cifras"]["n_minimo_leads"] == 20 and a[("meta_a", "MALA")]["cifras"]["leads"] == 40
-    assert a[("meta_subir", "BUENA")]["texto"].startswith("Campaña «BUENA» · subir presupuesto: coste por lead 4,90 €")
+    assert a[("meta_subir", "BUENA")]["texto"] == ("Campaña «BUENA» · subir presupuesto: La campaña va bien en coste, "
+                                                  "citas y ventas. Qué hacer: Se puede subir el presupuesto.")
+    assert t[("meta_subir", "BUENA")]["texto"].startswith("Campaña «BUENA» · subir presupuesto: coste por lead 4,90 €")
     decisiones = dict(pg.execute("SELECT campana_id, decision FROM panel_campana_decision").fetchall())
     assert decisiones == {"BUENA": "subir", "MALA": "parar"}
     reco = {m: (a_, r, p) for m, a_, r, p in pg.execute(

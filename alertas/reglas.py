@@ -22,6 +22,7 @@ from psycopg import sql
 
 from ingesta.concesionario import Concesionario
 from panel import formato as fmt
+from panel import mensajes as msj
 
 TODOS = "*"           # en Resultado.sin_evaluar: la regla entera
 TIPOS = ("VN", "VO")
@@ -364,9 +365,12 @@ def criterio_meta(ctx: Contexto) -> Resultado:
         if res is None or not res.activa:
             continue
         decision = {"subir": "subir presupuesto"}.get(res.decision, res.decision)
+        # Para marketing: diagnóstico y acciones (config/mensajes_marketing.yaml); para técnico, las cifras
+        m = msj.de_resultado(res.json(), ctx.conc.ciudad)
         r.disparos.append(Disparo(
             j.campana_id, {"campana_id": j.campana_id, "regla": letra, "decision": res.decision, **res.cifras},
-            {"titulo": j.titulo, "decision": decision, "cifras": res.cifras_texto, "revisar": res.revisar},
+            {"titulo": j.titulo, "decision": decision, "cifras": res.cifras_texto, "revisar": res.revisar,
+             "mensaje": m.texto() if m else ""},
             tipo=j.tipo))
     return r
 

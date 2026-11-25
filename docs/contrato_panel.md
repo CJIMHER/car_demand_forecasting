@@ -34,15 +34,33 @@ siempre con datos reales (ver `analitica/README.md`).
   - porcentajes en tanto por cien (`_pct`, y las medidas con `unidad = '%'`);
   - días, enteros.
 
-## Dirección: solo datos reales salvo en el modo ejemplo explícito
+## Dirección y Ventas: solo datos reales salvo en el modo ejemplo explícito
 
 Sin `PANEL_MODO_EJEMPLO=1` (variable del panel, vacía por defecto), Dirección nunca muestra filas de ejemplo,
 aunque estén cargadas (`make ejemplo-cargar`): cada bloque lee solo filas reales. Sin ellas, dice «Pendiente de
 conectar: <fuente>» si su fuente todavía no existe (stock interno y la predicción de ventas) o «Sin datos
 todavía» si la fuente existe y aún no ha escrito nada. Sin stock interno real, la tarjeta de stock muestra
 nuestro stock publicado en la web (Mercado). El estado de la vista para los permisos sale también solo de las
-filas reales. Ventas y Marketing no cambian. Con `PANEL_MODO_EJEMPLO=1` (y en `make panel-dev`), Dirección se
-comporta como las demás vistas.
+filas reales. Con `PANEL_MODO_EJEMPLO=1` (y en `make panel-dev`), Dirección se comporta como las demás vistas.
+
+Ventas, igual (`contrato.VISTAS_SOLO_REAL`). La probabilidad de venta a 90 días (`panel_riesgo_vehiculo`) aún no
+tiene modelo (necesita el historial de stock del CRM): sin filas reales, la lista y el detalle dicen «Pendiente:
+modelo de probabilidad de venta (necesita el stock del CRM)» y las tarjetas de arriba salen de fuentes reales:
+nuestro stock publicado en la web (`panel_mercado_dia`), los VO con el precio a bajar o revisar
+(`panel_precio_vo`), las salidas del mes (`panel_salidas_stock`) y los leads y citas de Walcu por semanas de las
+últimas 4 semanas (`panel_campana_semana`); cada una dice «Pendiente de conectar: <fuente>» sin ella. Marketing no
+cambia.
+
+## Lo que ve cada rol: qué pasa y qué hacer
+
+Dirección, ventas y marketing ven los datos (gasto, leads, citas, ventas, costes) y, en cada recomendación, la
+decisión, un diagnóstico y las acciones (`panel/mensajes.py`, textos en `config/mensajes_marketing.yaml` con
+`{ciudad}` de `config/concesionario.yaml`). No ven umbrales, fórmulas, nombres de reglas ni explicaciones de
+método (cohortes, reparto del gasto, cálculo del interés de búsqueda, validación de la previsión). El rol técnico
+ve además todo el detalle, en «Detalle técnico» bajo cada recomendación y en las notas de método. Las tablas no
+cambian: `panel_campana_decision.reglas` y `panel_recomendacion_modelo.cifras` guardan el detalle y el mensaje se
+compone al pintar. Las alertas de las campañas de Meta llevan dos textos (`texto` y `texto_tecnico` en
+`alertas/reglas.yaml`): marketing recibe el diagnóstico y las acciones; técnico, las cifras frente a los umbrales.
 
 ## Un bloque no mezcla orígenes
 
@@ -94,7 +112,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Dirección | Tráfico de la web por canal (GA4) | `panel_trafico_canal_dia` |
 | Dirección | Ventas previstas de las campañas de Meta, próximas 4 semanas, por VN y VO | `panel_prevision_modelo` y `panel_prevision_semana` |
 | Dirección y Ventas | Precio de nuestros VO | `panel_precio_vo` |
-| Ventas | Resumen y lista de vehículos | `panel_riesgo_vehiculo` |
+| Ventas | Resumen y lista de vehículos | `panel_riesgo_vehiculo` (sin filas reales y fuera del modo ejemplo: lista «Pendiente» y tarjetas de `panel_mercado_dia`, `panel_precio_vo`, `panel_salidas_stock` y `panel_campana_semana`) |
 | Ventas | Detalle del vehículo | `panel_riesgo_vehiculo` y `panel_curva_grupo` |
 | Ventas y Dirección | Precio de nuestros VO (provisional; Marketing no lo ve) | `panel_precio_vo` |
 | Ventas | Salidas de nuestro stock de las últimas 4 semanas, un coche por fila | `panel_salidas_stock` |
@@ -102,7 +120,7 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Marketing | Tarjetas de 28 días | `panel_campana_dia` y `panel_leads_dia` |
 | Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_campana_semana` (Walcu por semanas, como las reglas), `panel_campana_salud` y `panel_campana_decision` |
 | Marketing | Recomendación por modelo | `panel_recomendacion_modelo` |
-| Marketing | Atención frente a sus rivales (Todo y VN) | `panel_atencion_relativa` |
+| Marketing | Interés de búsqueda frente a sus rivales (Todo y VN): sube, estable o baja (los puntos, solo técnico) | `panel_atencion_relativa` |
 | Marketing | Ocasión: dónde hay stock que mover (solo VO) | `panel_riesgo_vehiculo`, la misma tabla que Ventas |
 | Marketing | Cuándo lanzar una campaña general | `panel_semana_campana` |
 | Marketing | Qué dieron las campañas pasadas | `panel_campana_resultado` |
@@ -353,8 +371,8 @@ En la vista Marketing, la decisión es la columna de cada campaña; la salud fre
 | Columna | Unidad | Significado |
 | --- | --- | --- |
 | `accion` | aumentar, mantener, revisar, parar, lanzar, no_lanzar (y reducir, cambiar de los datos de ejemplo anteriores) | Criterios de Meta: la decisión de las campañas del modelo (subir → aumentar, continuar → mantener) o, sin campaña, la regla e |
-| `regla`, `cifras`, `prioridad` | | La regla que la decide, sus cifras y, en «lanzar», el orden (más stock y mejor precio primero) |
-| `motivo` | texto | Una frase con las cifras que la justifican |
+| `regla`, `cifras`, `prioridad` | | La regla que la decide, sus cifras y, en «lanzar», el orden (más stock y mejor precio primero). Con campaña, `cifras` lleva `decision`, `reglas` (las de su decisión) y `activas` (todas las activas, para el mensaje de acción); sin ella, las de la regla e y su `estado` |
+| `motivo` | texto | Una frase con las cifras que la justifican (solo la ve el rol técnico; los demás, el diagnóstico y las acciones) |
 | `modelo_version`, `n` | | Versión de las reglas; `n` = días de datos en que se apoyan |
 
 No lleva intervalo porque es una decisión, no una cifra. Las cifras en que se apoya están en las demás tablas.

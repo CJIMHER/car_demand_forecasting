@@ -1,5 +1,21 @@
 # Cambios
 
+## 2026-11-25 · Mensajes de acción sin «la cocina», y Ventas solo con datos reales (rama hito-1b-mensajes)
+
+- **Mensajes de acción** (`panel/mensajes.py`, `config/mensajes_marketing.yaml`): cada recomendación de campaña o
+  de modelo dice la decisión, un diagnóstico en una frase y las acciones, ordenadas por importancia y sin repetir;
+  `{ciudad}` de `config/concesionario.yaml` (campo nuevo `ciudad` en `Concesionario`).
+- **Sin umbrales, fórmulas, reglas ni método** para dirección, ventas y marketing (Marketing, Dirección y Ventas):
+  el técnico lo ve en «Detalle técnico» y en las notas de método. Interés de búsqueda: sube, estable o baja.
+  Previsión: sin la validación ni el motivo técnico.
+- **Telegram**: alertas de campañas de Meta con `texto` (diagnóstico y acciones, para marketing) y `texto_tecnico`
+  (el detalle, para el técnico, que pasa a recibirlas). «Vehículo envejecido», sin percentil.
+- **Ventas solo con datos reales** (`VISTAS_SOLO_REAL`): sin `PANEL_MODO_EJEMPLO`, tarjetas de fuentes reales
+  (stock publicado, precio provisional, salidas del mes, leads y citas de Walcu) y «Pendiente: modelo de
+  probabilidad de venta (necesita el stock del CRM)» en la lista y el detalle.
+- `docs/hitos/hito_1b_mensajes_resumen.md` con el inventario de los bloques de Ventas. Pruebas en
+  `tests/test_mensajes.py`.
+
 ## 2026-11-25 · API de Walcu: código postal agregado, ventas con cita y «sin configurar» (rama hito-3-walcu-api)
 
 - Rama rebasada sobre `origin/main` (`53af9c7`, con `make salidas-diagnostico`).

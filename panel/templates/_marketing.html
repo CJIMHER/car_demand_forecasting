@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas %}
+{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas, accion, detalle_tecnico %}
 <div id="marketing" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -50,11 +50,11 @@
           {% if not g.publicada %}
           <tr class="no-publicada{% if g.es_tipo %} grupo{% endif %}" data-tipo="{{ g.tipo }}" data-modelo="{{ g.modelo or '' }}" data-publicada="no">
             <th scope="row" class="izq">{{ g.nombre }}{% if not g.es_tipo %} <span class="chip chip-tipo">{{ g.tipo }}</span>{% endif %}</th>
-            <td colspan="4" class="izq">{{ g.validacion }}</td>
+            <td colspan="4" class="izq">{% if tecnico %}{{ g.validacion }}{% else %}Sin previsión todavía: faltan datos para que sea fiable.{% endif %}</td>
           </tr>
           {% else %}
           <tr class="{% if g.es_tipo %}grupo{% endif %}{% if g.pocos %} pocos-datos{% endif %}" data-tipo="{{ g.tipo }}" data-modelo="{{ g.modelo or '' }}">
-            <th scope="row" class="izq">{{ g.nombre }}{% if not g.es_tipo %} <span class="chip chip-tipo">{{ g.tipo }}</span>{% endif %}{% if g.pocos %} <span class="chip chip-pocos" title="{{ g.motivo }}">Pocos datos</span>{% endif %}</th>
+            <th scope="row" class="izq">{{ g.nombre }}{% if not g.es_tipo %} <span class="chip chip-tipo">{{ g.tipo }}</span>{% endif %}{% if g.pocos %} <span class="chip chip-pocos"{% if tecnico %} title="{{ g.motivo }}"{% endif %}>Pocos datos</span>{% endif %}</th>
             <td data-etiqueta="Gasto semanal">{{ g.gasto }}</td>
             {% for m in ("leads", "citas", "ventas") %}
             <td data-etiqueta="{{ m|capitalize }}" class="c-{{ m }}">{{ g[m].p50 }}<span class="n">{{ g[m].intervalo }}</span></td>
@@ -63,8 +63,10 @@
           {% if g.inversa %}
           <tr class="fila-inversa" data-tipo="{{ g.tipo }}"><td colspan="5" class="izq">{{ g.inversa }}</td></tr>
           {% endif %}
-          {% if g.es_tipo %}
+          {% if g.es_tipo and tecnico %}
           <tr class="fila-inversa fila-validacion" data-tipo="{{ g.tipo }}"><td colspan="5" class="izq">{{ g.validacion }}{% if g.aviso_gasto %} <strong>{{ g.aviso_gasto }}</strong>{% endif %}</td></tr>
+          {% elif g.es_tipo and g.aviso_gasto %}
+          <tr class="fila-inversa" data-tipo="{{ g.tipo }}"><td colspan="5" class="izq"><strong>{{ g.aviso_gasto }}</strong></td></tr>
           {% endif %}
           {% endif %}
           {% endfor %}
@@ -78,7 +80,8 @@
       {% endfor %}
       <button type="submit" class="boton-accion secundario">Calcular el gasto</button>
     </form>
-    <p class="nota">Total de las {{ d.prevision.n_semanas }} semanas: la mediana y, debajo, el intervalo del {{ d.prevision.pct }} % (8 de cada 10 veces cae ahí). Con el gasto semanal del escenario (actual: la media de las 2 últimas semanas de cada campaña activa); sin gasto, 0. Los modelos no suman el tipo: cada uno es su propia previsión, apoyada en la de su tipo cuando tiene pocos datos{% if d.prevision.hay_pocos %} («Pocos datos»: pasa el ratón por encima para ver por qué){% endif %}. La validación está en Estado de las fuentes. Calculado el {{ d.prevision.calculado }}.</p>
+    {% if not tecnico %}<p class="nota">Total de las {{ d.prevision.n_semanas }} semanas: lo más probable y, debajo, entre qué cifras estará casi seguro. Con el gasto semanal del escenario elegido.{% if d.prevision.hay_pocos %} «Pocos datos»: previsión con pocos datos, tómala con cautela.{% endif %}</p>{% else %}
+    <p class="nota">Total de las {{ d.prevision.n_semanas }} semanas: la mediana y, debajo, el intervalo del {{ d.prevision.pct }} % (8 de cada 10 veces cae ahí). Con el gasto semanal del escenario (actual: la media de las 2 últimas semanas de cada campaña activa); sin gasto, 0. Los modelos no suman el tipo: cada uno es su propia previsión, apoyada en la de su tipo cuando tiene pocos datos{% if d.prevision.hay_pocos %} («Pocos datos»: pasa el ratón por encima para ver por qué){% endif %}. La validación está en Estado de las fuentes. Calculado el {{ d.prevision.calculado }}.</p>{% endif %}
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 
@@ -92,7 +95,7 @@
         {% for i in col.elementos %}
         <div>
           <div class="reco-modelo">{{ i.modelo }}{% if i.tipo %} <span class="chip chip-tipo">{{ i.tipo }}</span>{% endif %}{% if i.accion %} <span class="chip chip-revisar_precio">{{ i.accion }}</span>{% endif %}</div>
-          <p class="reco-motivo">{{ i.motivo }}</p>
+          {% if i.mensaje %}{{ accion(i.mensaje) }}{% call detalle_tecnico(tecnico) %}<p class="reco-motivo">{{ i.motivo }}</p>{% endcall %}{% else %}<p class="reco-motivo">{{ i.motivo }}</p>{% endif %}
         </div>
         {% else %}
         <p class="nota">Ningún modelo.</p>
@@ -100,7 +103,7 @@
       </div>
       {% endfor %}
     </div>
-    <p class="nota">Son sugerencias; decide marketing. Siguen los criterios de las campañas de Meta: para un modelo con campaña, la decisión de su campaña (con la regla y sus cifras); sin campaña, si se puede lanzar (regla e: al menos 3 unidades propias y nuestro precio por debajo de la mediana de la competencia en la zona cercana, mismo modelo, acabado y motor), primero los de más stock y mejor precio.{% if d.tipo == "VO" %} En ocasión, por modelo del stock de ocasión.{% elif d.tipo == "todo" %} Cada modelo lleva su etiqueta: VN, del stock nuevo; VO, del de ocasión.{% endif %}</p>
+    <p class="nota">Son sugerencias; decide marketing.{% if tecnico %} Siguen los criterios de las campañas de Meta: para un modelo con campaña, la decisión de su campaña (con la regla y sus cifras); sin campaña, si se puede lanzar (regla e: al menos 3 unidades propias y nuestro precio por debajo de la mediana de la competencia en la zona cercana, mismo modelo, acabado y motor), primero los de más stock y mejor precio.{% endif %}{% if d.tipo == "VO" %} En ocasión, por modelo del stock de ocasión.{% elif d.tipo == "todo" %} Cada modelo lleva su etiqueta: VN, del stock nuevo; VO, del de ocasión.{% endif %}</p>
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 
@@ -145,11 +148,14 @@
                 <span class="chip chip-decision-{{ c.decision or 'ninguna' }}">{{ c.decision_texto }}</span>
               </td>
             </tr>
-            {% if c.criterios or c.salud_texto %}
+            {% if c.mensaje or (tecnico and (c.criterios or c.salud_texto)) %}
             <tr class="fila-diagnostico">
               <td colspan="9">
+                {% if c.mensaje %}{{ accion(c.mensaje) }}{% endif %}
+                {% call detalle_tecnico(tecnico) %}
                 {% for t in c.criterios %}<p class="criterio">{{ t }}</p>{% endfor %}
                 {% if c.salud_texto %}<p class="diagnostico">Detalle · {{ c.salud_texto }}.{% for t in c.fallos %} {{ t }}.{% endfor %}</p>{% endif %}
+                {% endcall %}
               </td>
             </tr>
             {% endif %}
@@ -160,10 +166,11 @@
         </table>
       </div>
       {% if not d.campanas.hay_leads %}<p class="nota motivo">Sin carga de Walcu: leads según Meta; citas y ventas, sin datos todavía.</p>{% endif %}
-      <p class="nota">Gasto, leads, citas y ventas: toda la vida de la campaña. Leads, citas y ventas, de Walcu por semanas (las mismas que usan las reglas); sin carga de Walcu que case, los leads según Meta. Los costes usan el gasto de las semanas con carga de Walcu. «Provisional»: alguna semana de la campaña aún no tiene las citas ({{ d.campanas.dias_cita }} días) o las ventas ({{ d.campanas.dias_venta }} días) completas y la cifra puede crecer; las reglas solo usan las semanas completas.</p>
+      {% if not tecnico %}<p class="nota">Gasto, leads, citas y ventas: toda la vida de la campaña, de Meta y Walcu. «Provisional»: la cifra aún puede crecer.</p>{% else %}
+      <p class="nota">Gasto, leads, citas y ventas: toda la vida de la campaña. Leads, citas y ventas, de Walcu por semanas (las mismas que usan las reglas); sin carga de Walcu que case, los leads según Meta. Los costes usan el gasto de las semanas con carga de Walcu. «Provisional»: alguna semana de la campaña aún no tiene las citas ({{ d.campanas.dias_cita }} días) o las ventas ({{ d.campanas.dias_venta }} días) completas y la cifra puede crecer; las reglas solo usan las semanas completas.</p>{% endif %}
       {% if d.campanas.otras %}<p class="nota otras-marcas">{{ d.campanas.otras }}</p>{% endif %}
-      {% if d.campanas.hay_comun %}<p class="nota">Campaña de VN y VO: leads, citas y ventas solo de {{ d.tipo }}. Su gasto es común a VN y VO y no se reparte con ninguna regla, así que aquí no tiene coste por lead, por cita ni por venta; se ve completo en «Todo».</p>{% endif %}
-      <p class="nota">Decisión (continuar, revisar, parar o subir presupuesto): con los criterios de las campañas de Meta, desde el segundo día de vida; cada regla dice sus cifras frente a su umbral y su n, y con poco volumen se muestra sin saltar. Detalle: cada medida de la campaña (entrega, anuncio, web, calidad del lead y stock) se compara con su referencia en campañas anteriores de su mismo ámbito (VN, VO o los dos) con los mismos días de vida; explica, pero no decide. El tipo (de un modelo o general) y el ámbito de cada campaña salen de su nombre, con las reglas de config/campanas.yaml. Con un modelo que no capturamos en Mercado («sin datos de mercado»), la regla e y la comparación con la competencia no se aplican.</p>
+      {% if d.campanas.hay_comun %}<p class="nota">Campaña de VN y VO: leads, citas y ventas solo de {{ d.tipo }}. Su gasto es común a VN y VO y no se reparte, así que aquí no tiene coste por lead, por cita ni por venta; se ve completo en «Todo».</p>{% endif %}
+      {% if tecnico %}<p class="nota">Decisión (continuar, revisar, parar o subir presupuesto): con los criterios de las campañas de Meta, desde el segundo día de vida; cada regla dice sus cifras frente a su umbral y su n, y con poco volumen se muestra sin saltar. Detalle: cada medida de la campaña (entrega, anuncio, web, calidad del lead y stock) se compara con su referencia en campañas anteriores de su mismo ámbito (VN, VO o los dos) con los mismos días de vida; explica, pero no decide. El tipo (de un modelo o general) y el ámbito de cada campaña salen de su nombre, con las reglas de config/campanas.yaml. Con un modelo que no capturamos en Mercado («sin datos de mercado»), la regla e y la comparación con la competencia no se aplican.</p>{% endif %}
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
 
@@ -203,8 +210,10 @@
     {% else %}
     <section aria-labelledby="t-atencion" class="tarjeta tarjeta-estrecha"{{ attrs("atencion", d.atencion) }}>
       <div>
-        <h2 id="t-atencion">Atención frente a sus rivales</h2>
-        {% if d.atencion.hay and d.atencion.entrega %}
+        <h2 id="t-atencion">Interés de búsqueda frente a sus rivales</h2>
+        {% if not tecnico %}
+        <p class="nota">Si las búsquedas en Google del modelo suben, están estables o bajan frente a sus rivales{% if d.atencion.hay and d.atencion.semana_fin %} · hasta el {{ d.atencion.semana_fin }}{% endif %}</p>
+        {% elif d.atencion.hay and d.atencion.entrega %}
         <p class="nota">Cuota de búsquedas en Google del modelo frente a sus competidores: últimas 4 semanas (hasta el {{ d.atencion.semana_fin }}) frente a las 4 anteriores, en puntos · descarga de Google Trends del {{ d.atencion.entrega }}</p>
         {% else %}
         <p class="nota">Búsquedas en Google del modelo frente a su segmento, en puntos{% if d.atencion.hay %} · {{ d.atencion.mes }}{% endif %}</p>
@@ -213,14 +222,15 @@
       {{ marca(d.atencion) }}
       {% if d.atencion.hay %}
       {% for m in d.atencion.filas %}
-      <div class="atencion"{% if m.detalle %} title="{{ m.detalle }}"{% endif %}>
+      <div class="atencion"{% if m.detalle and tecnico %} title="{{ m.detalle }}"{% endif %}>
         <span class="atencion-modelo">{{ m.modelo }}</span>
         <svg class="atencion-barra neg" viewBox="0 0 100 18" preserveAspectRatio="none" aria-hidden="true"><rect class="relleno viejo" x="{{ 100 - m.neg }}" width="{{ m.neg }}" height="18"></rect></svg>
         <svg class="atencion-barra pos" viewBox="0 0 100 18" preserveAspectRatio="none" aria-hidden="true"><rect class="relleno" width="{{ m.pos }}" height="18"></rect></svg>
-        <span class="atencion-texto">{{ m.texto }}</span>
+        <span class="atencion-texto">{% if tecnico %}{{ m.texto }}{% else %}{{ m.interes|capitalize }}{% endif %}</span>
       </div>
       {% endfor %}
-      <p class="nota">Es una señal direccional: la única externa que ha anticipado algo las matriculaciones. Anticipa poco, así que se usa como pista, no como orden.{% if d.atencion.entrega %} Cuota: búsquedas del modelo entre las de todos los términos de su comparación (con varias comparaciones, la media); Google Trends se descarga a mano una vez al mes (última descarga: {{ d.atencion.entrega }}).{% endif %}</p>
+      {% if not tecnico %}<p class="nota">Es una pista, no una orden.</p>{% else %}
+      <p class="nota">Es una señal direccional: la única externa que ha anticipado algo las matriculaciones. Anticipa poco, así que se usa como pista, no como orden.{% if d.atencion.entrega %} Cuota: búsquedas del modelo entre las de todos los términos de su comparación (con varias comparaciones, la media); Google Trends se descarga a mano una vez al mes (última descarga: {{ d.atencion.entrega }}).{% endif %}</p>{% endif %}
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
     {% endif %}
@@ -261,7 +271,7 @@
         </li>
         {% endfor %}
       </ul>
-      <p class="nota">«Sin campaña»: lo esperado si no se hubiera lanzado, con su intervalo (del percentil 10 al 90). Por encima o por debajo, si lo observado queda fuera del intervalo. Es una comparación con un modelo, no un experimento.{% if d.tipo != "todo" %} En las generales, solo los leads y ventas de {{ d.tipo }}.{% endif %}</p>
+      {% if not tecnico %}<p class="nota">«Sin campaña»: lo que se esperaba sin la campaña. Es orientativo.</p>{% endif %}{% if tecnico %}<p class="nota">«Sin campaña»: lo esperado si no se hubiera lanzado, con su intervalo (del percentil 10 al 90). Por encima o por debajo, si lo observado queda fuera del intervalo. Es una comparación con un modelo, no un experimento.{% if d.tipo != "todo" %} En las generales, solo los leads y ventas de {{ d.tipo }}.{% endif %}</p>{% endif %}
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
   </div>
@@ -303,7 +313,7 @@
     </div>
     {% if d.trafico.nota %}<p class="nota trafico-nota">{{ d.trafico.nota }}</p>{% endif %}
     {% if not d.trafico.hay_previo %}<p class="nota">Sin datos de los 28 días anteriores todavía: la comparación aparece cuando los haya.</p>{% endif %}
-    <p class="nota">El canal sale de la fuente y el medio de cada sesión, con las reglas de config/canales.yaml (y la agrupación de canales de Google Analytics cuando ninguna casa). Meta incluye las visitas desde Facebook e Instagram, de anuncios o no. Las campañas de Google Ads solo se cuentan aquí: los criterios de campañas son solo para Meta.</p>
+    {% if tecnico %}<p class="nota">El canal sale de la fuente y el medio de cada sesión, con las reglas de config/canales.yaml (y la agrupación de canales de Google Analytics cuando ninguna casa). Meta incluye las visitas desde Facebook e Instagram, de anuncios o no. Las campañas de Google Ads solo se cuentan aquí: los criterios de campañas son solo para Meta.</p>{% endif %}
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 
@@ -392,10 +402,10 @@
         </tbody>
       </table>
     </div>
-    <p class="nota">Cohorte: las citas y las ventas cuentan en la semana del lead y llegan después. Una semana tiene las citas completas cuando su último día tenía {{ d.mes.dias_cita }} días al cargar Walcu, y las ventas, con {{ d.mes.dias_venta }}; hasta entonces todavía pueden crecer. € / cita solo usa las semanas con las citas completas y € / venta, las de ventas completas («—» si no hay ninguna).</p>
-    {% if not d.mes.walcu %}<p class="nota motivo">Sin carga de Walcu de estas semanas: leads, citas y ventas sin datos; las reglas que las necesitan no se aplican.</p>{% elif d.mes.sin_carga %}<p class="nota motivo">Sin carga de Walcu de la semana {{ d.mes.sin_carga }}.</p>{% endif %}
+    {% if tecnico %}<p class="nota">Cohorte: las citas y las ventas cuentan en la semana del lead y llegan después. Una semana tiene las citas completas cuando su último día tenía {{ d.mes.dias_cita }} días al cargar Walcu, y las ventas, con {{ d.mes.dias_venta }}; hasta entonces todavía pueden crecer. € / cita solo usa las semanas con las citas completas y € / venta, las de ventas completas («—» si no hay ninguna).</p>{% else %}<p class="nota">Las citas y las ventas de las últimas semanas todavía pueden crecer.</p>{% endif %}
+    {% if not d.mes.walcu %}<p class="nota motivo">Sin carga de Walcu de estas semanas: leads, citas y ventas sin datos todavía.</p>{% elif d.mes.sin_carga %}<p class="nota motivo">Sin carga de Walcu de la semana {{ d.mes.sin_carga }}.</p>{% endif %}
     {% if d.mes.sin_cruce %}<p class="nota">Además, {{ d.mes.sin_cruce }} leads de Facebook en Walcu sin campaña de Meta con la que casar (no cuentan en el total).</p>{% endif %}
-    <p class="nota">Leads, citas y ventas: de Walcu (origen Facebook), unidos a la campaña de Meta por su nombre. «—»: la campaña no casa con ningún lead de Walcu. Cita: el lead tiene negociación; venta: negociación cerrada como vendida. La decisión es la de los criterios de Meta.</p>
+    <p class="nota">Leads, citas y ventas: de Walcu (origen Facebook), unidos a la campaña de Meta por su nombre. «—»: la campaña no casa con ningún lead de Walcu. Cita: el lead tiene negociación; venta: negociación cerrada como vendida.{% if tecnico %} La decisión es la de los criterios de Meta.{% endif %}</p>
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 
@@ -426,7 +436,7 @@
         </tbody>
       </table>
     </div>
-    <p class="nota">Las de {{ d.referencias.anio_ref }} son la media de las reglas c y d: un coste por cita (y por lead) como mucho el de {{ d.referencias.anio_ref }} del mismo tipo está «en la media». Los totales de un año incompleto no se comparan con los de uno completo; los costes y las tasas, sí. Lead a cita y coste por cita solo usan las semanas con las citas completas; cita a venta y coste por venta, las de ventas completas{% if d.referencias.incompletas %} ({{ d.referencias.incompletas }}){% endif %}.{% if d.tipo != "todo" %} El gasto de las campañas de VN y VO se reparte por sus leads de Walcu de cada tipo.{% endif %}</p>
+    {% if tecnico %}<p class="nota">Las de {{ d.referencias.anio_ref }} son la media de las reglas c y d: un coste por cita (y por lead) como mucho el de {{ d.referencias.anio_ref }} del mismo tipo está «en la media». Los totales de un año incompleto no se comparan con los de uno completo; los costes y las tasas, sí. Lead a cita y coste por cita solo usan las semanas con las citas completas; cita a venta y coste por venta, las de ventas completas{% if d.referencias.incompletas %} ({{ d.referencias.incompletas }}){% endif %}.{% if d.tipo != "todo" %} El gasto de las campañas de VN y VO se reparte por sus leads de Walcu de cada tipo.{% endif %}</p>{% else %}<p class="nota">Los totales de un año incompleto no se comparan con los de uno completo; los costes y las tasas, sí.</p>{% endif %}
     {% else %}{{ sin_datos() }}{% endif %}
   </section>
 
