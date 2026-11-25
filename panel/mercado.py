@@ -14,7 +14,7 @@ import psycopg
 import yaml
 from psycopg.rows import dict_row
 
-from ingesta.concesionario import Concesionario
+from ingesta.concesionario import FUENTES_WEB, Concesionario
 from panel import formato as fmt
 
 ZONAS = ("provincia", "cercana", "comunidad", "espana")
@@ -47,33 +47,61 @@ def etiquetas_zona(conc: Concesionario) -> dict[str, str]:
     return {"provincia": conc.provincia, "cercana": "Zona cercana", "comunidad": conc.comunidad, "espana": "España"}
 
 
-def capturas(pg: psycopg.Connection, hoy: date) -> list[dict]:
-    """Última captura completa de cada fuente, para la cabecera."""
+def capturas(pg: psycopg.Connection, hoy: date, conc: Concesionario | None = None) -> list[dict]:
+    """Última captura completa de cada fuente, para la cabecera. Una fuente en pausa (fuentes_en_pausa) no
+    cuenta como que falte: «descarga en pausa», con su última captura."""
     ultimas = {f: (d, fin, n) for f, d, fin, n in pg.execute(
         """SELECT DISTINCT ON (fuente) fuente, dia, fin_at, anuncios FROM panel_mercado_capturas
            WHERE completa ORDER BY fuente, dia DESC""")}
     salida = []
     for fuente, etiqueta in FUENTES:
         dia, fin, n = ultimas.get(fuente, (None, None, None))
-        if dia is None:
+        pausa = conc is not None and conc.pausa(fuente) is not None
+        if pausa:
+            texto, ok = f"{etiqueta}: descarga en pausa" + (
+                f" · la última captura, el {fmt.fecha_corta(dia)}" if dia else ""), True
+        elif dia is None:
             texto, ok = f"{etiqueta}: todavía sin capturas completas", False
         elif dia == hoy:
             texto, ok = f"{etiqueta}: captura completa hoy a las {fmt.hora(fin)} · {fmt.miles(n)} anuncios en España", True
         else:
             texto, ok = (f"{etiqueta}: sin captura completa hoy · la última, el {fmt.fecha_corta(dia)} "
                          f"a las {fmt.hora(fin)}"), False
-        salida.append({"fuente": fuente, "texto": texto, "ok": ok, "dia": dia, "fin": fin})
+        salida.append({"fuente": fuente, "texto": texto, "ok": ok, "dia": dia, "fin": fin, "pausa": pausa})
     return salida
 
 
-def estado_cabecera(pg: psycopg.Connection, hoy: date) -> dict:
-    """La píldora de la barra superior: «Fuentes al día · HH:MM» o cuántas faltan."""
-    caps = capturas(pg, hoy)
+def estado_cabecera(pg: psycopg.Connection, hoy: date, conc: Concesionario | None = None) -> dict:
+    """La píldora de la barra superior: «Fuentes al día · HH:MM» o cuántas faltan. Las fuentes en pausa
+    no faltan; si lo están todas, «Descarga en pausa»."""
+    caps = capturas(pg, hoy, conc)
     faltan = [c for c in caps if not c["ok"]]
-    if not faltan:
-        return {"ok": True, "texto": f"Fuentes al día · {fmt.hora(max(c['fin'] for c in caps if c['fin']))}"}
-    return {"ok": False, "texto": "Falta la captura de hoy de " + (
-        "1 fuente" if len(faltan) == 1 else f"{len(faltan)} fuentes")}
+    if faltan:
+        return {"ok": False, "texto": "Falta la captura de hoy de " + (
+            "1 fuente" if len(faltan) == 1 else f"{len(faltan)} fuentes")}
+    activas = [c["fin"] for c in caps if not c["pausa"] and c["fin"]]
+    if not activas:
+        return {"ok": True, "texto": "Descarga en pausa"}
+    return {"ok": True, "texto": f"Fuentes al día · {fmt.hora(max(activas))}"}
+
+
+def pausa_web(pg: psycopg.Connection | None, conc: Concesionario) -> dict | None:
+    """Aviso de Mercado, Ventas y Dirección cuando alguna fuente de la web de la marca está en pausa:
+    «Datos de la web de la marca hasta el DD/MM: descarga en pausa». Sin el motivo (eso, solo en Estado de
+    las fuentes). La fecha es la de la captura completa más antigua entre las últimas de los scrapers en
+    pausa; si alguno no tiene ninguna (o solo están en pausa las fichas de color), el «desde» de la pausa."""
+    pausas = [p for p in conc.pausas if p.fuente in FUENTES_WEB]
+    if not pausas:
+        return None
+    scrapers = [p.fuente for p in pausas if p.fuente in dict(FUENTES)]
+    hasta = None
+    if scrapers and pg is not None:
+        ultimas = pg.execute("SELECT fuente, max(dia) FROM panel_mercado_capturas WHERE completa AND fuente = ANY(%s) "
+                             "GROUP BY fuente", (scrapers,)).fetchall()
+        if len(ultimas) == len(scrapers):
+            hasta = min(d for _, d in ultimas)
+    hasta = hasta or min(p.desde for p in pausas)
+    return {"hasta": hasta, "texto": f"Datos de la web de la marca hasta el {fmt.fecha_corta(hasta)}: descarga en pausa"}
 
 
 def variacion(anuncios: int, hace7: int | None, motivo: str, n_minimo_pct: int) -> dict:
@@ -104,7 +132,7 @@ def nuestros(propios: int | None, anuncios: int, n_minimo_pct: int, con_peso: bo
 def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy: date) -> dict:
     nombres = etiquetas_zona(conc)
     nombre_tipo = {"VN": "nuevos", "VO": "ocasión"}[tipo]
-    base = {"tipo": tipo, "zona": zona, "zona_nombre": nombres[zona], "capturas": capturas(pg, hoy),
+    base = {"tipo": tipo, "zona": zona, "zona_nombre": nombres[zona], "capturas": capturas(pg, hoy, conc),
             "zonas": [{"id": z, "etiqueta": nombres[z], "activa": z == zona} for z in ZONAS],
             "tipos": [{"id": "VN", "etiqueta": "Nuevos (VN)", "activa": tipo == "VN"},
                       {"id": "VO", "etiqueta": "Ocasión (VO)", "activa": tipo == "VO"}],
@@ -210,7 +238,7 @@ def datos(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona: str, hoy
     }
 
 
-def estado_fuentes(pg: psycopg.Connection) -> dict:
+def estado_fuentes(pg: psycopg.Connection, conc: Concesionario | None = None) -> dict:
     anotaciones = [
         {"fuente": f, "tipo": t, "dia": fmt.fecha(d), "estado": e, "registrado": fmt.fecha_hora(r),
          "detalle": (str(det) if det else "")[:200]}
@@ -232,7 +260,11 @@ def estado_fuentes(pg: psycopg.Connection) -> dict:
             "anuncios": fmt.miles(ultima[2]) if ultima else fmt.GUION,
             "sin_provincia": fmt.miles(ultima[3]) if ultima else fmt.GUION,
         })
-    return {"anotaciones": anotaciones, "dias": dias, "cobertura": cobertura(pg), "color": cobertura_colores(pg)}
+    etiquetas = dict(FUENTES) | {"colores": "Fichas de color"}
+    pausas = [{"fuente": p.fuente, "etiqueta": etiquetas.get(p.fuente, p.fuente), "desde": fmt.fecha(p.desde),
+               "motivo": p.motivo} for p in (conc.pausas if conc else ())]
+    return {"anotaciones": anotaciones, "dias": dias, "cobertura": cobertura(pg), "color": cobertura_colores(pg),
+            "pausas": pausas}
 
 
 # --------------------------------------------------------------------------- detalle de un modelo
@@ -364,7 +396,7 @@ def detalle_modelo(pg: psycopg.Connection, conc: Concesionario, tipo: str, zona:
 
     base = {
         "tipo": tipo, "zona": zona, "zona_nombre": nombres[zona], "modelo": modelo, "nombre_tipo": nombre_tipo,
-        "capturas": capturas(pg, hoy), "volver": f"/mercado?zona={zona}&tipo={tipo}",
+        "capturas": capturas(pg, hoy, conc), "volver": f"/mercado?zona={zona}&tipo={tipo}",
         "zonas": [{"id": z, "etiqueta": nombres[z], "activa": z == zona, "url": url_en(tipo, z)} for z in ZONAS],
         "tipos": [{"id": t, "etiqueta": e, "activa": t == tipo, "url": url_en(t, zona)}
                   for t, e in (("VN", "Nuevos (VN)"), ("VO", "Ocasión (VO)"))],

@@ -45,6 +45,17 @@ propio:
   nombres_en_scrapers:
     - AVISA
 
+# Fuentes de la web de la marca en pausa (vo, vn, vn_otros y colores: las fichas de color). Mientras una fuente
+# está aquí no se carga ni se comprueba: queda «en_pausa» en fuentes_estado, no salta «Fuente caída» ni el
+# resumen diario la cuenta como problema, el precálculo sigue con los últimos datos y el panel avisa en
+# Mercado, Ventas y Dirección de hasta cuándo hay datos. El motivo solo lo ve el técnico (Estado de las
+# fuentes y resumen diario). Pausar o reactivar: infra/deploy.md, «Fuentes en pausa».
+fuentes_en_pausa:
+  vo: {desde: 2026-11-25, motivo: "revisión jurídica"}
+  vn: {desde: 2026-11-25, motivo: "revisión jurídica"}
+  vn_otros: {desde: 2026-11-25, motivo: "revisión jurídica"}
+  colores: {desde: 2026-11-25, motivo: "revisión jurídica"}
+
 # Competencia directa en Sevilla. No cambia ninguna columna todavía; se deja aquí para el panel
 # y las alertas de los hitos siguientes.
 competencia:

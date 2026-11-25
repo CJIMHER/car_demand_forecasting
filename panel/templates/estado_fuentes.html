@@ -9,6 +9,23 @@
     </div>
   </div>
 
+  {% if e.pausas %}
+  <section class="tarjeta" aria-labelledby="t-pausa" data-bloque="fuentes-en-pausa">
+    <h2 id="t-pausa">Fuentes en pausa</h2>
+    <div class="tabla-scroll">
+      <table class="tabla tabla-pausa">
+        <thead><tr><th scope="col" class="izq">Fuente</th><th scope="col" class="izq">Estado</th><th scope="col">Desde</th><th scope="col" class="izq">Motivo</th></tr></thead>
+        <tbody>
+        {% for p in e.pausas %}
+          <tr data-fuente="{{ p.fuente }}"><th scope="row" class="izq">{{ p.etiqueta }}</th><td class="izq estado-pausa">en pausa</td><td>{{ p.desde }}</td><td class="izq detalle">{{ p.motivo }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="nota">Lista fuentes_en_pausa de config/concesionario.yaml. No se cargan ni se comprueban (fuentes_estado: «en_pausa»), no salta «Fuente caída» y el precálculo sigue con los últimos datos. Mercado, Ventas y Dirección muestran hasta qué día hay datos, sin el motivo. Reactivar: quitar la fuente de la lista y volver a activar su temporizador en el servidor (infra/deploy.md, «Fuentes en pausa»).</p>
+  </section>
+  {% endif %}
+
   <section class="tarjeta" aria-labelledby="t-dias">
     <h2 id="t-dias">Días con y sin captura completa</h2>
     <div class="tabla-scroll">
@@ -250,7 +267,7 @@
         {% for a in e.anotaciones %}
           <tr>
             <th scope="row" class="izq">{{ a.fuente }}</th><td class="izq">{{ a.tipo }}</td><td>{{ a.dia }}</td>
-            <td class="izq estado-{{ 'ok' if a.estado == 'ok' else 'mal' }}">{{ a.estado }}</td><td>{{ a.registrado }}</td>
+            <td class="izq estado-{{ 'ok' if a.estado == 'ok' else ('pausa' if a.estado == 'en_pausa' else 'mal') }}">{{ a.estado }}</td><td>{{ a.registrado }}</td>
             <td class="izq detalle">{{ a.detalle }}</td>
           </tr>
         {% else %}

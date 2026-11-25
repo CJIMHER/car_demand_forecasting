@@ -123,6 +123,8 @@ a.nav-item:hover { color: var(--blanco); background: rgba(255, 255, 255, 0.08); 
 }
 .dia-datos { margin: -8px 0 0; font-size: 14px; color: var(--gris-oscuro); }
 .aviso-dia { color: var(--aviso-texto); font-weight: 600; }
+.aviso-pausa { margin: 0 0 12px; font-size: 13px; color: var(--gris-oscuro); }
+.estado-pausa { color: var(--gris-oscuro); font-weight: 600; }
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .kpi {

@@ -1,3 +1,4 @@
+{% from "_bloques.html" import aviso_pausa %}
 <div id="mercado" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -19,6 +20,7 @@
     </div>
   </div>
 
+  {{ aviso_pausa(pausa) }}
   <div class="capturas">
     {% for c in m.capturas %}
     <span class="captura"><span class="punto {{ 'ok' if c.ok else 'aviso' }}" aria-hidden="true"></span>{{ c.texto }}</span>
@@ -31,7 +33,7 @@
     <p class="nota">Aparecen tras el primer día con captura completa{% if m.tipo == 'VN' %} de las dos capturas de nuevos (gasolina y diésel; eléctricos e híbridos){% endif %} y el precálculo de las 09:10.</p>
   </section>
   {% else %}
-  <p class="dia-datos">Datos del {{ m.dia_largo }}{% if not m.es_hoy %}<span class="aviso-dia"> · Falta la captura completa de hoy{% if m.tipo == 'VN' %} de alguna de las dos capturas de nuevos{% endif %}: se muestran los datos del último día completo.</span>{% endif %}</p>
+  <p class="dia-datos">Datos del {{ m.dia_largo }}{% if not m.es_hoy and not pausa %}<span class="aviso-dia"> · Falta la captura completa de hoy{% if m.tipo == 'VN' %} de alguna de las dos capturas de nuevos{% endif %}: se muestran los datos del último día completo.</span>{% endif %}</p>
 
   <div class="kpis">
     {% for k in m.kpis %}

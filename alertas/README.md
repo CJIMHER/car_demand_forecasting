@@ -20,7 +20,7 @@ probabilidades sustituirán a los umbrales (docs/diseno.md, Señales y alertas).
 
 | Regla | Para | Fuente | Estado |
 | --- | --- | --- | --- |
-| Fuente caída | técnico | `fuentes_estado`: un scraper sin captura del día, la carga, el precálculo o la última copia en error; un conector con error | Real |
+| Fuente caída | técnico | `fuentes_estado`: un scraper sin captura del día, la carga, el precálculo o la última copia en error; un conector con error. Los scrapers de `fuentes_en_pausa` (`config/concesionario.yaml`) no cuentan | Real |
 | Presión de un competidor (stock) | ventas, dirección | `panel_mercado_competidor`: otro concesionario de la provincia sube su stock de un modelo en 7 días (≥ 5 anuncios y ≥ 25 %) | Real |
 | Google Trends sin descargar | técnico | `gtrends_entrega`: la última descarga manual tiene más de 35 días, o no hay ninguna | Real |
 | Presión de un competidor (precio) | ventas, dirección | `panel_mercado_competidor`: baja el precio mediano de un segmento (modelo + acabado) ≥ 3 % en 7 días | Real |

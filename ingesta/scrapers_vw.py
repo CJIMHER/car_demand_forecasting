@@ -18,6 +18,10 @@ presente, ausente y retirado, tal como los deciden los eventos del scraper.
   recuento          anuncios cargados por día y fuente, frente a lo que dijo el scraper
   concesionarios    dealer_id y nombres que coinciden con config/concesionario.yaml
   remarcar-propio   vuelve a calcular es_propio tras cambiar config/concesionario.yaml
+
+Una fuente en fuentes_en_pausa (config/concesionario.yaml) no se carga ni se comprueba: se anota
+«en_pausa» (con desde y motivo) y el resumen la cuenta como en pausa, no como problema. Al quitarla de
+la lista, la carga siguiente trae todas las pasadas que el scraper tenga pendientes.
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ import yaml
 from psycopg.types.json import Jsonb
 
 from ingesta import telegram
+from ingesta.concesionario import Pausa, fuentes_en_pausa
 from ingesta.db import conectar
 from ingesta.provincias import normalizar_cp, provincia
 
@@ -93,6 +98,14 @@ def dealers_propios(ruta: Path | None = None) -> set[str]:
     if not ids:
         raise ErrorCarga("config/concesionario.yaml no tiene propio.dealer_ids")
     return ids
+
+
+def pausas() -> dict[str, Pausa]:
+    return fuentes_en_pausa(ruta_concesionario())
+
+
+def detalle_pausa(p: Pausa) -> dict:
+    return {"desde": p.desde.isoformat(), "motivo": p.motivo}
 
 
 def hoy_madrid() -> date:
@@ -313,9 +326,14 @@ def cargar(pg: psycopg.Connection, nombres=None, base: Path | None = None, dia: 
     """Carga todas las fuentes. Un fallo en una no impide cargar las otras."""
     dia = dia or hoy_madrid()
     propios = dealers_propios()
+    en_pausa = pausas()
     resultado = {}
     for nombre in nombres or FUENTES:
         fuente = FUENTES[nombre]
+        if nombre in en_pausa:
+            resultado[nombre] = {"en_pausa": detalle_pausa(en_pausa[nombre])}
+            _anotar(pg, nombre, "carga", dia, "en_pausa", detalle_pausa(en_pausa[nombre]))
+            continue
         try:
             resumen = cargar_fuente(pg, fuente, base, propios)
             resultado[nombre] = resumen
@@ -339,9 +357,15 @@ def comprobar(pg: psycopg.Connection, base: Path | None = None, dia: date | None
     dia = dia or hoy_madrid()
     if cargar_antes:
         cargar(pg, base=base, dia=dia)
+    en_pausa = pausas()
     resultado = {}
     for nombre, fuente in FUENTES.items():
         detalle: dict = {}
+        if nombre in en_pausa:
+            detalle = detalle_pausa(en_pausa[nombre])
+            _anotar(pg, nombre, "comprobacion", dia, "en_pausa", detalle)
+            resultado[nombre] = {"estado": "en_pausa", **detalle}
+            continue
         try:
             sq = abrir_sqlite(fuente, base)
             try:
@@ -402,6 +426,11 @@ def texto_resumen(dia: date, comprobacion: dict, filas: dict[str, int], errores_
         if estado == "ok":
             lineas.append(f"{etiqueta}: {_miles(filas.get(nombre, 0))} anuncios")
             continue
+        if estado == "en_pausa":   # no es un problema: está en fuentes_en_pausa
+            desde = f" desde el {_dia_corto(r['desde'])}" if r.get("desde") else ""
+            motivo = f" ({r['motivo']})" if r.get("motivo") else ""
+            lineas.append(f"{etiqueta}: en pausa{desde}{motivo}")
+            continue
         problemas += 1
         if estado == "sin_captura":
             partes = ["sin captura de hoy"]
@@ -448,7 +477,7 @@ def datos_resumen(pg: psycopg.Connection, dia: date) -> tuple[dict[str, int], di
     for fuente, estado, detalle in pg.execute(
             """SELECT DISTINCT ON (fuente) fuente, estado, detalle FROM fuentes_estado
                WHERE tipo = 'carga' AND dia = %s AND fuente = ANY(%s) ORDER BY fuente, id DESC""", (dia, list(FUENTES))):
-        if estado != "ok":
+        if estado not in ("ok", "en_pausa"):
             errores[fuente] = str((detalle or {}).get("error", estado))
     return filas, errores, int(cargadas)
 
@@ -542,7 +571,7 @@ def main(argv=None) -> int:
             res = comprobar(pg, dia=args.dia, cargar_antes=not args.sin_cargar,
                             avisar=False if args.sin_telegram else None)
             print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
-            return 0 if all(r["estado"] == "ok" for r in res.values()) else 1
+            return 0 if all(r["estado"] in ("ok", "en_pausa") for r in res.values()) else 1
         if args.orden == "recuento":
             print(f"{'día':<12}{'fuente':<10}{'tipo':<6}{'scraper':>9}{'cargados':>10}{'propios':>9}")
             for dia, fuente, tipo, obs, carg, prop in recuento(pg, args.dias):

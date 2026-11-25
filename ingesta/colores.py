@@ -10,6 +10,7 @@ vehicle_id, vin, status, exterior_color, interior_color, fetched_at…). Aquí:
   estaban ya guardados para ese anuncio; los colores, tal cual;
 - se anota en fuentes_estado (fuente «colores», tipo «carga»): «ok», «sin_captura» si el fichero no
   existe o «error» si no se puede leer. Nunca lanza: la carga del stock sigue aunque esto falle.
+- con «colores» en fuentes_en_pausa (config/concesionario.yaml) no se lee nada: se anota «en_pausa».
 
 No toca stock_externo_snapshot, eventos_externos ni anuncios_externos: el color no es un «cambio»
 del anuncio. La unión con el stock (fuente + vehicle_id, con el VIN como contraste) se hace en el
@@ -106,7 +107,11 @@ def ejecutar(pg: psycopg.Connection, dia: date, base: Path | None = None) -> dic
     """Carga y anota en fuentes_estado. Nunca lanza: un fallo aquí no para la carga del stock."""
     fichero = ruta(base)
     try:
-        if not fichero.is_file():
+        from ingesta.scrapers_vw import detalle_pausa, pausas
+        pausa = pausas().get("colores")
+        if pausa is not None:
+            estado, detalle = "en_pausa", detalle_pausa(pausa)
+        elif not fichero.is_file():
             estado, detalle = "sin_captura", {"error": f"No existe la exportación de colores: {fichero}"}
         else:
             estado, detalle = "ok", cargar(pg, base)

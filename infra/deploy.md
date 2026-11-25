@@ -583,6 +583,69 @@ A partir de ahí, cada día a las 06:30 (`make walcu-api` a mano).
 4. Revisar `ventas.diferencia_minima` de `config/campana_general.yaml` con el cálculo del resumen
    (`docs/hitos/hito_1b_campana_general_resumen.md`).
 
+### 7.18 Fuentes en pausa
+
+Las descargas de la web de la marca se pueden parar sin que el sistema las dé por caídas. Desde el 25/11/2026
+están en pausa las cuatro (`vo`, `vn`, `vn_otros` y `colores`, las fichas de color) y sus temporizadores,
+desactivados en el servidor.
+
+Pausar o reactivar son dos pasos que van juntos: la lista `fuentes_en_pausa` de `config/concesionario.yaml`
+(en el repositorio) y el temporizador del servidor.
+
+```yaml
+fuentes_en_pausa:
+  vo: {desde: 2026-11-25, motivo: "revisión jurídica"}
+  vn: {desde: 2026-11-25, motivo: "revisión jurídica"}
+  vn_otros: {desde: 2026-11-25, motivo: "revisión jurídica"}
+  colores: {desde: 2026-11-25, motivo: "revisión jurídica"}
+```
+
+Con una fuente en la lista:
+
+- la carga de las 08:30 no la carga y la comprobación de las 09:00 no la comprueba: en `fuentes_estado`
+  queda `en_pausa` (con `desde` y `motivo` en el detalle; `make estado`);
+- el resumen diario de Telegram la pone como «en pausa desde el … (motivo)», no como un problema, y
+  `make comprobar` termina bien;
+- el motor de alertas no da «Fuente caída» por ella (ni «sin comprobación» si están en pausa los tres
+  scrapers);
+- el precálculo de las 09:10 sigue, con los últimos datos cargados;
+- el panel avisa en Mercado, Ventas («Precio de nuestros VO» y «Salidas») y Dirección: «Datos de la web de la
+  marca hasta el DD/MM: descarga en pausa», sin el motivo. El técnico ve la fuente, desde cuándo y el motivo
+  en Estado de las fuentes.
+
+**Pausar** una fuente (en este orden, para que no salte ninguna alerta entre medias):
+
+1. En el Mac: añadirla a `fuentes_en_pausa` con la fecha y el motivo, commit y push.
+2. En el servidor: `make deploy`.
+3. En el servidor, desactivar su temporizador:
+
+```bash
+sudo systemctl disable --now cdf-scraper-vo.timer         # VO
+sudo systemctl disable --now cdf-scraper-vn.timer         # VN gasolina y diésel
+sudo systemctl disable --now cdf-scraper-vnotros.timer    # VN eléctricos e híbridos
+systemctl list-timers --all 'cdf-*'                       # el de las fichas de color: el que deja
+                                                          # vw_details/exports/colors_latest.jsonl.gz
+```
+
+**Reactivar** una fuente:
+
+1. En el servidor, volver a activar su temporizador y comprobar que tiene próxima ejecución:
+
+```bash
+sudo systemctl enable --now cdf-scraper-vo.timer          # y los demás que se reactiven
+systemctl list-timers --all 'cdf-*'
+```
+
+2. En el Mac: quitar la fuente de `fuentes_en_pausa` (si no queda ninguna, quitar también la clave), commit y
+   push. En el servidor: `make deploy`.
+3. La carga siguiente (08:30, o `make cargar`) trae todas las pasadas que el scraper tenga pendientes; desde
+   ese día la comprobación vuelve a avisar si falta la captura. El panel deja de mostrar el aviso en cuanto
+   arranca con la configuración nueva.
+
+Si se reactiva el temporizador pero la fuente sigue en la lista, se captura y no se carga (sin alerta); si se
+quita de la lista con el temporizador parado, la comprobación de las 09:00 avisa de que falta la captura.
+`make deploy` aplica también la migración 0025 (estado `en_pausa` en `fuentes_estado`).
+
 ## 8. Día a día
 
 ```bash

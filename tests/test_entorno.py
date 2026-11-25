@@ -36,8 +36,11 @@ SENSIBLES = [
 ]
 
 
-def test_ninguna_prueba_ve_la_configuracion_del_host():
-    assert [n for n in os.environ if del_host(n)] == []
+def test_ninguna_prueba_ve_la_configuracion_del_host(concesionario_sin_pausas):
+    # CDF_CONCESIONARIO solo puede ser la de las pruebas: config/concesionario.yaml sin fuentes_en_pausa
+    # (conftest.py, sin_pausas)
+    assert os.environ.get("CDF_CONCESIONARIO") == str(concesionario_sin_pausas)
+    assert [n for n in os.environ if del_host(n) and n != "CDF_CONCESIONARIO"] == []
 
 
 # .dockerignore excluye .env*: en la imagen de cdf_jobs (donde corre «make test») no está.

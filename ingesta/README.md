@@ -51,6 +51,13 @@ La comprobación de las 09:00 primero carga lo que falte (por si un reintento te
 08:30) y luego escribe en `fuentes_estado`, por fuente: `ok`, `sin_captura` (el scraper no tiene
 pasada success hoy), `sin_cargar` o `error` (base ausente, ámbito equivocado...).
 
+**Fuentes en pausa.** Una fuente de `fuentes_en_pausa` (`config/concesionario.yaml`: `vo`, `vn`, `vn_otros` o
+`colores`, cada una con `desde` y `motivo`) no se carga ni se comprueba: se anota `en_pausa` (tipos `carga` y
+`comprobacion`; `colores`, `carga`) con `desde` y `motivo` en el detalle. El resumen de Telegram la pone como «en
+pausa desde el … (motivo)» y no la cuenta como problema; `make comprobar` termina bien. Al quitarla de la lista,
+la carga siguiente trae todas las pasadas pendientes del scraper. Pausar y reactivar: `infra/deploy.md`, 7.18.
+Pruebas: `tests/test_fuentes_pausa.py`.
+
 ## Color de los anuncios (colores.py)
 
 El componente de fichas (independiente de los scrapers) deja el color de cada anuncio en

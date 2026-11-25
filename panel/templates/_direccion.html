@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, sin_datos_o_pendiente, segmentos, precio_vo, salida, mensual_por_modelo, campana_general %}
+{% from "_bloques.html" import attrs, marca, sin_datos, sin_datos_o_pendiente, segmentos, precio_vo, salida, mensual_por_modelo, campana_general, aviso_pausa %}
 <div id="direccion" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -7,6 +7,7 @@
     </div>
     <div class="selectores">{{ segmentos("Tipo de stock", d.tipos, "#direccion") }}</div>
   </div>
+  {{ aviso_pausa(pausa) }}
 
   {% set nombres = ["stock", "antiguedad", "ventas_kpi", "alertas_kpi"] %}
   {% set vacias = ["Stock total", "Antigüedad media", "Salidas del mes", "Alertas abiertas"] %}

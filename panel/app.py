@@ -127,7 +127,9 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
                     "tecnico": bool(usuario) and usuario["rol"] == "tecnico",
                     "navegacion": (permisos.navegacion(usuario["rol"], estados_de(request, pg), app.state.ejemplo_para)
                                    if usuario else []),
-                    "cabecera": mercado.estado_cabecera(pg, app.state.hoy()) if (usuario and pg) else None,
+                    "cabecera": mercado.estado_cabecera(pg, app.state.hoy(), conc) if (usuario and pg) else None,
+                    # Fuentes de la web de la marca en pausa: aviso en Mercado, Ventas y Dirección (sin el motivo)
+                    "pausa": mercado.pausa_web(pg, conc) if (usuario and pg) else None,
                     **ctx}
         resp = plantillas.TemplateResponse(request, plantilla, contexto, status_code=status)
         if request.cookies.get(seg.COOKIE_CSRF) != csrf:
@@ -394,7 +396,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
     @app.get("/estado-fuentes")
     def estado(request: Request, pg=Depends(bd)):
         u = exigir(request, pg, "estado")
-        return pintar(request, "estado_fuentes.html", {"e": mercado.estado_fuentes(pg), "vista": "estado",
+        return pintar(request, "estado_fuentes.html", {"e": mercado.estado_fuentes(pg, app.state.conc), "vista": "estado",
                                                        "motor": alertas.estado_motor(pg),
                                                        "trafico": alertas.estado_trafico(pg),
                                                        "prevision": prevision.validacion(pg)}, pg=pg, usuario=u)

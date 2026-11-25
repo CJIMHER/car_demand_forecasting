@@ -136,7 +136,7 @@
     </section>
   </div>
 
-  {{ precio_vo(d.precio, "#ventas") }}
+  {{ precio_vo(d.precio, "#ventas", pausa) }}
 
   <section aria-labelledby="t-stock-crm" class="tarjeta bloque-stock-crm"{{ attrs("stock_crm", d.stock_crm) }}>
     <div class="tarjeta-cabeza">
@@ -163,7 +163,7 @@
     {% else %}<p class="sin-datos pendiente">Pendiente de conectar: stock interno (API de Walcu)</p>{% endif %}
   </section>
 
-  {{ salidas_recientes(d.salidas) }}
+  {{ salidas_recientes(d.salidas, pausa) }}
 
   {{ lista_alertas(d.alertas, "Alertas para ventas", "t-alertas-ventas") }}
 </div>

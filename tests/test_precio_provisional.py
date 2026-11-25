@@ -16,6 +16,7 @@ import pytest
 from analitica import mercado as am
 from analitica import precio as pv
 from ingesta import scrapers_vw as sv
+from conftest import sin_pausas_texto
 from ingesta.concesionario import ErrorConfiguracion, cargar as cargar_concesionario
 from panel import ejemplo
 from sinteticos import RAIZ, capturar, coche
@@ -224,7 +225,7 @@ def test_precalculo_nuestros_no_cuentan_y_al_menos_n_dias(pg, datos):
 
 def test_sin_configuracion_el_precalculo_sigue(pg, datos, tmp_path, monkeypatch):
     f = tmp_path / "concesionario.yaml"
-    texto = (RAIZ / "config/concesionario.yaml").read_text()
+    texto = sin_pausas_texto((RAIZ / "config/concesionario.yaml").read_text())
     f.write_text(texto.split("precio_provisional:")[0] + "modelos:" + texto.split("\nmodelos:")[1])
     monkeypatch.setenv("CDF_CONCESIONARIO", str(f))
     conc = cargar_concesionario()

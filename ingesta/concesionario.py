@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -21,6 +22,19 @@ RAIZ = Path(__file__).resolve().parent.parent
 
 class ErrorConfiguracion(Exception):
     pass
+
+
+# Fuentes de la web de la marca que se pueden poner en pausa (fuentes_en_pausa): los tres scrapers de stock y
+# las fichas de color. Con una en pausa no se carga ni se comprueba (se anota «en_pausa» en fuentes_estado),
+# no salta «Fuente caída» y el panel avisa de hasta cuándo hay datos.
+FUENTES_WEB = ("vo", "vn", "vn_otros", "colores")
+
+
+@dataclass(frozen=True)
+class Pausa:
+    fuente: str
+    desde: date
+    motivo: str      # solo lo ve el técnico (Estado de las fuentes y el resumen diario)
 
 
 @dataclass(frozen=True)
@@ -63,6 +77,11 @@ class Concesionario:
     # Ciudad del concesionario: la usan los mensajes de acción de Marketing (config/mensajes_marketing.yaml,
     # «{ciudad}»). Sin ella, la provincia.
     ciudad: str = ""
+    # Fuentes en pausa (fuentes_en_pausa), por nombre
+    pausas: tuple[Pausa, ...] = ()
+
+    def pausa(self, fuente: str) -> Pausa | None:
+        return next((p for p in self.pausas if p.fuente == fuente), None)
 
     def otra_empresa(self, texto: str | None) -> bool:
         """El texto (sede, equipo, origen o nombre de campaña) contiene una de empresas_excluidas."""
@@ -132,7 +151,39 @@ def cargar(fichero: Path | None = None) -> Concesionario:
         empresas_excluidas=tuple(dict.fromkeys(_plegar(e) for e in propio.get("empresas_excluidas") or []
                                                if _plegar(e))),
         ciudad=str(propio.get("ciudad") or "").strip() or PROVINCIAS[prov],
+        pausas=tuple(_pausas(cfg).values()),
     )
+
+
+def fuentes_en_pausa(fichero: Path | None = None) -> dict[str, Pausa]:
+    """{fuente: Pausa} de fuentes_en_pausa en config/concesionario.yaml (vacío si no hay ninguna).
+
+    Solo lee esa clave: la ingesta la usa sin validar el resto del fichero."""
+    return _pausas(yaml.safe_load((fichero or ruta()).read_text(encoding="utf-8")) or {})
+
+
+def _pausas(cfg: dict) -> dict[str, Pausa]:
+    bruto = cfg.get("fuentes_en_pausa") or {}
+    if not isinstance(bruto, dict):
+        raise ErrorConfiguracion("config/concesionario.yaml: fuentes_en_pausa tiene que ser {fuente: {desde, motivo}}")
+    pausas = {}
+    for fuente, valor in bruto.items():
+        fuente = str(fuente).strip()
+        if fuente not in FUENTES_WEB:
+            raise ErrorConfiguracion(f"config/concesionario.yaml: fuentes_en_pausa: {fuente!r} no es una fuente que "
+                                     f"se pueda pausar ({', '.join(FUENTES_WEB)})")
+        valor = valor or {}
+        desde, motivo = valor.get("desde"), str(valor.get("motivo") or "").strip()
+        if isinstance(desde, str):
+            try:
+                desde = date.fromisoformat(desde.strip())
+            except ValueError:
+                desde = None
+        if not isinstance(desde, date) or not motivo:
+            raise ErrorConfiguracion(f"config/concesionario.yaml: fuentes_en_pausa.{fuente} lleva «desde» (AAAA-MM-DD) "
+                                     "y «motivo»")
+        pausas[fuente] = Pausa(fuente, desde, motivo)
+    return pausas
 
 
 def _marcas(propio: dict, clave: str) -> tuple[str, ...]:

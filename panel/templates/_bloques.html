@@ -1,6 +1,8 @@
 {#- Bloques de las vistas del contrato: marca «Datos de ejemplo» y «Sin datos todavía». -#}
 {% macro attrs(nombre, b) -%} data-bloque="{{ nombre }}" data-origen="{{ b.origen or '' }}"{%- endmacro %}
 {% macro marca(b) -%}{% if b.origen == 'ejemplo' %}<span class="etiqueta-ejemplo">Datos de ejemplo</span>{% endif %}{%- endmacro %}
+{#- Fuentes de la web de la marca en pausa (fuentes_en_pausa): de cuándo son los datos, sin el motivo -#}
+{% macro aviso_pausa(p) -%}{% if p %}<p class="aviso-pausa" role="note" data-aviso="pausa">{{ p.texto }}</p>{% endif %}{%- endmacro %}
 {% macro sin_datos() -%}<p class="sin-datos">Sin datos todavía</p>{%- endmacro %}
 {% macro sin_datos_o_pendiente(b) -%}{% if b.pendiente %}<p class="sin-datos pendiente">Pendiente de conectar: {{ b.pendiente }}</p>{% else %}{{ sin_datos() }}{% endif %}{%- endmacro %}
 {% macro segmentos(etiqueta, opciones, objetivo) -%}
@@ -64,12 +66,13 @@
 </section>
 {%- endmacro %}
 
-{% macro salidas_recientes(b) -%}
+{% macro salidas_recientes(b, pausa=none) -%}
 <section aria-labelledby="t-salidas-recientes" class="tarjeta bloque-salidas"{{ attrs("salidas", b) }}>
   <div class="tarjeta-cabeza">
     <h2 id="t-salidas-recientes">Salidas de nuestro stock: últimas 4 semanas</h2>
     {% if b.hay %}<span class="nota">{{ b.desde }}–{{ b.hasta }} · {{ b.recuento }}</span>{% endif %}
   </div>
+  {{ aviso_pausa(pausa) }}
   {{ marca(b) }}
   {% if b.hay %}
   {% if b.filas %}
@@ -110,12 +113,13 @@
 </section>
 {%- endmacro %}
 
-{% macro precio_vo(b, objetivo) -%}
+{% macro precio_vo(b, objetivo, pausa=none) -%}
 <section aria-labelledby="t-precio-vo" class="tarjeta bloque-precio-vo"{{ attrs("precio", b) }}>
   <div class="tarjeta-cabeza">
     <h2 id="t-precio-vo">Precio de nuestros VO</h2>
     {% if b.hay %}<span class="nota">Mercado del {{ b.dia }}</span>{% endif %}
   </div>
+  {{ aviso_pausa(pausa) }}
   {{ marca(b) }}
   {% if b.hay %}
   <p class="aviso-provisional" role="note">{{ b.aviso }}</p>

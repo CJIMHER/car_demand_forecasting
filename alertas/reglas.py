@@ -90,10 +90,12 @@ def fuente_caida(ctx: Contexto) -> Resultado:
         r.disparos.append(Disparo(clave, {"caso": texto, "dia": str(d), **huecos}, {"dia": _dia(d), **huecos},
                                   texto=texto))
 
+    # Fuentes en pausa (fuentes_en_pausa de config/concesionario.yaml): no se comprueban, no son una caída
+    activos = {f: e for f, e in SCRAPERS.items() if ctx.conc.pausa(f) is None}
     # Scrapers: la comprobación de las 09:00
-    if not any((f, "comprobacion") in ultimos for f in SCRAPERS):
+    if activos and not any((f, "comprobacion") in ultimos for f in activos):
         disparo("comprobacion", "sin_comprobacion")
-    for f, etiqueta in SCRAPERS.items():
+    for f, etiqueta in activos.items():
         estado, det = ultimos.get((f, "comprobacion"), ("ok", {}))
         if estado == "sin_captura":
             detalle = f"; la última, el {_dia(det['ultima_captura'])}" if det.get("ultima_captura") else ""

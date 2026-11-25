@@ -16,6 +16,7 @@ import pytest
 from analitica import mercado as am
 from analitica import salidas as sl
 from ingesta import scrapers_vw as sv
+from conftest import sin_pausas_texto
 from ingesta.concesionario import ErrorConfiguracion, cargar as cargar_concesionario
 from panel import salidas as ps
 from panel.app import crear_app
@@ -205,7 +206,7 @@ def test_precalculo_solo_nuestros_anuncios_y_cada_regla(pg, datos):
 
 def test_sin_configuracion_el_precalculo_sigue(pg, datos, tmp_path, monkeypatch):
     f = tmp_path / "concesionario.yaml"
-    texto = (RAIZ / "config/concesionario.yaml").read_text()
+    texto = sin_pausas_texto((RAIZ / "config/concesionario.yaml").read_text())
     f.write_text(texto.split("salidas_stock:")[0] + "modelos:" + texto.split("\nmodelos:")[1])
     monkeypatch.setenv("CDF_CONCESIONARIO", str(f))
     conc = cargar_concesionario()

@@ -100,6 +100,12 @@ contraseña ni el hash salen en logs o respuestas, los permisos del usuario de P
 cabeceras, que el HTML no pide nada fuera, las cifras de Mercado frente a SQL directo y un
 concesionario ficticio de otra provincia sin rastro del propio.
 
+`tests/test_fuentes_pausa.py`: con fuentes de la web de la marca en `fuentes_en_pausa`, Mercado (y el detalle de un
+modelo), Ventas («Precio de nuestros VO» y «Salidas») y Dirección muestran «Datos de la web de la marca hasta el
+DD/MM: descarga en pausa» (la fecha, la última captura completa de los scrapers en pausa) sin el motivo ni la
+palabra «scraper» para quien no es técnico; la píldora de la cabecera no las da por caídas; Estado de las fuentes
+lista cada fuente en pausa con su fecha y su motivo.
+
 `tests/test_contrato_panel.py` cubre el contrato (columnas comunes, intervalos, nada personal,
 permisos de `cdf_panel`), los datos de ejemplo (deterministas, coherentes, sin tocar hechos ni
 mercado, se niegan sin `PANEL_PERMITE_EJEMPLO=1`), la etiqueta de cada bloque y la banda, la

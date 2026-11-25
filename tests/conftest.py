@@ -58,6 +58,28 @@ def entorno_limpio(entorno_limpio_sesion, monkeypatch):
     _limpiar(monkeypatch)
 
 
+def sin_pausas_texto(texto: str) -> str:
+    """config/concesionario.yaml sin el bloque fuentes_en_pausa."""
+    import re
+    return re.sub(r"(?m)^fuentes_en_pausa:.*\n(?:[ \t]+.*\n|[ \t]*\n)*", "", texto)
+
+
+@pytest.fixture(scope="session")
+def concesionario_sin_pausas(tmp_path_factory) -> Path:
+    fichero = tmp_path_factory.mktemp("config") / "concesionario.yaml"
+    fichero.write_text(sin_pausas_texto((RAIZ / "config" / "concesionario.yaml").read_text(encoding="utf-8")),
+                       encoding="utf-8")
+    return fichero
+
+
+@pytest.fixture(autouse=True)
+def sin_pausas(entorno_limpio, concesionario_sin_pausas, monkeypatch):
+    """La configuración real lleva fuentes en pausa (fuentes_en_pausa); las pruebas usan por defecto la misma
+    configuración sin ellas, para probar el funcionamiento normal. Las de la pausa la ponen ellas
+    (tests/test_fuentes_pausa.py)."""
+    monkeypatch.setenv("CDF_CONCESIONARIO", str(concesionario_sin_pausas))
+
+
 @pytest.fixture(autouse=True)
 def sin_telegram(entorno_limpio, monkeypatch):
     """Ninguna prueba llama a Telegram: sin credenciales (entorno_limpio) y con la salida a la red bloqueada."""

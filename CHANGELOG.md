@@ -1,5 +1,22 @@
 # Cambios
 
+## 2026-11-25 · Fuentes de la web de la marca en pausa (rama hito-1b-fuentes-pausa)
+
+- **`fuentes_en_pausa`** en `config/concesionario.yaml` (`{fuente: {desde, motivo}}`; solo `vo`, `vn`, `vn_otros` y
+  `colores`), puesta ya con las cuatro desde el 25/11/2026 por «revisión jurídica». Sus temporizadores están
+  desactivados en el servidor.
+- **Ingesta**: una fuente en pausa no se carga ni se comprueba; `fuentes_estado` queda `en_pausa` con `desde` y
+  `motivo` (migración 0025). El resumen de Telegram la pone «en pausa desde el …» y no la cuenta como problema;
+  `make comprobar` termina bien. Al reactivarla, la carga siguiente trae lo pendiente.
+- **Alertas**: «Fuente caída» no salta por una fuente en pausa (ni «sin comprobación» con los tres scrapers en
+  pausa). El precálculo sigue con los últimos datos.
+- **Panel**: aviso «Datos de la web de la marca hasta el DD/MM: descarga en pausa» en Mercado (también el detalle de
+  un modelo), Ventas («Precio de nuestros VO» y «Salidas») y Dirección, sin motivo; la píldora de la cabecera dice
+  «Descarga en pausa» en vez de «Falta la captura». Estado de las fuentes (técnico): tabla «Fuentes en pausa» con
+  fecha y motivo, y `en_pausa` en gris en las anotaciones.
+- Pausar y reactivar (lista + temporizador): `infra/deploy.md`, 7.18. Pruebas: `tests/test_fuentes_pausa.py`; el
+  resto de la suite usa la configuración sin pausas (`tests/conftest.py`, `sin_pausas`).
+
 ## 2026-11-25 · Ajustes: caída de ventas, reparto de alertas por rol y negociaciones (rama hito-1b-ajustes-alertas)
 
 - **Campaña general, caída de ventas**: diferencia mínima de 5 coches y sin las 2 últimas semanas completas

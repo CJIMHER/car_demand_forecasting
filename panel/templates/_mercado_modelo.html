@@ -1,3 +1,4 @@
+{% from "_bloques.html" import aviso_pausa %}
 {% macro precio(c) -%}
 {%- if c.pocos -%}
 <span class="pocos">{{ f.GUION }}<span class="n">{{ 'pocos anuncios' if c.n else 'sin anuncios con precio' }}</span></span>
@@ -39,6 +40,7 @@
       </div>
     </div>
   </div>
+  {{ aviso_pausa(pausa) }}
 
   {% if not d.hay_datos %}
   <section class="tarjeta">
@@ -52,7 +54,7 @@
     <p class="nota">No hay anuncios de {{ 'nuevos' if d.tipo == 'VN' else 'ocasión' }} de este modelo en la zona elegida ese día. Prueba otra zona o tipo, o vuelve a <a href="{{ d.volver }}">Mercado</a>.</p>
   </section>
   {% else %}
-  <p class="dia-datos">Datos del {{ d.dia_largo }}{% if not d.es_hoy %}<span class="aviso-dia"> · Falta la captura completa de hoy: se muestran los datos del último día completo.</span>{% endif %}</p>
+  <p class="dia-datos">Datos del {{ d.dia_largo }}{% if not d.es_hoy and not pausa %}<span class="aviso-dia"> · Falta la captura completa de hoy: se muestran los datos del último día completo.</span>{% endif %}</p>
 
   {% if d.filtrando %}
   <p class="recuadro aviso-cobertura incompleta filtrando-color" role="status">{{ d.filtrando }}</p>
