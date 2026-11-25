@@ -396,3 +396,21 @@ def test_hacen_falta_5_coches_de_diferencia():
     assert cg.regla_ventas(cuatro, set(s), "VN", hoy, CFG)["estado"] == "no"
     cinco = {(x, "VN"): 1 for x in s[8:]} | {(x, "VN"): 2 for x in s[8:10]} | {(s[0], "VN"): 5}   # 5 frente a 10
     assert cg.regla_ventas(cinco, set(s), "VN", hoy, CFG)["estado"] == "si"
+
+
+def test_exclusiones_de_las_negociaciones_de_esta_instancia(tmp_path):
+    """config/walcu_export.yaml: fuera Covey Autocasión (todo lo que lleve «Covey»), Cupra Córdoba, SEAT Córdoba,
+    Avisa Škoda Badajoz y Cartuja Motor, por sede o por equipo; «Avisa Audi» cuenta (recibe leads de VW)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from scripts import walcu_agregar as wa
+    filas = [("Covey Autocasión Sevilla", "VO"), ("Avisa", "Covey"), ("CUPRA CORDOBA", "VN"), ("Avisa", "Seat Córdoba"),
+             ("Avisa Skoda Badajoz", "VN"), ("Avisa Škoda Badajoz", "VO"), ("Cartuja Motor", "VN"),
+             ("Avisa Audi", "VN"), ("Avisa Sevilla", "Avisa Audi"), ("Avisa Sevilla", "VO")]
+    export = tmp_path / "negociaciones.csv"
+    export.write_text("Estado;Fecha de cierre;Tipo negociación;Modelo;Sede;Equipo\n" + "".join(
+        f"Cerrada / Vendido;0{i % 5 + 1}/11/2026;Nuevo;Golf;{sede};{equipo}\n" for i, (sede, equipo) in enumerate(filas)),
+        encoding="utf-8")
+    neg, _ = wa.agregar_negociaciones(export)
+    assert neg.cuentas["otra_sede"] == 7 and neg.cuentas["ventas"] == 3       # las dos de Avisa Audi y la de Sevilla

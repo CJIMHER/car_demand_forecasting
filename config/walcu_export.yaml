@@ -82,7 +82,8 @@ negociaciones:
     VN: [Nuevo]
     VO: [VO, Km0]
   # Sedes y equipos de otras marcas o empresas del grupo que no cuentan (contiene, sin mayúsculas ni tildes),
-  # además de propio.empresas_excluidas de config/concesionario.yaml
-  sedes_excluidas: []
-  equipos_excluidos: []
+  # además de propio.empresas_excluidas de config/concesionario.yaml. NO se excluye «Avisa Audi»: recibe leads de
+  # VW del reparto general.
+  sedes_excluidas: &otras_sedes [Covey, Cupra Córdoba, SEAT Córdoba, Avisa Škoda Badajoz, Cartuja Motor]
+  equipos_excluidos: *otras_sedes
 

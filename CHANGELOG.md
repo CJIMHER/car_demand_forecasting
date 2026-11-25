@@ -8,6 +8,9 @@
 - **Alertas por rol**: revisado que «nueva» y «ya enviada» se deciden por destinatario (marketing, texto limpio;
   técnico, detalle), con pruebas que reproducen el 25-11 (`tests/test_alertas_por_rol.py`). Con `SIN_TELEGRAM=1`,
   cada rol dice qué alertas abiertas no se repiten porque ya las recibió, y cuándo.
+- **Negociaciones de Walcu**: `config/walcu_export.yaml` excluye las sedes y equipos de Covey, Cupra Córdoba, SEAT
+  Córdoba, Avisa Škoda Badajoz y Cartuja Motor (no Avisa Audi). La comparación con el histórico de 269 ventas queda
+  pendiente de exportar `negociaciones VW.numbers` a Excel (comando en el resumen).
 
 ## 2026-11-25 · Marketing solo con datos reales, sin explicar Google Trends, y campaña general (rama hito-1b-campana-general)
 

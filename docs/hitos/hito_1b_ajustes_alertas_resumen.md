@@ -54,3 +54,25 @@ SELECT rol, regla, clave, estado, abierta_desde FROM alertas
 Si el primer envío a marketing de ese día ya lleva «Taigo noviembre», es lo explicado. **Cambio**: con
 `SIN_TELEGRAM=1 make alertas`, cada rol dice ahora qué alertas abiertas no se repiten porque ya se le enviaron, y
 cuándo («--- marketing: 3 abiertas que no se repiten (ya enviadas a marketing): meta_f … el 25/11»).
+
+## 3. Exclusiones de la exportación de negociaciones
+
+`config/walcu_export.yaml` (negociaciones): fuera, por sede o por equipo (contiene, sin mayúsculas ni tildes), Covey
+(cualquier sede o equipo con «Covey», incluido Covey Autocasión), Cupra Córdoba, SEAT Córdoba, Avisa Škoda Badajoz y
+Cartuja Motor. «Avisa Audi» no se excluye: recibe leads de VW del reparto general. Una prueba lo comprueba con sedes
+y equipos escritos de varias formas (`test_exclusiones_de_las_negociaciones_de_esta_instancia`).
+
+**Comprobación contra el histórico: pendiente.** La exportación está en `~/Downloads/negociaciones VW.numbers`,
+formato de Numbers, que el script no lee (.xlsx o .csv). No he podido exportarla desde aquí (Numbers no respondió a
+la automatización; no ha quedado ninguna copia). Para comprobarlo, en Numbers: Archivo › Exportar a › Excel, y en el
+Mac:
+
+```bash
+.venv/bin/python scripts/walcu_agregar.py --negociaciones ~/Downloads/negociaciones_VW.xlsx --ventas /tmp/ventas_neg.csv
+cmp /tmp/ventas_neg.csv ~/cdf_walcu/walcu_ventas_semana_historico.csv && echo "Idéntico al histórico (269 ventas)"
+```
+
+El script escribe las filas en el mismo orden y formato que el histórico, así que `cmp` basta. Los comerciales
+excluidos se leen solos de `~/cdf_walcu/comerciales_excluidos.txt`. El registro que imprime dice cuántas ventas se
+excluyen por sede o empresa, por comercial y por tipo desconocido; si `cmp` encuentra diferencias,
+`diff /tmp/ventas_neg.csv ~/cdf_walcu/walcu_ventas_semana_historico.csv` dice en qué semanas y modelos.
