@@ -1,39 +1,114 @@
-# Tipos de página de la web del concesionario, para make ga4-explorar (ingesta/ga4_explorar.py), que
-# agrupa por tipo las rutas vistas en GA4 (pagePath, sin parámetros).
+# Páginas de la web en GA4: qué rutas cuentan, de qué marca son, de qué tipo y de qué modelo. Lo usan
+# make ga4-explorar (ingesta/ga4_explorar.py) y las señales semanales de intención (ingesta/ga4_series.py:
+# make ga4-series y la descarga diaria de GA4). La propiedad de GA4 es de todo el grupo.
 #
-# En orden: la primera regla cuyo «patron» (expresión regular) casa con la ruta se queda la página. La
-# ruta se compara en minúsculas y sin tildes. Una ruta que no casa con ninguna se agrupa por su forma:
-# cada tramo con un número de 2 o más cifras, o de más de 40 caracteres, se cambia por «*»
-# («/ocasion/golf-life-12345» → «/ocasion/*»), y así salen en la lista para añadir aquí su regla.
+# Todo se compara con la ruta (pagePath o landingPage, sin parámetros) en minúsculas y sin tildes. Orden:
+#   1. hosts: si la lista tiene algo, solo cuentan las páginas de esos dominios (vacía: todos).
+#   2. excluir: rutas que no son de la web comercial (peticiones, sedes, legal, posventa…). No cuentan.
+#   3. marca: la de otra marca del grupo no cuenta; la propia y la que no dice marca, sí (por separado).
+#   4. tipos: el primero que casa da el tipo de página, su tipo de stock (VN, VO o ninguno) y, en las
+#      fichas, el modelo.
 #
-# Las rutas dependen de la web de cada concesionario: estos patrones son un punto de partida y se
-# ajustan tras la primera ejecución.
+# Tras cambiarlo: make ga4-explorar EJEMPLOS=1 para comprobar las rutas de cada tipo y, si cambia lo que
+# ya se cargó, make ga4-series DESDE=2023-06-05 (cada semana recargada sustituye a la anterior).
+
+hosts: []
+
+excluir:
+  - '^/peticion(/|$)'                 # peticiones y causas solidarias: no son de la web comercial
+  - '^/concesionarios(/|$)'           # fichas de las sedes del grupo
+  - '^/(equipo|avisa|empresa|quienes-somos|trabaja-con-nosotros|empleo|blog|noticias)(/|$)'
+  - '^/(privacy|privacidad|aviso-legal|politica|cookies|condiciones|legal)'
+  - '^/(opiniones|testimonios|servicios(-[0-9]+)?)(/|$)'
+  - '(estado-de-mi-vehiculo|vehicle-status)'
+  - 'accesorios'
+  - '(taller|post-?venta|recambios|mantenimiento|chapa|pintura|neumaticos|itv|cita-taller)'
+
+# Marcas, por palabras enteras de la ruta («/landing-volkswagen-taigo» → landing, volkswagen, taigo). Un modelo
+# de varias palabras («t-roc», «id-buzz») tiene que aparecer seguido. Precedencia: el nombre de otra marca →
+# otra marca; si no, la marca propia o uno de sus modelos → propia; si no, un modelo de otra marca → otra marca;
+# si no, sin marca (inicio, ofertas, listados de todas las marcas…).
+marcas:
+  propia: [volkswagen, vw]           # incluidos sus vehículos comerciales
+  # Modelos de la marca propia: nombre (como se guarda) → formas en la ruta
+  modelos_propios:
+    T-Roc: [t-roc, troc]
+    T-Cross: [t-cross, tcross]
+    Taigo: [taigo]
+    Polo: [polo]
+    Golf: [golf]
+    Tiguan: [tiguan]
+    Tayron: [tayron]
+    Passat: [passat]
+    Arteon: [arteon]
+    Touareg: [touareg]
+    ID.3: [id-3, id3]
+    ID.4: [id-4, id4]
+    ID.5: [id-5, id5]
+    ID.7: [id-7, id7]
+    ID. Buzz: [id-buzz, idbuzz]
+    Caddy: [caddy]
+    Transporter: [transporter, e-transporter]
+    Multivan: [multivan]
+    Caravelle: [caravelle]
+    California: [california, grand-california]
+    Crafter: [crafter, e-crafter]
+    Amarok: [amarok]
+  otras: [audi, skoda, seat, cupra]
+  modelos_otras: [a1, a3, a4, a5, a6, a7, a8, q2, q3, q4, q5, q6, q7, q8, e-tron, etron, tt, kamiq, karoq,
+                  kodiaq, fabia, octavia, scala, superb, enyaq, elroq, arona, ibiza, leon, ateca, tarraco,
+                  formentor, born, tavascan, terramar, mii, citigo, myaudiandme, fulldrive]
+  # Sedes de otras marcas o empresas del grupo (palabras seguidas en la ruta): fuera, como otra marca
+  sedes_otras: [cartuja-motor, hispalauto]
+
+# Tipos de página. patron: expresión regular sobre la ruta. tipo: VN, VO o nada. ficha: true → se saca el modelo
+# de la ruta (modelos_propios); con requiere_modelo: true, solo casa si la ruta nombra un modelo (de cualquier
+# marca), y así la página de un modelo es ficha y la de toda la gama, listado.
 tipos:
   - nombre: Inicio
-    patron: '^/$'
+    patron: '^/(es/?)?$'
   - nombre: Gracias (formulario enviado)
     patron: '(gracias|thank-?you|confirmacion)'
-  - nombre: Ficha de vehículo de ocasión
-    patron: '/(ocasion|vehiculos?-de-ocasion|seminuevos?|segunda-mano|usados?|km-?0)[^/]*/.*[0-9]{3,}'
+  - nombre: Ficha de km 0
+    patron: '/vehiculos-km-?0[^/]*/.+|/km-?0/.+'
+    tipo: VO
+    ficha: true
+  - nombre: Listado de km 0
+    patron: '/vehiculos-km-?0|/km-?0(/|$)'
+    tipo: VO
+  - nombre: Ficha de ocasión
+    patron: '/(ocasion|vehiculos-ocasion[^/]*|coches-(de-)?ocasion|seminuevos?|segunda-mano|usados?)/(.*[0-9]{3,}|[^/]+/[^/]+/.+)'
+    tipo: VO
+    ficha: true
   - nombre: Listado de ocasión
-    patron: '/(ocasion|vehiculos?-de-ocasion|seminuevos?|segunda-mano|usados?|km-?0)'
+    patron: '/(ocasion|vehiculos-ocasion[^/]*|coches-(de-)?ocasion|seminuevos?|segunda-mano|usados?)(/|$)'
+    tipo: VO
   - nombre: Configurador
     patron: 'configurador'
+    tipo: VN
+  - nombre: Landing de modelo
+    patron: '^/landing-'
+    tipo: VN
+    ficha: true
   - nombre: Ficha de nuevo
-    patron: '/(nuevos?|coches-nuevos|vehiculos-nuevos|gama|modelos?)/[^/]+'
+    patron: '/(coches-nuevos|vehiculos-nuevos[^/]*|nuevos?|gama|modelos?|vehiculos-comerciales)/.+'
+    tipo: VN
+    ficha: true
+    requiere_modelo: true
   - nombre: Listado de nuevos
-    patron: '/(nuevos?|coches-nuevos|vehiculos-nuevos|gama|modelos?)/?$'
+    patron: '/(coches-nuevos|vehiculos-nuevos[^/]*|nuevos?|gama|modelos?|vehiculos-comerciales)(/|$)'
+    tipo: VN
+  - nombre: Buscador
+    patron: '^/coches(/|$)'
+  - nombre: Comparador
+    patron: 'compar'
   - nombre: Ofertas
-    patron: '(ofertas?|promociones?|campanas?)'
+    patron: '(ofertas?|promociones?|promos?)(/|-|$)'
   - nombre: Financiación y renting
     patron: '(financiacion|renting|leasing)'
-  - nombre: Taller y posventa
-    patron: '(taller|post-?venta|recambios|mantenimiento|cita-previa)'
-  - nombre: Prueba de conducción
-    patron: '(prueba|test-?drive)'
   - nombre: Tasación
-    patron: '(tasacion|tasar|vende-tu-coche|compramos)'
+    patron: '(tasacion|tasamos|tasar|vende-tu-coche|compramos)'
+  - nombre: Prueba de conducción
+    patron: '(prueba|test-?drive|longdrive)'
   - nombre: Contacto
-    patron: '(contacto|contactar|solicitar|llamar)'
-  - nombre: Legal y cookies
-    patron: '(aviso-legal|privacidad|cookies|condiciones)'
+    patron: '(contacto|contactar|solicitar|llamar|presupuesto)'

@@ -661,6 +661,23 @@ guardarlo: `make ga4-explorar > ga4_explorar.txt`). Los tipos de página salen d
 las rutas que no casan aparecen como «(sin tipo) /ruta/*»; se añade su regla en el Mac, commit, push,
 `make deploy` y se vuelve a lanzar. Hace unas 7 peticiones a la Data API (más si hay muchas rutas o eventos).
 
+### 7.20 Señales semanales de GA4 e informe de intención (hito 2)
+
+1. `make deploy` (migración 0026: tablas `ga4_intencion_*`).
+2. Comprobar las rutas antes de cargar: `make ga4-explorar EJEMPLOS=1 > ga4_explorar.txt`. En «Ficha de nuevo»,
+   «Ficha de ocasión», «Ficha de km 0» y «Landing de modelo» tiene que haber fichas, con su modelo entre
+   corchetes; lo de otras marcas, en «(fuera: otra marca)». Si algo cae mal, se corrige `config/ga4_paginas.yaml`
+   en el Mac (commit, push y `make deploy`) y se repite.
+3. Carga inicial: `make ga4-series DESDE=2023-06-05`. Va por tramos de 4 semanas (3 peticiones por tramo, más si
+   hay muchas filas); si se corta, se relanza igual: las semanas ya cargadas y sin cambios no se repiten.
+4. Desde ese día, la descarga de GA4 de las 06:10 la mantiene al día (las 2 últimas semanas terminadas y las
+   que falten). Un fallo no rompe la descarga: queda `aviso_series` en su detalle (`make estado`).
+5. Informe: `make ga4-intencion-informe` → `salidas/ga4_intencion_<día>.txt`. Necesita las series, y para la
+   validación, la previsión (Meta y Walcu cargados). No cambia la previsión ni el panel.
+
+Si se cambia `config/ga4_paginas.yaml` después de la carga, `make ga4-series DESDE=2023-06-05` recarga todo:
+cada semana cambiada queda con sus filas nuevas (las anteriores se conservan, fuera de las vistas `*_vigente`).
+
 ## 8. Día a día
 
 ```bash

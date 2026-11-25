@@ -17,7 +17,8 @@ podrían llevar datos de un formulario).
 
 Cada noche (06:10) recarga los últimos 7 días (GA4 también corrige): una fila solo se añade a
 ga4_trafico_dia si su contenido ha cambiado. Las respuestas brutas van comprimidas al bucket
-(ga4/raw/<día>/) antes de leerlas.
+(ga4/raw/<día>/) antes de leerlas. Después, con la descarga ya confirmada, rehace las campañas y pone al
+día las señales semanales de intención (ingesta/ga4_series.py; un fallo ahí queda como aviso).
 
 Acceso: OAuth 2.0 de cuenta de servicio (JWT firmado con RS256, alcance analytics.readonly), con la
 librería cryptography, que solo se carga si hay credenciales.
@@ -205,8 +206,10 @@ def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], 
         nuevas, iguales = cx.insertar_versionado(pg, "ga4_trafico_dia", "ga4_trafico_dia_vigente", CLAVE, VALORES,
                                                  filas, {"descargado_at": momento, "run_id": run_id, "origen": ORIGEN})
     campanas = cmp.actualizar_sin_romper(pg)          # la descarga ya está confirmada
+    from ingesta import ga4_series                   # aquí: ga4_series importa este módulo
+    series = ga4_series.actualizar_sin_romper(pg, token, propiedad, secretos, hoy, subir, dormir)
     return {"desde": str(desde), "hasta": str(hasta), "paginas": len(brutos), "filas": len(filas),
-            "filas_nuevas": nuevas, "filas_iguales": iguales, "brutos": ruta_bucket, **campanas}
+            "filas_nuevas": nuevas, "filas_iguales": iguales, "brutos": ruta_bucket, **campanas, **series}
 
 
 def ejecutar(entorno: Mapping[str, str] | None = None, desde: date | None = None, hasta: date | None = None,

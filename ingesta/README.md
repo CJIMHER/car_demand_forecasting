@@ -191,7 +191,38 @@ primera regla que casa; las que no, por su forma, con «*» en los tramos con n�
 dimensiones de interacción que tiene la propiedad, con su total de 12 meses, el tiempo medio de
 interacción calculado y las definiciones personalizadas; (4) el primer día con datos. Solo agregados, sin
 dimensiones de usuario; no guarda nada (ni Postgres, ni bucket, ni `fuentes_estado`). Pruebas:
-`tests/test_ga4_explorar.py`.
+`tests/test_ga4_explorar.py`. Con `EJEMPLOS=1`, las 5 rutas más vistas de cada tipo, con su marca y su modelo,
+para comprobar `config/ga4_paginas.yaml` antes de cargar las series.
+
+### Páginas de GA4 (ga4_paginas.py)
+
+`config/ga4_paginas.yaml` decide, para cada ruta (sin parámetros, en minúsculas y sin tildes): si cuenta (dominios
+de `hosts`, si hay; fuera lo de `excluir`: peticiones, sedes, legal, posventa…), su marca por palabras enteras
+(otra marca del grupo o una de sus sedes → fuera; la propia o uno de sus modelos → `propia`; nada → `sin_marca`),
+su tipo de página (el primero que casa) con su tipo de stock (VN, VO o ninguno) y, en las fichas, el modelo de
+`modelos_propios`. Con `requiere_modelo`, la regla solo casa si la ruta nombra un modelo: así la página de un
+modelo es ficha y la de toda la gama, listado. Pruebas con rutas reales: `tests/test_ga4_series.py`.
+
+### Señales semanales de intención (ga4_series.py)
+
+Tablas `ga4_intencion_carga`, `ga4_intencion_semana` y `ga4_fichas_modelo_semana` (migración 0026, solo añadir,
+vistas `*_vigente`). Por semana (lunes ISO), tipo (VN, VO, sin_tipo), grupo de canal (organico, directo, pagado,
+otros) y marca (propia, sin_marca): sesiones, sesiones con interacción y tiempo de interacción por la página de
+destino; vistas de fichas por la página vista; y los eventos de `config/ga4_intencion.yaml` (configurador
+—Configurar, COLOR, Opcionales, Precio—, form_start, form_submit, Solicitar información, Click llamada o email,
+Lead - Nuevos, Lead - Segunda mano) por la página del evento. Aparte, vistas de fichas por modelo. El grupo de
+canal sale de `config/canales.yaml` (meta y google_ads → pagado; organica → organico; directo → directo) y, si
+el canal no está en `grupos_canal`, de la agrupación de GA4 (`pagado_ga4`); el resto, otros.
+
+- `make ga4-series DESDE=2023-06-05`: carga inicial, por tramos de 4 semanas, hasta la última semana terminada.
+- Cada noche, dentro de `make ga4` (06:10): las 2 últimas semanas terminadas y las que falten desde la última
+  cargada; sin carga inicial no hace nada. Un fallo queda como `aviso_series` en el detalle de la descarga.
+- Cada semana se guarda con la huella de su contenido y la versión de `config/ga4_paginas.yaml`: recargarla sin
+  cambios no añade nada; con cambios, sus filas nuevas sustituyen a las anteriores en las vistas `*_vigente`.
+- Brutos al bucket (`ga4_series/raw/<día>/`) antes de escribir cada tramo. Solo agregados, sin dimensiones de
+  usuario.
+
+Pruebas: `tests/test_ga4_series.py`.
 
 ### Histórico de Meta (meta.py --historico)
 

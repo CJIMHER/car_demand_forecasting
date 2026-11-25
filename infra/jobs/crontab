@@ -3,7 +3,8 @@
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 
-# Conectores de Meta y GA4: recargan los últimos 7 días (sin credenciales no hacen nada)
+# Conectores de Meta y GA4: recargan los últimos 7 días (sin credenciales no hacen nada); GA4 pone al día
+# además las señales semanales de intención (ingesta/ga4_series.py), si ya tienen la carga inicial
 0 6 * * * cdf /app/infra/jobs/tarea.sh meta
 10 6 * * * cdf /app/infra/jobs/tarea.sh ga4
 # API de Walcu: carga incremental de coches, leads y citas, después de su sincronización con la web (06:00)

@@ -164,6 +164,25 @@ frente a hace 30 días: CRM o, sin él, nuestros anuncios en la web) y temporada
 los motivos en lenguaje de negocio, lo pendiente, la próxima temporada y las cifras (solo técnico). Pruebas:
 `tests/test_campana_general.py`.
 
+## ga4_intencion.py · informe de las señales de intención de GA4 (`make ga4-intencion-informe`)
+
+Análisis, sin tocar la previsión ni el panel: escribe `salidas/ga4_intencion_<día>.txt`. Protocolo fijado de
+antemano en `config/ga4_intencion.yaml` (`analisis`), que el informe repite al principio.
+
+- Señales de `ga4_intencion_semana_vigente` por tipo (VN, VO), en tres grupos de canal: todos, orgánico y
+  directo, y pagado. Cada señal empieza en su primera semana con datos (antes, el evento no existía).
+- **Correlación cruzada** con los leads semanales de Walcu (todos los orígenes y solo Facebook; sin otras marcas
+  ni otras empresas del grupo) y con las ventas por fecha de venta (sin las 2 últimas semanas), retardos de 0 a
+  8 semanas, en diferencias semanales de log(1 + x). Tal cual y sin Meta (parcial, quitando el gasto de Meta de
+  las semanas t y t−k). * si |r| > 1,96/√n. Orienta, no decide.
+- **Validación con origen móvil** (decide): la señal entra en el modelo de leads de la previsión como Google
+  Trends (la de la semana anterior, fija en las 4 semanas previstas) y se compara el error de los leads del tipo
+  con y sin ella. PASA si lo baja al menos un 5 % con el gasto que hubo y con el previsto. El umbral sale de
+  simular señales de ruido: con el 2 %, pasarían 9 de cada 100.
+
+Pruebas: `tests/test_ga4_intencion.py` (retardo plantado, correlación que solo viene del gasto, una señal que
+adelanta los leads frente a ruido, sin mirar al futuro, informe de punta a punta).
+
 ## Cómo se prueba
 
 `tests/test_mercado.py`: una prueba por regla, con capturas sintéticas escritas por el código real

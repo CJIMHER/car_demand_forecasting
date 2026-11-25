@@ -1,5 +1,26 @@
 # Cambios
 
+## 2026-11-25 · Señales semanales de intención de GA4 e informe (rama hito-2-ga4-series)
+
+- **Páginas** (`config/ga4_paginas.yaml`, `ingesta/ga4_paginas.py`): la propiedad es de todo el grupo. Fuera lo que
+  no es web comercial (`/peticion/*`, sedes, legal, posventa, accesorios…) y las otras marcas del grupo (Audi,
+  Škoda, SEAT, Cupra, sus modelos y sedes), por palabras de la ruta; la marca propia incluye sus vehículos
+  comerciales. Tipos reales: fichas y listados de nuevo y de ocasión, `/vehiculos-ocasion-en-stock`, km 0, landings
+  de modelo (`/landing-*`), configurador, ofertas, financiación, tasación, contacto…; en las fichas, el modelo.
+  `make ga4-explorar EJEMPLOS=1` enseña las rutas de cada tipo con su marca y modelo.
+- **Series semanales** (migración 0026, `ingesta/ga4_series.py`): desde el 05/06/2023, por tipo VN/VO, canal
+  (orgánico, directo, pagado, otros) y marca: sesiones, sesiones con interacción, tiempo de interacción, vistas de
+  fichas, configurador (Configurar, COLOR, Opcionales, Precio), form_start, form_submit, Solicitar información,
+  Click llamada o email y Lead - Nuevos / Lead - Segunda mano; y vistas de fichas por modelo. Solo agregados.
+  `make ga4-series DESDE=…` para la carga inicial; después, al día dentro de la descarga diaria de GA4.
+- **Informe** (`make ga4-intencion-informe`, `analitica/ga4_intencion.py`): para VN y VO, correlación cruzada de
+  cada señal (todos los canales, orgánico y directo, pagado) con los leads de Walcu (todos y Facebook) y las ventas
+  por fecha de venta, retardos de 0 a 8 semanas, tal cual y sin el gasto de Meta; y validación con origen móvil
+  en el modelo de leads de la previsión, con PASA / NO PASA (baja el error al menos un 5 % con el gasto que hubo y
+  con el previsto). No toca la previsión ni el panel.
+- Cómo ponerlo en marcha: `infra/deploy.md`, 7.20. Pruebas: `tests/test_ga4_series.py` y
+  `tests/test_ga4_intencion.py`.
+
 ## 2026-11-25 · Exploración de GA4 para la intención de compra (rama hito-2-ga4-intencion)
 
 - **`make ga4-explorar`** (`ingesta/ga4_explorar.py`): con la credencial de GA4 ya configurada, consulta la Data API

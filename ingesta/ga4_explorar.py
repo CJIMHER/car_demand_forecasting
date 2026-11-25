@@ -5,7 +5,8 @@ consulta la GA4 Data API y enseña en pantalla:
 
   1. Eventos: recuento de cada uno en los últimos 12 meses, y su primer y último día con datos.
   2. Los 100 tipos de página más vistos en los últimos 12 meses (vistas y rutas distintas), agrupando
-     las rutas con config/ga4_paginas.yaml; las que no casan, por su forma («/ocasion/*»).
+     las rutas con config/ga4_paginas.yaml (ingesta/ga4_paginas.py); las que no casan, por su forma
+     («/ocasion/*»), y las que no cuentan (no comerciales u otra marca), como «(fuera: …)».
   3. Dimensiones y métricas de interacción disponibles (de los metadatos de la propiedad), con su total
      de los últimos 12 meses, las personalizadas y el número de todas por categoría.
   4. Desde qué día hay datos en la propiedad.
@@ -16,6 +17,7 @@ parámetros). No guarda nada: ni en Postgres, ni en el bucket, ni en fuentes_est
 Uso:
   python -m ingesta.ga4_explorar                  (make ga4-explorar)
   python -m ingesta.ga4_explorar --todas          además, la lista completa de dimensiones y métricas
+  python -m ingesta.ga4_explorar --ejemplos       además, las rutas más vistas de cada tipo, con marca y modelo
 """
 
 from __future__ import annotations
@@ -28,15 +30,11 @@ import sys
 import time
 from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from pathlib import Path
-
-import yaml
 
 from ingesta import conectores as cx
 from ingesta import ga4
-from ingesta.campanas import RAIZ, plegar
+from ingesta import ga4_paginas as gp
 from ingesta.scrapers_vw import hoy_madrid
 
 PRIMER_DIA_GA4 = date(2015, 8, 14)        # el primer día que admite la Data API
@@ -44,6 +42,7 @@ POR_PAGINA = 100_000
 MAX_PAGINAS = 200
 MAX_METRICAS = 10                         # por petición, límite de la API
 TIPOS_PAGINA = 100
+EJEMPLOS = 5
 
 # Lo que interesa para medir la intención: (apiName, qué es). Solo se piden si la propiedad las tiene.
 METRICAS_INTERACCION = [
@@ -75,38 +74,10 @@ DIMENSIONES_INTERACCION = [
 ]
 
 
-class ErrorPaginas(Exception):
-    pass
+ErrorPaginas = gp.ErrorPaginas
 
 
 # --------------------------------------------------------------------------- tipos de página
-
-@dataclass(frozen=True)
-class TipoPagina:
-    nombre: str
-    patron: re.Pattern
-
-
-def ruta_config() -> Path:
-    return Path(os.environ.get("CDF_GA4_PAGINAS", RAIZ / "config" / "ga4_paginas.yaml"))
-
-
-def cargar_tipos(fichero: Path | None = None) -> tuple[TipoPagina, ...]:
-    cfg = yaml.safe_load((fichero or ruta_config()).read_text(encoding="utf-8")) or {}
-    tipos = cfg.get("tipos")
-    if not isinstance(tipos, list):
-        raise ErrorPaginas("config/ga4_paginas.yaml: «tipos» debe ser una lista")
-    salida = []
-    for i, t in enumerate(tipos, 1):
-        if not isinstance(t, dict) or not str(t.get("nombre") or "").strip() or not t.get("patron"):
-            raise ErrorPaginas(f"config/ga4_paginas.yaml: el tipo {i} necesita «nombre» y «patron»")
-        try:
-            patron = re.compile(str(t["patron"]))
-        except re.error as exc:
-            raise ErrorPaginas(f"config/ga4_paginas.yaml: patrón de «{t['nombre']}» no válido: {exc}") from None
-        salida.append(TipoPagina(str(t["nombre"]).strip(), patron))
-    return tuple(salida)
-
 
 def forma(ruta: str) -> str:
     """«/ocasion/golf-life-12345/» → «/ocasion/*»: los tramos con números o muy largos, «*»."""
@@ -114,23 +85,27 @@ def forma(ruta: str) -> str:
     return "/" + "/".join(tramos) if any(tramos) else "/"
 
 
-def tipo_pagina(ruta: str, tipos: tuple[TipoPagina, ...]) -> str:
-    r = plegar(ga4.ruta_pagina(ruta or "/")) or "/"
-    for t in tipos:
-        if t.patron.search(r):
-            return t.nombre
-    return f"(sin tipo) {forma(r)}"
+def grupo(p: gp.Pagina) -> str:
+    """Nombre del grupo de una página: su tipo; «(fuera: motivo)» si no cuenta; «(sin tipo) /forma/*» si no casa."""
+    if not p.cuenta:
+        return f"(fuera: {p.excluida})"
+    return p.tipo_pagina or f"(sin tipo) {forma(p.ruta)}"
 
 
-def agrupar_paginas(filas: list[tuple[str, int]], tipos: tuple[TipoPagina, ...]) -> list[dict]:
-    """[(ruta, vistas)] → [{tipo, vistas, rutas}], de más a menos vistas."""
+def agrupar_paginas(filas: list[tuple[str, int]], paginas: gp.Paginas) -> list[dict]:
+    """[(ruta, vistas)] → [{tipo, vistas, rutas, ejemplos}], de más a menos vistos. ejemplos: las rutas más
+    vistas del grupo, con su marca y su modelo."""
     vistas: Counter = Counter()
-    rutas: dict[str, set[str]] = defaultdict(set)
+    rutas: dict[str, Counter] = defaultdict(Counter)
+    clase: dict[str, gp.Pagina] = {}
     for ruta, n in filas:
-        t = tipo_pagina(ruta, tipos)
+        p = paginas.clasificar(ruta)
+        t = grupo(p)
         vistas[t] += n
-        rutas[t].add(ga4.ruta_pagina(ruta or "/"))
-    return [{"tipo": t, "vistas": n, "rutas": len(rutas[t])}
+        rutas[t][p.ruta] += n
+        clase[p.ruta] = p
+    return [{"tipo": t, "vistas": n, "rutas": len(rutas[t]),
+             "ejemplos": [(r, v, clase[r].marca, clase[r].modelo) for r, v in rutas[t].most_common(EJEMPLOS)]}
             for t, n in sorted(vistas.items(), key=lambda x: (-x[1], x[0]))]
 
 
@@ -140,23 +115,28 @@ class Cliente:
     def __init__(self, token: str, propiedad: str, secretos: list[str], dormir=time.sleep):
         self.token, self.propiedad, self.secretos, self.dormir = token, propiedad, secretos, dormir
         self.peticiones = 0
+        self.brutos: list[bytes] | None = None     # una lista: guarda cada respuesta en bruto (para el bucket)
 
     def _pedir(self, url: str, cuerpo: dict | None = None) -> dict:
         self.peticiones += 1
         cab = {"Authorization": f"Bearer {self.token}"}
         if cuerpo is not None:
             cab["Content-Type"] = "application/json"
-        datos, _ = cx.peticion_json(url, metodo="POST" if cuerpo is not None else "GET", cabeceras=cab,
-                                    cuerpo=json.dumps(cuerpo).encode() if cuerpo is not None else None,
-                                    es_limite=ga4.es_limite, secretos=self.secretos, dormir=self.dormir)
+        datos, bruto = cx.peticion_json(url, metodo="POST" if cuerpo is not None else "GET", cabeceras=cab,
+                                        cuerpo=json.dumps(cuerpo).encode() if cuerpo is not None else None,
+                                        es_limite=ga4.es_limite, secretos=self.secretos, dormir=self.dormir)
+        if self.brutos is not None:
+            self.brutos.append(bruto)
         return datos
 
     def metadatos(self) -> dict:
         return self._pedir(f"{ga4.API}/properties/{self.propiedad}/metadata")
 
     def informe(self, desde: date, hasta: date, dimensiones: list[str], metricas: list[str],
-                orden: list[dict] | None = None, limite: int | None = None) -> list[tuple[list[str], list[str]]]:
-        """Filas (valores de las dimensiones, valores de las métricas), con todas las páginas (o hasta `limite`)."""
+                orden: list[dict] | None = None, limite: int | None = None,
+                filtro: dict | None = None) -> list[tuple[list[str], list[str]]]:
+        """Filas (valores de las dimensiones, valores de las métricas), con todas las páginas (o hasta `limite`).
+        `filtro`: dimensionFilter de la API."""
         filas, offset = [], 0
         for _ in range(MAX_PAGINAS):
             cuerpo = {"dateRanges": [{"startDate": desde.isoformat(), "endDate": hasta.isoformat()}],
@@ -164,6 +144,8 @@ class Cliente:
                       "limit": min(POR_PAGINA, limite or POR_PAGINA), "offset": offset, "keepEmptyRows": False}
             if orden:
                 cuerpo["orderBys"] = orden
+            if filtro:
+                cuerpo["dimensionFilter"] = filtro
             datos = self._pedir(f"{ga4.API}/properties/{self.propiedad}:runReport", cuerpo)
             pagina = datos.get("rows") or []
             for r in pagina:
@@ -202,7 +184,7 @@ def eventos(cli: Cliente, desde: date, hasta: date) -> list[dict]:
     return sorted(lista, key=lambda e: (-e["recuento"], e["evento"]))
 
 
-def paginas(cli: Cliente, desde: date, hasta: date, tipos: tuple[TipoPagina, ...]) -> tuple[list[dict], int]:
+def paginas(cli: Cliente, desde: date, hasta: date, tipos: gp.Paginas) -> tuple[list[dict], int]:
     """(tipos de página de más a menos vistos, rutas leídas)."""
     filas = cli.informe(desde, hasta, ["pagePath"], ["screenPageViews"],
                         orden=[{"metric": {"metricName": "screenPageViews"}, "desc": True}])
@@ -249,8 +231,9 @@ def _f(d: date | None) -> str:
 
 
 def explorar(entorno: Mapping[str, str], hoy: date, escribir: Callable[[str], None] = print, todas: bool = False,
-             tipos: tuple[TipoPagina, ...] | None = None, dormir=time.sleep, firmar=ga4.jwt_firmado) -> int:
-    tipos = cargar_tipos() if tipos is None else tipos
+             tipos: gp.Paginas | None = None, dormir=time.sleep, firmar=ga4.jwt_firmado,
+             ejemplos: bool = False) -> int:
+    tipos = gp.cargar() if tipos is None else tipos
     propiedad, ruta = ga4.credenciales(entorno)
     token, secretos = ga4.token_acceso(ruta, dormir, firmar)
     cli = Cliente(token, propiedad, secretos, dormir)
@@ -271,13 +254,17 @@ def explorar(entorno: Mapping[str, str], hoy: date, escribir: Callable[[str], No
     grupos, leidas = paginas(cli, desde, hasta, tipos)
     total = sum(g["vistas"] for g in grupos)
     sin_tipo = sum(g["vistas"] for g in grupos if g["tipo"].startswith("(sin tipo)"))
+    fuera = sum(g["vistas"] for g in grupos if g["tipo"].startswith("(fuera"))
     escribir(f"  {_n(leidas)} rutas en {len(grupos)} tipos; sin tipo de config/ga4_paginas.yaml, el "
-             f"{_pct(sin_tipo, total)} % de las vistas.")
+             f"{_pct(sin_tipo, total)} % de las vistas; fuera (no comercial u otra marca), el {_pct(fuera, total)} %.")
     ancho = max([len(g["tipo"]) for g in grupos[:TIPOS_PAGINA]] + [4])
     escribir(f"  {'tipo':<{ancho}}  {'vistas':>12}  {'%':>6}  {'rutas':>7}")
     for g in grupos[:TIPOS_PAGINA]:
         escribir(f"  {g['tipo']:<{ancho}}  {_n(g['vistas']):>12}  {_pct(g['vistas'], total):>6}  "
                  f"{_n(g['rutas']):>7}")
+        if ejemplos:
+            for r, v, marca, modelo in g["ejemplos"]:
+                escribir(f"      {_n(v):>9}  {r}  [{marca}" + (f"; {modelo}]" if modelo else "]"))
 
     escribir("\n== 3. Dimensiones y métricas de interacción disponibles")
     dims, mets = disponibles(cli.metadatos())
@@ -317,10 +304,12 @@ def main(argv=None, entorno: Mapping[str, str] | None = None, escribir: Callable
          dormir=time.sleep, firmar=ga4.jwt_firmado) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--todas", action="store_true", help="lista completa de dimensiones y métricas")
+    parser.add_argument("--ejemplos", action="store_true", help="las rutas más vistas de cada tipo de página")
     args = parser.parse_args(argv)
     entorno = os.environ if entorno is None else entorno
     try:
-        return explorar(entorno, hoy_madrid(), escribir, args.todas, dormir=dormir, firmar=firmar)
+        return explorar(entorno, hoy_madrid(), escribir, args.todas, dormir=dormir, firmar=firmar,
+                        ejemplos=args.ejemplos)
     except cx.SinCredenciales as exc:
         escribir(f"GA4 sin credenciales: {exc}. No se ha hecho ninguna petición.")
         return 1

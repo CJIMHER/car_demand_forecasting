@@ -44,8 +44,8 @@ EVENTOS_DIAS = [("page_view", "20230301"), ("page_view", "20261124"), ("session_
 PAGINAS = [("/", 30000), ("/ocasion", 20000), ("/ocasion/volkswagen-golf-life-12345", 9000),
            ("/ocasion/volkswagen-t-roc-sport-67890/", 7000), ("/nuevos/t-roc", 8000), ("/nuevos", 3000),
            ("/configurador/id-4", 2500), ("/ofertas/black-friday", 2000), ("/contacto", 1500),
-           ("/gracias", 400), ("/blog/consejos-itv-2025", 300), ("/blog/consejos-invierno-2024", 200),
-           ("/Ocasión/Polo-99887", 100)]
+           ("/gracias", 400), ("/vehiculos-especiales/serie-2025", 300), ("/vehiculos-especiales/serie-2024", 200),
+           ("/Ocasión/Polo-99887", 100), ("/landing-audi-q3", 600), ("/peticion/una-causa", 250)]
 METRICAS_META = ["sessions", "engagedSessions", "engagementRate", "userEngagementDuration", "averageSessionDuration",
                  "screenPageViews", "screenPageViewsPerSession", "eventCount", "keyEvents", "activeUsers",
                  "totalUsers"]                                                    # sin newUsers
@@ -133,7 +133,7 @@ def _explorar(monkeypatch, entorno, api, **k):
 
 
 def _linea(texto, empieza):
-    return next(l for l in texto.splitlines() if l.strip().startswith(empieza))
+    return next(x for x in texto.splitlines() if x.strip().startswith(empieza))
 
 
 def test_eventos_con_recuento_de_12_meses_y_primer_dia(monkeypatch, entorno, sin_bd):
@@ -145,7 +145,7 @@ def test_eventos_con_recuento_de_12_meses_y_primer_dia(monkeypatch, entorno, sin
     assert _linea(texto, "generate_lead").split() == ["generate_lead", "340", "15/01/2024", "20/11/2026"]
     # un evento que ya no se usa sale con 0 en los últimos 12 meses y sus fechas
     assert _linea(texto, "formulario_antiguo").split() == ["formulario_antiguo", "0", "10/05/2023", "31/12/2023"]
-    orden = [l.split()[0] for l in texto.split("== 1.")[1].split("== 2.")[0].splitlines()[2:] if l.strip()]
+    orden = [x.split()[0] for x in texto.split("== 1.")[1].split("== 2.")[0].splitlines()[2:] if x.strip()]
     assert orden == ["page_view", "session_start", "generate_lead", "click_telefono", "formulario_antiguo"]
     # las 10 filas de evento y día, en 3 páginas
     assert [c["offset"] for c in api.informes() if [d["name"] for d in c["dimensions"]] == ["eventName", "date"]] \
@@ -155,19 +155,34 @@ def test_eventos_con_recuento_de_12_meses_y_primer_dia(monkeypatch, entorno, sin
 def test_tipos_de_pagina_por_patron_y_por_forma(monkeypatch, entorno, sin_bd):
     _, texto = _explorar(monkeypatch, entorno, Api())
     bloque = texto.split("== 2.")[1].split("== 3.")[0]
-    assert "13 rutas en 10 tipos" in bloque
+    assert "15 rutas en 12 tipos" in bloque
     # las dos fichas de ocasión y la de «/Ocasión/Polo-99887» (mayúsculas y tilde) juntas
-    assert _linea(bloque, "Ficha de vehículo de ocasión").split()[-3:] == ["16.100", "19,2", "3"]
-    assert _linea(bloque, "Listado de ocasión").split()[-3:] == ["20.000", "23,8", "1"]
-    assert _linea(bloque, "Inicio").split()[-3:] == ["30.000", "35,7", "1"]
+    assert _linea(bloque, "Ficha de ocasión").split()[-3:] == ["16.100", "19,0", "3"]
+    assert _linea(bloque, "Listado de ocasión").split()[-3:] == ["20.000", "23,6", "1"]
+    assert _linea(bloque, "Inicio").split()[-3:] == ["30.000", "35,4", "1"]
     for tipo in ("Ficha de nuevo", "Listado de nuevos", "Configurador", "Ofertas", "Contacto",
                  "Gracias (formulario enviado)"):
         assert _linea(bloque, tipo)
     # lo que no casa, agrupado por su forma, para añadirle una regla
-    assert _linea(bloque, "(sin tipo) /blog/*").split()[-3:] == ["500", "0,6", "2"]
-    assert "el 0,6 % de las vistas" in bloque
-    tipos = [l.strip().rsplit(None, 3)[0] for l in bloque.splitlines()[3:] if l.strip()]
-    assert tipos[:3] == ["Inicio", "Listado de ocasión", "Ficha de vehículo de ocasión"]
+    assert _linea(bloque, "(sin tipo) /vehiculos-especiales/*").split()[-3:] == ["500", "0,6", "2"]
+    # lo que no cuenta: otra marca del grupo y lo que no es de la web comercial
+    assert _linea(bloque, "(fuera: otra marca)").split()[-3:] == ["600", "0,7", "1"]
+    assert _linea(bloque, "(fuera: no comercial)").split()[-3:] == ["250", "0,3", "1"]
+    assert "el 0,6 % de las vistas; fuera (no comercial u otra marca), el 1,0 %" in bloque
+    tipos = [x.strip().rsplit(None, 3)[0] for x in bloque.splitlines()[3:] if x.strip()]
+    assert tipos[:3] == ["Inicio", "Listado de ocasión", "Ficha de ocasión"]
+    assert "/ocasion/" not in bloque                     # sin ejemplos si no se piden
+
+
+def test_ejemplos_de_rutas_con_marca_y_modelo(monkeypatch, entorno, sin_bd):
+    _, texto = _explorar(monkeypatch, entorno, Api(), ejemplos=True)
+    bloque = texto.split("== 2.")[1].split("== 3.")[0]
+    lineas = [x.strip() for x in bloque.splitlines()]
+    i = lineas.index(_linea(bloque, "Ficha de ocasión").strip())
+    assert lineas[i + 1:i + 4] == ["9.000  /ocasion/volkswagen-golf-life-12345  [propia; Golf]",
+                                   "7.000  /ocasion/volkswagen-t-roc-sport-67890  [propia; T-Roc]",
+                                   "100  /ocasion/polo-99887  [propia; Polo]"]
+    assert "600  /landing-audi-q3  [otra]" in lineas
 
 
 def test_metricas_y_dimensiones_de_interaccion(monkeypatch, entorno, sin_bd):
@@ -185,7 +200,7 @@ def test_metricas_y_dimensiones_de_interaccion(monkeypatch, entorno, sin_bd):
     assert "Métricas en total: 11 (Session 11)" in bloque
     # 11 métricas: dos peticiones (máximo 10 por petición) y solo de las que hay
     lotes = [[m["name"] for m in c["metrics"]] for c in api.informes() if not c["dimensions"]]
-    assert [len(l) for l in lotes] == [10, 1] and "newUsers" not in sum(lotes, [])
+    assert [len(x) for x in lotes] == [10, 1] and "newUsers" not in sum(lotes, [])
 
 
 def test_primer_dia_con_datos_y_nada_guardado(monkeypatch, entorno, sin_bd):
@@ -231,7 +246,8 @@ def test_un_error_de_la_api_sale_sin_el_token(monkeypatch, entorno, sin_bd):
 
     def falla(peticion, timeout):
         if peticion.full_url == INFORME:
-            raise urllib.error.HTTPError(INFORME, 403, "x", {}, io.BytesIO(b'{"error": {"status": "PERMISSION_DENIED"}}'))
+            cuerpo = io.BytesIO(b'{"error": {"status": "PERMISSION_DENIED"}}')
+            raise urllib.error.HTTPError(INFORME, 403, "x", {}, cuerpo)
         return api(peticion, timeout)
 
     monkeypatch.setattr(cx, "_urlopen", falla)
@@ -241,16 +257,6 @@ def test_un_error_de_la_api_sale_sin_el_token(monkeypatch, entorno, sin_bd):
     assert lineas[-1].startswith("GA4: ") and "403" in lineas[-1] and TOKEN not in "\n".join(lineas)
 
 
-def test_config_de_tipos_de_pagina(tmp_path):
-    tipos = gx.cargar_tipos()
-    assert tipos and all(t.nombre for t in tipos)
-    assert gx.tipo_pagina("/ocasion/golf-12345?email=a@b.example", tipos) == "Ficha de vehículo de ocasión"
+def test_forma_de_las_rutas_sin_tipo():
     assert gx.forma("/a/b-123/" + "x" * 41) == "/a/*/*"
     assert gx.forma("/") == "/"
-    mal = tmp_path / "mal.yaml"
-    mal.write_text("tipos:\n  - nombre: Roto\n    patron: '('\n")
-    with pytest.raises(gx.ErrorPaginas, match="patrón de «Roto» no válido"):
-        gx.cargar_tipos(mal)
-    mal.write_text("tipos:\n  - patron: 'x'\n")
-    with pytest.raises(gx.ErrorPaginas, match="necesita «nombre» y «patron»"):
-        gx.cargar_tipos(mal)

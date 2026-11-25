@@ -1,0 +1,72 @@
+# Señales semanales de intención de compra de GA4 (ingesta/ga4_series.py) y su análisis
+# (analitica/ga4_intencion.py, make ga4-intencion-informe). Las páginas, marcas y modelos: config/ga4_paginas.yaml.
+# Los canales: config/canales.yaml.
+
+# ---------------------------------------------------------------------------- series (make ga4-series)
+
+# Primera semana de la carga inicial (lunes): la propiedad tiene datos desde el 02/06/2023
+inicio: 2023-06-05
+# La descarga diaria de GA4 recarga las últimas N semanas terminadas (GA4 corrige los días pasados) y
+# cualquier semana terminada que falte desde la última cargada
+semanas_recarga: 2
+# Semanas por bloque de peticiones a la API en la carga inicial
+semanas_por_tramo: 4
+
+# Canal de config/canales.yaml → grupo de canal de la tabla (organico, directo, pagado, otros). Un canal que no
+# está aquí va a «pagado» si la agrupación de canales por defecto de GA4 está en pagado_ga4 y, si no, a «otros».
+grupos_canal:
+  organica: organico
+  directo: directo
+  meta: pagado
+  google_ads: pagado
+pagado_ga4: [Paid Search, Paid Social, Paid Shopping, Paid Video, Paid Other, Display, Cross-network, Audio]
+
+# Eventos de GA4 que se cuentan (columna de la tabla → nombre del evento). tipo: el tipo de stock del evento,
+# sea cual sea su página (el configurador y «Lead - Nuevos», VN; «Lead - Segunda mano», VO); sin tipo, el de
+# la página en que ocurre. Un evento en una página que no cuenta (no comercial u otra marca) no se cuenta.
+eventos:
+  configurar: {evento: Configurar, tipo: VN}
+  color: {evento: COLOR, tipo: VN}
+  opcionales: {evento: Opcionales, tipo: VN}
+  precio: {evento: Precio, tipo: VN}
+  form_start: {evento: form_start}
+  form_submit: {evento: form_submit}
+  solicitar_informacion: {evento: Solicitar información}
+  click_llamada_email: {evento: Click llamada o email}
+  lead_nuevos: {evento: Lead - Nuevos, tipo: VN}
+  lead_segunda_mano: {evento: Lead - Segunda mano, tipo: VO}
+
+# ---------------------------------------------------------------------------- análisis (make ga4-intencion-informe)
+# Fijado antes de mirar los resultados: no se cambia para que una señal pase.
+analisis:
+  # Retardos de la correlación cruzada: la señal de la semana t−k frente al objetivo de la semana t
+  retardo_maximo: 8
+  # Marcas de la tabla que entran (las de otras marcas del grupo ya no se guardan)
+  marcas: [propia, sin_marca]
+  # Grupos de canal que se prueban por separado: el pagado lo mueve sobre todo la inversión en Meta
+  grupos_canal:
+    todos: [organico, directo, pagado, otros]
+    organico_directo: [organico, directo]
+    pagado: [pagado]
+  # Señales: nombre → columnas que se suman (del tipo VN o VO de cada fila)
+  senales:
+    sesiones: [sesiones]
+    sesiones_interaccion: [sesiones_interaccion]
+    tiempo_interaccion: [tiempo_interaccion]
+    vistas_fichas: [vistas_fichas]
+    configurador: [configurar, color, opcionales, precio]
+    form_start: [form_start]
+    form_submit: [form_submit]
+    solicitar_informacion: [solicitar_informacion]
+    click_llamada_email: [click_llamada_email]
+    lead_web: [lead_nuevos, lead_segunda_mano]
+  # Ventas por fecha de venta: sin las últimas N semanas terminadas (Walcu cierra las ventas con retraso)
+  ventas_semanas_excluidas: 2
+  # Con menos semanas en común no se calcula la correlación
+  semanas_minimas: 26
+  # Una señal PASA si, añadida al modelo de leads de la previsión (config/prevision.yaml, validación con origen
+  # móvil), baja el error absoluto medio de los leads del tipo al menos este % con el gasto que hubo Y con el
+  # gasto previsto. Calibrado con datos simulados antes de ver los reales (tests/test_ga4_intencion.py): con 12
+  # orígenes, una señal de puro ruido baja el error un 2 % o más en 9 de cada 100 pruebas, y un 5 % o más en menos
+  # de 2; con unas 50 señales y canales, el 2 % daría 4 o 5 «pasa» falsos.
+  mejora_minima_pct: 5

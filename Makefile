@@ -18,7 +18,7 @@ PYTHON ?= .venv/bin/python
 .PHONY: help comprobar-entorno deploy migrar cargar comprobar recuento concesionarios remarcar-propio \
         estado copia restaurar-prueba test hora logs ps psql precalcular salidas-diagnostico panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
-        ejemplo-cargar ejemplo-borrar alertas meta ga4 ga4-explorar campanas gtrends gtrends-enlaces gtrends-subir \
+        ejemplo-cargar ejemplo-borrar alertas meta ga4 ga4-explorar ga4-series ga4-intencion-informe campanas gtrends gtrends-enlaces gtrends-subir \
         meta-historico walcu-cargar walcu-ventas-cargar walcu-ventas-agregar walcu-agregar referencias-meta prevision walcu-api walcu-api-inicial \
         walcu-api-probar walcu-api-mapeo
 
@@ -176,8 +176,17 @@ referencias-meta: ## Cruce Meta–Walcu y referencias de coste por año y tipo (
 ga4: ## Descarga de GA4 (cron 06:10): los últimos 7 días; sin credenciales no hace nada
 	$(JOBS) python -m ingesta.ga4
 
-ga4-explorar: ## GA4: eventos, tipos de página, métricas de interacción y primer día con datos (no guarda nada); TODAS=1 lista todo
-	$(JOBS) python -m ingesta.ga4_explorar $(if $(TODAS),--todas)
+ga4-explorar: ## GA4: eventos, tipos de página, métricas de interacción y primer día con datos (no guarda nada); TODAS=1 lista todo; EJEMPLOS=1 rutas de cada tipo
+	$(JOBS) python -m ingesta.ga4_explorar $(if $(TODAS),--todas) $(if $(EJEMPLOS),--ejemplos)
+
+ga4-series: ## GA4: carga inicial de las señales semanales de intención: make ga4-series DESDE=2023-06-05 [HASTA=AAAA-MM-DD]
+	@test -n "$(DESDE)" || { echo "Uso: make ga4-series DESDE=2023-06-05"; exit 1; }
+	$(JOBS) python -m ingesta.ga4_series --desde $(DESDE) $(if $(HASTA),--hasta $(HASTA))
+
+ga4-intencion-informe: ## GA4: informe de las señales de intención frente a leads y ventas, en salidas/ga4_intencion_<día>.txt
+	@mkdir -p salidas
+	$(JOBS) python -m analitica.ga4_intencion > salidas/ga4_intencion_$$(date +%F).txt
+	@echo "Informe: salidas/ga4_intencion_$$(date +%F).txt"
 
 campanas: ## Reclasifica las campañas con config/campanas.yaml (Marketing y campañas sin regla)
 	$(JOBS) python -m ingesta.campanas
