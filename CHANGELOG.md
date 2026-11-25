@@ -5,6 +5,9 @@
 - **Campaña general, caída de ventas**: diferencia mínima de 5 coches y sin las 2 últimas semanas completas
   (`ventas.semanas_recientes_excluidas`), porque Walcu cierra las ventas con retraso. Con el histórico saltaría en el
   27 % de las semanas en VN y el 19 % en VO (antes, 37 % y 36 %): `docs/hitos/hito_1b_ajustes_alertas_resumen.md`.
+- **Alertas por rol**: revisado que «nueva» y «ya enviada» se deciden por destinatario (marketing, texto limpio;
+  técnico, detalle), con pruebas que reproducen el 25-11 (`tests/test_alertas_por_rol.py`). Con `SIN_TELEGRAM=1`,
+  cada rol dice qué alertas abiertas no se repiten porque ya las recibió, y cuándo.
 
 ## 2026-11-25 · Marketing solo con datos reales, sin explicar Google Trends, y campaña general (rama hito-1b-campana-general)
 

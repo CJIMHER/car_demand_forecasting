@@ -92,8 +92,10 @@ def _intentar(enviar, texto: str, chat: str) -> tuple[str, int | None, str | Non
         return "error", None, telegram.limpiar(f"{type(exc).__name__}: {exc}")[:500]
 
 
-def pendientes(pg: psycopg.Connection, dia: date, rol: str) -> list[dict]:
-    """Alertas abiertas hoy para el rol que no se le han enviado desde que se abrieron."""
+def pendientes(pg: psycopg.Connection, dia: date, rol: str, ya_enviadas: list | None = None) -> list[dict]:
+    """Alertas abiertas hoy para el rol que no se le han enviado desde que se abrieron. Todo se decide por rol: lo
+    que haya recibido otro destinatario no cuenta. `ya_enviadas`: si se pasa, se llena con las abiertas que no se
+    repiten porque este rol ya las recibió (con la fecha del envío)."""
     cols = ("regla", "clave", "origen", "texto", "nivel", "tema", "abierta_desde")
     filas = [dict(zip(cols, f)) for f in pg.execute(
         f"""SELECT {', '.join(cols)} FROM alertas WHERE fecha = %s AND rol = %s AND estado IN ('nueva', 'abierta')
@@ -108,7 +110,14 @@ def pendientes(pg: psycopg.Connection, dia: date, rol: str) -> list[dict]:
         for a in alertas:
             k = (a["regla"], a["clave"], a["origen"])
             enviadas[k] = max(enviadas.get(k, fecha), fecha)
-    return [f for f in filas if enviadas.get((f["regla"], f["clave"], f["origen"]), date.min) < f["abierta_desde"]]
+    salida = []
+    for f in filas:
+        cuando = enviadas.get((f["regla"], f["clave"], f["origen"]), date.min)
+        if cuando < f["abierta_desde"]:
+            salida.append(f)
+        elif ya_enviadas is not None:
+            ya_enviadas.append({**f, "enviada": cuando})
+    return salida
 
 
 def enviar_dia(pg: psycopg.Connection, dia: date, enviar=None, entorno: Mapping[str, str] | None = None,
@@ -121,7 +130,11 @@ def enviar_dia(pg: psycopg.Connection, dia: date, enviar=None, entorno: Mapping[
     for rol in ROLES:
         # Las calculadas sobre filas de ejemplo se guardan y se ven en el panel, pero no se envían
         # salvo con ALERTAS_ENVIAR_EJEMPLO=1 en el .env
-        filas = [f for f in pendientes(pg, dia, rol) if con_ejemplo or f["origen"] != "ejemplo"]
+        ya: list[dict] = []
+        filas = [f for f in pendientes(pg, dia, rol, ya) if con_ejemplo or f["origen"] != "ejemplo"]
+        if sin_telegram and ya:
+            print(f"--- {rol}: {len(ya)} abiertas que no se repiten (ya enviadas a {NOMBRES[rol]}): "
+                  + ", ".join(f"{a['regla']} {a['clave']} el {a['enviada']:%d/%m}" for a in ya))
         if not filas:
             continue
         dest, chat = destino(rol, entorno)

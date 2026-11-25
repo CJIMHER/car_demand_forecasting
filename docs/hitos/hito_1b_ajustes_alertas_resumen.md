@@ -24,3 +24,33 @@ Con el histórico, hoy saltaría para VN (5 ventas frente a 17, −71 %) y no pa
 En el histórico ya cargado las semanas recientes están completas, así que excluirlas apenas cambia la frecuencia:
 lo que evita es la caída falsa de cada lunes con los datos al día, cuando las 2 últimas semanas aún no tienen todas
 sus ventas cerradas.
+
+## 2. Reparto de las alertas por rol
+
+**Lo revisado**: «nueva» y «ya enviada» se deciden por destinatario en los dos sitios.
+- `alertas/motor.py` (`filas_de`): cada alerta es una fila por regla, rol y clave; es «nueva» si ese rol no la
+  tenía abierta en la evaluación anterior (`_anteriores`, por `(rol, clave)`).
+- `alertas/envio.py` (`pendientes`): para cada rol, se envía lo abierto que ese rol no ha recibido desde que se le
+  abrió (`alertas_salida` del mismo rol). Lo que haya recibido el técnico no cuenta para marketing ni al revés.
+
+`tests/test_alertas_por_rol.py` lo reproduce: ayer las reglas de campaña solo iban a marketing y se le envió la
+campaña que saltaba; hoy van también al técnico y el cansancio de «VW [VN][2026] Taigo noviembre» es nuevo. Marketing
+recibe el cansancio de Taigo (texto limpio) y no repite lo que ya tenía; el técnico recibe todas, nuevas para él, con
+el detalle. Un fallo de envío a uno no afecta al otro, en los dos sentidos.
+
+**Lo del 25-11** encaja con esto si el envío de las 09:15 corrió todavía con las reglas viejas (campañas solo para
+marketing): marketing recibió entonces el cansancio de Taigo, y la ejecución a mano de después, con las reglas
+nuevas, no se lo repite; el técnico, que no tenía ninguna, las recibe todas por primera vez. También lo reproduce
+una prueba. No he cambiado la lógica del reparto. Para confirmarlo sin conectarme, en el servidor:
+
+```bash
+make psql
+SELECT registrado_at, rol, destino, estado, left(texto, 120) FROM alertas_salida
+ WHERE fecha = '2026-11-25' AND que = 'alertas' ORDER BY id;
+SELECT rol, regla, clave, estado, abierta_desde FROM alertas
+ WHERE fecha = '2026-11-25' AND regla LIKE 'meta_%' ORDER BY clave, regla, rol;
+```
+
+Si el primer envío a marketing de ese día ya lleva «Taigo noviembre», es lo explicado. **Cambio**: con
+`SIN_TELEGRAM=1 make alertas`, cada rol dice ahora qué alertas abiertas no se repiten porque ya se le enviaron, y
+cuándo («--- marketing: 3 abiertas que no se repiten (ya enviadas a marketing): meta_f … el 25/11»).
