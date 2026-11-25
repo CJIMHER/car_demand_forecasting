@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -79,9 +80,10 @@ def test_comparaciones_del_fichero_real_nunca_pasan_de_cinco(cfg):
     comps = gt.comparaciones(cfg)
     assert comps and all(2 <= len(c.terminos) <= 5 for c in comps)
     polo = [c for c in comps if c.modelo == "Polo"]
-    assert [c.id for c in polo] == ["polo-1", "polo-2", "polo-3"]               # 10 competidores: 4 + 4 + 2
+    # 10 competidores repartidos 4 + 4 + 2 y, aparte, los chinos de la comparación 4
+    assert [c.id for c in polo] == ["polo-1", "polo-2", "polo-3", "polo-4"]
     assert all(c.terminos[0] == "volkswagen polo" for c in polo)
-    assert sum(len(c.competidores) for c in polo) == 10
+    assert sum(len(c.competidores) for c in polo) == 12
     assert len({c.id for c in comps}) == len(comps)
 
 
@@ -475,3 +477,69 @@ def test_aviso_de_los_35_dias(pg, dias, salta):
     assert x["cifras"]["caso"] == salta
     if salta == "caducada":
         assert "la última descarga es del 15/10, hace 36 días" in x["texto"]
+
+
+# ================================================================== competidores chinos en comparaciones nuevas
+
+RAIZ = Path(__file__).resolve().parent.parent
+
+
+def _viejas(cfg, tmp_path):
+    """Las comparaciones del fichero de antes de añadir los chinos (sin la columna «comparacion»)."""
+    lineas = (RAIZ / "data" / "competidores.csv").read_text(encoding="utf-8").splitlines()
+    cab = lineas[0].split(",")
+    i = cab.index("comparacion")
+    viejas = [",".join(cab[:i])] + [l.rsplit(",", 1)[0] for l in lineas[1:] if not l.endswith(",4")]
+    f = tmp_path / "viejo.csv"
+    f.write_text("\n".join(viejas) + "\n", encoding="utf-8")
+    return gt.comparaciones(cfg, f)
+
+
+def test_los_chinos_van_en_comparaciones_nuevas_y_las_28_no_cambian(cfg, tmp_path):
+    nuevas = {(c.id, c.terminos) for c in gt.comparaciones(cfg)}
+    viejas = {(c.id, c.terminos) for c in _viejas(cfg, tmp_path)}
+    assert len(viejas) == 28 and viejas <= nuevas
+    assert sorted(nuevas - viejas) == [
+        ("polo-4", ("volkswagen polo", "mg3", "byd dolphin surf")),
+        ("t-roc-4", ("volkswagen t-roc", "mg hs", "byd seal u")),
+        ("tiguan-4", ("volkswagen tiguan", "mg hs", "byd seal u"))]
+
+
+def test_enlaces_con_la_ultima_descarga_marca_pendientes_solo_las_nuevas(cfg, tmp_path, capsys):
+    carpeta = tmp_path / "descarga"
+    for i, c in enumerate(_viejas(cfg, tmp_path)):        # la descarga del mes pasado: las 28
+        poner(carpeta, f"multiTimeline ({i}).csv", csv_trends(c.terminos))
+    salida = tmp_path / "enlaces.html"
+    assert gt.main(["enlaces", "--salida", str(salida), "--carpeta", str(carpeta)]) == 0
+    assert "Pendientes: 3: polo-4, t-roc-4, tiguan-4" in capsys.readouterr().out
+    pagina = salida.read_text(encoding="utf-8")
+    marcadas = set(re.findall(r'<tr data-id="([^"]+)"[^>]* data-descargada>', pagina))
+    todas = set(re.findall(r'<tr data-id="([^"]+)"', pagina))
+    assert len(todas) == 31 and todas - marcadas == {"polo-4", "t-roc-4", "tiguan-4"}
+
+
+def test_las_casillas_se_guardan_por_comparacion(comps, cfg):
+    """La clave del navegador ya no depende de la lista entera: añadir comparaciones no desmarca las demás."""
+    pagina = gt.html_enlaces(comps, cfg, DESCARGA)
+    assert '"cdf-gtrends-hechas"' in pagina and 'data-firma="polo-1:volkswagen polo,seat ibiza,renault clio"' in pagina
+    assert pagina == gt.html_enlaces(comps, cfg, DESCARGA)
+    otra = gt.html_enlaces(comps + [gt.Comparacion("polo-9", "Polo", "volkswagen polo", ("mg3",))], cfg, DESCARGA)
+    assert '"cdf-gtrends-hechas"' in otra
+
+
+@pytest.mark.parametrize("filas, error", [
+    ("Polo,B,volkswagen polo,MG3,mg3,señal,,1\n", "ya tiene la comparación 1"),
+    ("Polo,B,volkswagen polo,MG3,mg3,señal,,x\n", "no es un número"),
+    ("".join(f"Polo,B,volkswagen polo,R{i},r{i},señal,,5\n" for i in range(5)), "más de 4 competidores"),
+])
+def test_comparacion_fija_mal_puesta(cfg, tmp_path, filas, error):
+    f = tmp_path / "c.csv"
+    f.write_text("modelo_vw,segmento,consulta_vw,competidor,consulta_competidor,uso,nota,comparacion\n"
+                 "Polo,B,volkswagen polo,Seat Ibiza,seat ibiza,señal,,\n" + filas, encoding="utf-8")
+    with pytest.raises(gt.ErrorGtrends, match=error):
+        gt.comparaciones(cfg, f)
+
+
+def test_sin_la_columna_comparacion_todo_sigue_igual(comps):
+    assert [c.id for c in comps] == ["golf-1", "golf-2", "polo-1"]
+

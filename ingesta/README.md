@@ -110,11 +110,13 @@ nunca accede a Google (ni pytrends, ni navegadores automáticos, ni peticiones a
 automatiza el resto. Configuración en `config/gtrends.yaml` (zona, periodo, categoría 47 con sus nombres
 equivalentes, «Automóviles y vehículos» o «Autos y vehículos», semanas esperadas; el CSV solo trae el
 nombre, así que se acepta cualquiera de `categoria_nombres` o el código si algún día lo trae); comparaciones de `data/competidores.csv`: el modelo propio y hasta 4
-competidores (5 términos, el límite de Trends); con más, varias comparaciones con el modelo como ancla.
+competidores (5 términos, el límite de Trends); con más, varias comparaciones con el modelo como ancla. La
+columna `comparacion` (opcional) fija en qué comparación va un competidor: los nuevos van en una comparación nueva
+(p. ej. los modelos chinos en `polo-4`, `t-roc-4` y `tiguan-4`) para no cambiar las que ya se descargan.
 
 | Orden | Dónde | Qué hace |
 | --- | --- | --- |
-| `make gtrends-enlaces` | Mac | `salidas/gtrends_enlaces.html`: un enlace por comparación, casilla de descargada y cuántas faltan |
+| `make gtrends-enlaces [CARPETA=…]` | Mac | `salidas/gtrends_enlaces.html`: un enlace por comparación, casilla de descargada (guardada por comparación) y cuántas faltan. Con `CARPETA=` (la última descarga), marca como hechas las que ya tienen su CSV y dice cuáles quedan pendientes |
 | `make gtrends-subir CARPETA=…` | Mac | Identifica cada CSV por sus términos y comprueba categoría, zona, semanal y unas 52 semanas. Avisa de las que faltan, las repetidas y los ficheros que no casan. Si todo cuadra, sube los originales (como `<comparación>.csv`) y `manifiesto.json` con scp a `/opt/cdf/entrada/gtrends/<fecha>/` (clave `~/.ssh/cdf_hetzner`, usuario cdf; IP de `IP=` o de `CDF_SERVIDOR_IP` del `.env` del Mac). Primero a `<fecha>.subiendo` y luego se renombra |
 | `make gtrends` (y cron 07:00) | Servidor | Carga la última entrega: comprueba las huellas del manifiesto, sube los originales comprimidos al bucket (`gtrends/raw/<fecha>/`), los añade a `gtrends_entrega` y `gtrends_semana` (solo añadir; repetir no duplica) y rehace `panel_atencion_relativa` (real) |
 

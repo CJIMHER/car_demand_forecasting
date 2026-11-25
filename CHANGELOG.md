@@ -1,5 +1,16 @@
 # Cambios
 
+## 2026-11-25 · Google Trends: competidores chinos en comparaciones nuevas (rama hito-1b-mensajes)
+
+- `data/competidores.csv` (la lista cerrada con el jefe de ventas): MG3 («mg3») y BYD Dolphin Surf («byd dolphin
+  surf») contra el Polo; MG HS («mg hs») y BYD Seal U («byd seal u») contra el T-Roc y el Tiguan.
+- Columna nueva `comparacion` (opcional): los nuevos van en `polo-4`, `t-roc-4` y `tiguan-4`, con el modelo VW
+  como ancla. Las 28 comparaciones existentes no cambian (mismo id y términos), así que sus descargas siguen
+  valiendo. 31 comparaciones en total.
+- `make gtrends-enlaces CARPETA=<última descarga>`: marca como hechas las que ya tienen su CSV y lista las
+  pendientes (con la descarga de las 28: solo las 3 nuevas). Las casillas del navegador se guardan por
+  comparación: añadir comparaciones ya no desmarca las demás (y se conservan las de la página anterior).
+
 ## 2026-11-25 · Mensajes de acción sin «la cocina», y Ventas solo con datos reales (rama hito-1b-mensajes)
 
 - **Mensajes de acción** (`panel/mensajes.py`, `config/mensajes_marketing.yaml`): cada recomendación de campaña o

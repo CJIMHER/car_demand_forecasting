@@ -7,7 +7,11 @@ trends.google.com): automatiza todo lo demás.
 1. enlaces (en el Mac; make gtrends-enlaces): un HTML local con un enlace por comparación, a partir de
    data/competidores.csv. Cada comparación: la consulta del modelo propio y hasta 4 de sus competidores
    (5 términos, el límite de Trends); con más competidores, varias comparaciones que repiten la
-   consulta del modelo como ancla. Zona, periodo y categoría, de config/gtrends.yaml.
+   consulta del modelo como ancla. La columna «comparacion» (opcional) fija en qué comparación va un
+   competidor: así se añaden competidores en comparaciones nuevas sin cambiar las que ya hay (sus descargas
+   siguen valiendo). Zona, periodo y categoría, de config/gtrends.yaml. Con la carpeta de la última
+   descarga (make gtrends-enlaces CARPETA=…), marca como hechas las comparaciones que ya tienen su CSV y
+   dice cuáles quedan pendientes.
 2. subir (en el Mac; make gtrends-subir CARPETA=…): lee los CSV descargados (multiTimeline.csv,
    multiTimeline (1).csv…), los identifica por los términos de su cabecera (no por el nombre) y
    comprueba categoría, zona, frecuencia semanal y unas 52 semanas. Si todo cuadra, sube los
@@ -138,25 +142,38 @@ def clave_termino(t: str) -> str:
 
 def comparaciones(cfg: Config, fichero: Path | None = None) -> list[Comparacion]:
     """Por modelo (en el orden de data/competidores.csv), su consulta y la de sus competidores, en grupos
-    de max_terminos − 1 con la consulta del modelo como ancla en cada uno."""
+    de max_terminos − 1 con la consulta del modelo como ancla en cada uno. Los competidores sin columna
+    «comparacion» se reparten en orden (1, 2, …); los que la llevan van en esa comparación, que no puede ser
+    una de las automáticas (para no cambiar las que ya se descargan)."""
     ruta = fichero or RAIZ / "data" / "competidores.csv"
-    modelos: dict[str, tuple[str, list[str]]] = {}
+    modelos: dict[str, tuple[str, list[str], dict[int, list[str]]]] = {}
     with ruta.open(encoding="utf-8", newline="") as f:
         for fila in csv.DictReader(f):
             modelo, consulta = (fila.get("modelo_vw") or "").strip(), (fila.get("consulta_vw") or "").strip()
             rival = (fila.get("consulta_competidor") or "").strip()
             if not modelo or not consulta or not rival:
                 continue
-            ancla, rivales = modelos.setdefault(modelo, (consulta, []))
+            ancla, rivales, fijos = modelos.setdefault(modelo, (consulta, [], {}))
             if clave_termino(consulta) != clave_termino(ancla):
                 raise ErrorGtrends(f"data/competidores.csv: el modelo {modelo} tiene dos consultas («{ancla}» y «{consulta}»)")
-            if clave_termino(rival) not in {clave_termino(r) for r in rivales} | {clave_termino(ancla)}:
-                rivales.append(rival)
+            numero = (fila.get("comparacion") or "").strip()
+            if numero and not (numero.isdigit() and int(numero) >= 1):
+                raise ErrorGtrends(f"data/competidores.csv: {modelo}, {rival}: comparacion «{numero}» no es un número")
+            destino = fijos.setdefault(int(numero), []) if numero else rivales
+            if clave_termino(rival) not in {clave_termino(r) for r in destino} | {clave_termino(ancla)}:
+                destino.append(rival)
     salida, por = [], cfg.max_terminos - 1
-    for modelo, (ancla, rivales) in modelos.items():
-        grupos = [rivales[i:i + por] for i in range(0, len(rivales), por)]
+    for modelo, (ancla, rivales, fijos) in modelos.items():
+        grupos = dict(enumerate((rivales[i:i + por] for i in range(0, len(rivales), por)), 1))
+        for n, grupo in sorted(fijos.items()):
+            if n in grupos:
+                raise ErrorGtrends(f"data/competidores.csv: {modelo} ya tiene la comparación {n} con los competidores "
+                                   "sin número; usa la siguiente libre para no cambiarla")
+            if len(grupo) > por:
+                raise ErrorGtrends(f"data/competidores.csv: {modelo}, comparación {n}: más de {por} competidores")
+            grupos[n] = grupo
         slug = normalizar(modelo).replace("_", "-")
-        for i, grupo in enumerate(grupos, 1):
+        for i, grupo in sorted(grupos.items()):
             salida.append(Comparacion(f"{slug}-{i}", modelo, ancla, tuple(grupo)))
     if len({c.id for c in salida}) != len(salida):
         raise ErrorGtrends("data/competidores.csv: dos modelos dan el mismo identificador de comparación")
@@ -165,17 +182,24 @@ def comparaciones(cfg: Config, fichero: Path | None = None) -> list[Comparacion]
 
 # --------------------------------------------------------------------------- enlaces (Mac)
 
-def html_enlaces(comps: list[Comparacion], cfg: Config, hoy: date) -> str:
-    """Página local: un enlace por comparación, con casilla de «descargada» (se guarda en el navegador)."""
+def firma(c: Comparacion) -> str:
+    """Identidad de una comparación para la casilla de «descargada»: su id y sus términos."""
+    return c.id + ":" + ",".join(clave_termino(t) for t in c.terminos)
+
+
+def html_enlaces(comps: list[Comparacion], cfg: Config, hoy: date, descargadas: frozenset[str] = frozenset()) -> str:
+    """Página local: un enlace por comparación, con casilla de «descargada» (se guarda en el navegador, por
+    comparación: añadir comparaciones no desmarca las demás). `descargadas`: ids con su CSV en la carpeta de la
+    última descarga, que salen ya marcadas."""
     e = html.escape
     filas = "\n".join(
-        f'<tr data-id="{e(c.id)}"><td><input type="checkbox" id="c-{e(c.id)}" aria-label="Descargada {e(c.id)}"></td>'
+        f'<tr data-id="{e(c.id)}" data-firma="{e(firma(c))}"'
+        f'{" data-descargada" if c.id in descargadas else ""}><td><input type="checkbox" id="c-{e(c.id)}" aria-label="Descargada {e(c.id)}"></td>'
         f'<th scope="row"><label for="c-{e(c.id)}">{e(c.id)}</label></th><td>{e(c.modelo)}</td>'
         f'<td>{" · ".join(e(t) for t in c.terminos)}</td>'
         f'<td><a href="{e(c.url(cfg))}" target="_blank" rel="noopener noreferrer">Abrir en Google Trends</a></td></tr>'
         for c in comps)
-    clave = "cdf-gtrends-" + hashlib.sha256("|".join(c.id + ":" + ",".join(c.terminos) for c in comps).encode()
-                                            ).hexdigest()[:12]
+    clave = "cdf-gtrends-hechas"
     return f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Google Trends: comparaciones para descargar</title>
@@ -208,10 +232,23 @@ descarga (flecha hacia abajo). Guarda el CSV en una misma carpeta; el nombre da 
   var clave = {json.dumps(clave)}, total = {len(comps)};
   var hechas = {{}};
   try {{ hechas = JSON.parse(localStorage.getItem(clave) || "{{}}"); }} catch (e) {{ hechas = {{}}; }}
+  // Las páginas anteriores guardaban las casillas por id bajo otra clave: se conservan
+  for (var i = 0; i < localStorage.length; i++) {{
+    var k = localStorage.key(i);
+    if (k && k.indexOf("cdf-gtrends-") === 0 && k !== clave) {{
+      try {{
+        var viejas = JSON.parse(localStorage.getItem(k) || "{{}}");
+        document.querySelectorAll("tr[data-id]").forEach(function (tr) {{
+          if (viejas[tr.dataset.id]) {{ hechas[tr.dataset.firma] = true; }}
+        }});
+      }} catch (e) {{}}
+    }}
+  }}
+  document.querySelectorAll("tr[data-descargada]").forEach(function (tr) {{ hechas[tr.dataset.firma] = true; }});
   function pintar() {{
     var n = 0;
     document.querySelectorAll("tr[data-id]").forEach(function (tr) {{
-      var id = tr.dataset.id, caja = tr.querySelector("input");
+      var id = tr.dataset.firma, caja = tr.querySelector("input");
       caja.checked = !!hechas[id]; tr.classList.toggle("hecha", caja.checked); if (caja.checked) n++;
     }});
     var faltan = total - n;
@@ -221,13 +258,19 @@ descarga (flecha hacia abajo). Guarda el CSV en una misma carpeta; el nombre da 
   }}
   document.querySelectorAll("tr[data-id] input").forEach(function (caja) {{
     caja.addEventListener("change", function () {{
-      var id = caja.closest("tr").dataset.id;
+      var id = caja.closest("tr").dataset.firma;
       if (caja.checked) {{ hechas[id] = true; }} else {{ delete hechas[id]; }}
       localStorage.setItem(clave, JSON.stringify(hechas)); pintar();
     }});
   }});
   document.getElementById("limpiar").addEventListener("click", function () {{
-    hechas = {{}}; localStorage.removeItem(clave); pintar();
+    hechas = {{}}; localStorage.setItem(clave, "{{}}");
+    for (var j = localStorage.length - 1; j >= 0; j--) {{
+      var k = localStorage.key(j);
+      if (k && k.indexOf("cdf-gtrends-") === 0 && k !== clave) {{ localStorage.removeItem(k); }}
+    }}
+    document.querySelectorAll("tr[data-descargada]").forEach(function (tr) {{ tr.removeAttribute("data-descargada"); }});
+    pintar();
   }});
   pintar();
 }})();
@@ -600,12 +643,26 @@ def escribir_atencion(pg, fecha: date, cfg: Config) -> int:
 
 # --------------------------------------------------------------------------- órdenes
 
-def orden_enlaces(salida: Path, hoy: date | None = None) -> int:
-    cfg = cargar_config()
-    comps = comparaciones(cfg)
+def pendientes(comps: list[Comparacion], cfg: Config, carpeta: Path | None) -> tuple[frozenset[str], list[Comparacion]]:
+    """Con la carpeta de la última descarga: (ids con su CSV, comparaciones pendientes). Sin ella, todas
+    pendientes. Un CSV casa con su comparación por sus términos (como en make gtrends-subir)."""
+    if carpeta is None:
+        return frozenset(), list(comps)
+    inf = comprobar(carpeta, comps, cfg)
+    return frozenset(inf.asignados), list(inf.faltan)
+
+
+def orden_enlaces(salida: Path, hoy: date | None = None, carpeta: Path | None = None, cfg: Config | None = None,
+                  comps: list[Comparacion] | None = None) -> int:
+    cfg = cfg or cargar_config()
+    comps = comps if comps is not None else comparaciones(cfg)
+    hechas, faltan = pendientes(comps, cfg, carpeta)
     salida.parent.mkdir(parents=True, exist_ok=True)
-    salida.write_text(html_enlaces(comps, cfg, hoy or date.today()), encoding="utf-8")
+    salida.write_text(html_enlaces(comps, cfg, hoy or date.today(), hechas), encoding="utf-8")
     print(f"{len(comps)} comparaciones en {salida}")
+    if carpeta is not None:
+        print(f"Con su CSV en {carpeta}: {len(hechas)}. Pendientes: {len(faltan)}"
+              + (": " + ", ".join(c.id for c in faltan) if faltan else ""))
     return 0
 
 
@@ -652,6 +709,7 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="orden", required=True)
     e = sub.add_parser("enlaces", help="HTML local con un enlace por comparación (Mac)")
     e.add_argument("--salida", type=Path, default=RAIZ / "salidas" / "gtrends_enlaces.html")
+    e.add_argument("--carpeta", type=Path, help="carpeta de la última descarga: marca como hechas las que ya están")
     s = sub.add_parser("subir", help="Comprueba los CSV de una carpeta y los sube al servidor (Mac)")
     s.add_argument("--carpeta", type=Path, required=True)
     s.add_argument("--ip")
@@ -662,7 +720,7 @@ def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         if args.orden == "enlaces":
-            return orden_enlaces(args.salida)
+            return orden_enlaces(args.salida, carpeta=args.carpeta.expanduser() if args.carpeta else None)
         if args.orden == "subir":
             return orden_subir(args.carpeta.expanduser(), args.ip, args.fecha, args.solo_comprobar)
         return orden_cargar()

@@ -174,8 +174,8 @@ campanas: ## Reclasifica las campañas con config/campanas.yaml (Marketing y cam
 gtrends: ## Carga la última entrega de Google Trends de /opt/cdf/entrada/gtrends (cron 07:00); no duplica
 	$(JOBS) python -m ingesta.gtrends cargar
 
-gtrends-enlaces: ## (Mac) HTML con un enlace de Google Trends por comparación (salidas/gtrends_enlaces.html)
-	$(PYTHON) -m ingesta.gtrends enlaces
+gtrends-enlaces: ## (Mac) HTML con un enlace de Google Trends por comparación; con CARPETA=<última descarga>, marca las que ya están
+	$(PYTHON) -m ingesta.gtrends enlaces $(if $(CARPETA),--carpeta "$(CARPETA)")
 	@open salidas/gtrends_enlaces.html 2>/dev/null || true
 
 gtrends-subir: ## (Mac) Comprueba los CSV de Trends y los sube: make gtrends-subir CARPETA=<ruta> [IP=<ip>] [SOLO_COMPROBAR=1]
