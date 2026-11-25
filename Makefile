@@ -18,7 +18,7 @@ PYTHON ?= .venv/bin/python
 .PHONY: help comprobar-entorno deploy migrar cargar comprobar recuento concesionarios remarcar-propio \
         estado copia restaurar-prueba test hora logs ps psql precalcular salidas-diagnostico panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
-        ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas gtrends gtrends-enlaces gtrends-subir \
+        ejemplo-cargar ejemplo-borrar alertas meta ga4 ga4-explorar campanas gtrends gtrends-enlaces gtrends-subir \
         meta-historico walcu-cargar walcu-ventas-cargar walcu-ventas-agregar walcu-agregar referencias-meta prevision walcu-api walcu-api-inicial \
         walcu-api-probar walcu-api-mapeo
 
@@ -175,6 +175,9 @@ referencias-meta: ## Cruce Meta–Walcu y referencias de coste por año y tipo (
 
 ga4: ## Descarga de GA4 (cron 06:10): los últimos 7 días; sin credenciales no hace nada
 	$(JOBS) python -m ingesta.ga4
+
+ga4-explorar: ## GA4: eventos, tipos de página, métricas de interacción y primer día con datos (no guarda nada); TODAS=1 lista todo
+	$(JOBS) python -m ingesta.ga4_explorar $(if $(TODAS),--todas)
 
 campanas: ## Reclasifica las campañas con config/campanas.yaml (Marketing y campañas sin regla)
 	$(JOBS) python -m ingesta.campanas

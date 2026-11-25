@@ -646,6 +646,21 @@ Si se reactiva el temporizador pero la fuente sigue en la lista, se captura y no
 quita de la lista con el temporizador parado, la comprobación de las 09:00 avisa de que falta la captura.
 `make deploy` aplica también la migración 0025 (estado `en_pausa` en `fuentes_estado`).
 
+### 7.19 Exploración de GA4 (hito 2, intención de compra)
+
+Primer paso del análisis de intención: ver qué tiene la propiedad antes de decidir qué se descarga. Usa la
+credencial de GA4 que ya está (`GA4_PROPERTY_ID`, `GA4_CREDENCIALES`, rol Lector) y solo pide agregados:
+
+```bash
+make ga4-explorar             # eventos, 100 tipos de página, interacción y primer día con datos
+make ga4-explorar TODAS=1     # además, la lista completa de dimensiones y métricas de la propiedad
+```
+
+No escribe en Postgres, ni en el bucket, ni en `fuentes_estado`; solo enseña el resultado en pantalla (para
+guardarlo: `make ga4-explorar > ga4_explorar.txt`). Los tipos de página salen de `config/ga4_paginas.yaml`:
+las rutas que no casan aparecen como «(sin tipo) /ruta/*»; se añade su regla en el Mac, commit, push,
+`make deploy` y se vuelve a lanzar. Hace unas 7 peticiones a la Data API (más si hay muchas rutas o eventos).
+
 ## 8. Día a día
 
 ```bash

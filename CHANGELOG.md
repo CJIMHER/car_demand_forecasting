@@ -1,5 +1,17 @@
 # Cambios
 
+## 2026-11-25 · Exploración de GA4 para la intención de compra (rama hito-2-ga4-intencion)
+
+- **`make ga4-explorar`** (`ingesta/ga4_explorar.py`): con la credencial de GA4 ya configurada, consulta la Data API
+  y enseña (1) los eventos con su recuento de los últimos 12 meses y su primer y último día con datos; (2) los 100
+  tipos de página más vistos; (3) las métricas y dimensiones de interacción disponibles (sesiones con interacción,
+  tiempo de interacción, usuarios…), con su total de 12 meses y las personalizadas; (4) el primer día con datos.
+  Solo agregados, sin dimensiones de usuario; no guarda nada.
+- **`config/ga4_paginas.yaml`**: tipos de página por expresión regular sobre la ruta (fichas y listados de ocasión
+  y de nuevos, configurador, ofertas, contacto, taller…), punto de partida que se ajusta tras la primera ejecución;
+  las rutas sin tipo se agrupan por su forma («/blog/*»).
+- Cómo lanzarlo: `infra/deploy.md`, 7.19. Pruebas: `tests/test_ga4_explorar.py`, con respuestas de ejemplo.
+
 ## 2026-11-25 · Fuentes de la web de la marca en pausa (rama hito-1b-fuentes-pausa)
 
 - **`fuentes_en_pausa`** en `config/concesionario.yaml` (`{fuente: {desde, motivo}}`; solo `vo`, `vn`, `vn_otros` y

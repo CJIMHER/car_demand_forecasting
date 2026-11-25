@@ -1,0 +1,39 @@
+# Tipos de página de la web del concesionario, para make ga4-explorar (ingesta/ga4_explorar.py), que
+# agrupa por tipo las rutas vistas en GA4 (pagePath, sin parámetros).
+#
+# En orden: la primera regla cuyo «patron» (expresión regular) casa con la ruta se queda la página. La
+# ruta se compara en minúsculas y sin tildes. Una ruta que no casa con ninguna se agrupa por su forma:
+# cada tramo con un número de 2 o más cifras, o de más de 40 caracteres, se cambia por «*»
+# («/ocasion/golf-life-12345» → «/ocasion/*»), y así salen en la lista para añadir aquí su regla.
+#
+# Las rutas dependen de la web de cada concesionario: estos patrones son un punto de partida y se
+# ajustan tras la primera ejecución.
+tipos:
+  - nombre: Inicio
+    patron: '^/$'
+  - nombre: Gracias (formulario enviado)
+    patron: '(gracias|thank-?you|confirmacion)'
+  - nombre: Ficha de vehículo de ocasión
+    patron: '/(ocasion|vehiculos?-de-ocasion|seminuevos?|segunda-mano|usados?|km-?0)[^/]*/.*[0-9]{3,}'
+  - nombre: Listado de ocasión
+    patron: '/(ocasion|vehiculos?-de-ocasion|seminuevos?|segunda-mano|usados?|km-?0)'
+  - nombre: Configurador
+    patron: 'configurador'
+  - nombre: Ficha de nuevo
+    patron: '/(nuevos?|coches-nuevos|vehiculos-nuevos|gama|modelos?)/[^/]+'
+  - nombre: Listado de nuevos
+    patron: '/(nuevos?|coches-nuevos|vehiculos-nuevos|gama|modelos?)/?$'
+  - nombre: Ofertas
+    patron: '(ofertas?|promociones?|campanas?)'
+  - nombre: Financiación y renting
+    patron: '(financiacion|renting|leasing)'
+  - nombre: Taller y posventa
+    patron: '(taller|post-?venta|recambios|mantenimiento|cita-previa)'
+  - nombre: Prueba de conducción
+    patron: '(prueba|test-?drive)'
+  - nombre: Tasación
+    patron: '(tasacion|tasar|vende-tu-coche|compramos)'
+  - nombre: Contacto
+    patron: '(contacto|contactar|solicitar|llamar)'
+  - nombre: Legal y cookies
+    patron: '(aviso-legal|privacidad|cookies|condiciones)'

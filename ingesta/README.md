@@ -182,6 +182,17 @@ descarga de Meta o GA4 se confirma antes de rehacer estas tablas: si rehacerlas 
 
     make meta      make ga4      (lo mismo que el cron; DESDE/HASTA a mano: python -m ingesta.meta --desde … --hasta …)
 
+### Exploración de GA4 (ga4_explorar.py)
+
+`make ga4-explorar` (`TODAS=1` para la lista completa de dimensiones y métricas): con la misma credencial,
+enseña en pantalla (1) cada evento con su recuento de los últimos 12 meses y su primer y último día con
+datos; (2) los 100 tipos de página más vistos, con las rutas agrupadas por `config/ga4_paginas.yaml` (la
+primera regla que casa; las que no, por su forma, con «*» en los tramos con números); (3) las métricas y
+dimensiones de interacción que tiene la propiedad, con su total de 12 meses, el tiempo medio de
+interacción calculado y las definiciones personalizadas; (4) el primer día con datos. Solo agregados, sin
+dimensiones de usuario; no guarda nada (ni Postgres, ni bucket, ni `fuentes_estado`). Pruebas:
+`tests/test_ga4_explorar.py`.
+
 ### Histórico de Meta (meta.py --historico)
 
 `make meta-historico DESDE=2025-01-01 [HASTA=AAAA-MM-DD]` (por defecto, hasta ayer): mismo token y misma
