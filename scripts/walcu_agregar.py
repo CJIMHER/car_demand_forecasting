@@ -3,6 +3,15 @@
 Uso:
   .venv/bin/python scripts/walcu_agregar.py ENTRADA.xlsx|ENTRADA.csv SALIDA.csv [--excluidos FICHERO]
   make walcu-agregar ENTRADA=… SALIDA=… [EXCLUIDOS=…]
+  .venv/bin/python scripts/walcu_agregar.py --negociaciones NEGOCIACIONES.xlsx --ventas VENTAS.csv [--excluidos …]
+  make walcu-ventas-agregar NEGOCIACIONES=… SALIDA=… [EXCLUIDOS=…]
+
+Con --negociaciones lee la exportación de NEGOCIACIONES y escribe las ventas por semana de la VENTA (columnas
+semana, tipo, modelo, ventas; lo carga  make walcu-ventas-cargar): venta = Estado «Cerrada / Vendido», fecha =
+«Fecha de cierre», tipo de «Tipo negociación» (Nuevo → VN; VO y Km0 → VO), modelo del campo «Modelo» sin la marca
+y con el nombre del catálogo (config/concesionario.yaml, modelos), con las mismas exclusiones (sedes y equipos de
+otras marcas o empresas del grupo, comerciales excluidos). Columnas y valores en config/walcu_export.yaml
+(negociaciones). Antes de escribir, el CSV pasa la validación del servidor (ingesta/walcu_ventas.py).
 
 Lee la exportación tal como la saca el CRM y escribe el CSV que carga  make walcu-cargar  en el servidor,
 con exactamente estas columnas:
@@ -88,20 +97,22 @@ def cargar_config(fichero: Path | None = None) -> dict:
 
 # --------------------------------------------------------------------------- lectura (solo las columnas necesarias)
 
-def _indices(cabecera: list[str], columnas: dict[str, str]) -> dict[str, int]:
+def _indices(cabecera: list[str], columnas: dict[str, str], opcionales: frozenset[str] = frozenset()
+             ) -> dict[str, int]:
+    """Posición de cada columna pedida; las de `opcionales` pueden faltar (no se leen)."""
     plegada = [plegar(c) for c in cabecera]
     indices, faltan = {}, []
     for clave, nombre in columnas.items():
         if plegar(nombre) in plegada:
             indices[clave] = plegada.index(plegar(nombre))
-        else:
+        elif clave not in opcionales:
             faltan.append(nombre)
     if faltan:
         raise ErrorExportacion("faltan columnas en la exportación: " + ", ".join(faltan))
     return indices
 
 
-def leer_csv(ruta: Path, columnas: dict[str, str]):
+def leer_csv(ruta: Path, columnas: dict[str, str], opcionales: frozenset[str] = frozenset()):
     bruto = ruta.read_bytes()
     try:
         texto = bruto.decode("utf-8-sig")
@@ -110,7 +121,7 @@ def leer_csv(ruta: Path, columnas: dict[str, str]):
     primera = texto.split("\n", 1)[0]
     sep = ";" if primera.count(";") > primera.count(",") else ("\t" if "\t" in primera else ",")
     lector = csv.reader(io.StringIO(texto, newline=""), delimiter=sep)
-    indices = _indices(next(lector, []), columnas)
+    indices = _indices(next(lector, []), columnas, opcionales)
     for valores in lector:
         yield {k: (valores[i] if i < len(valores) else "") for k, i in indices.items()}
 
@@ -122,7 +133,7 @@ def _columna(ref: str) -> int:
     return n - 1
 
 
-def leer_xlsx(ruta: Path, columnas: dict[str, str]):
+def leer_xlsx(ruta: Path, columnas: dict[str, str], opcionales: frozenset[str] = frozenset()):
     """Primera hoja de un .xlsx con la biblioteca estándar: solo las celdas de las columnas pedidas."""
     with zipfile.ZipFile(ruta) as z:
         libro = ET.fromstring(z.read("xl/workbook.xml"))
@@ -158,7 +169,7 @@ def leer_xlsx(ruta: Path, columnas: dict[str, str]):
                 fila.clear()
                 if indices is None:
                     ancho = max(valores) + 1 if valores else 0
-                    indices = _indices([valores.get(i, "") for i in range(ancho)], columnas)
+                    indices = _indices([valores.get(i, "") for i in range(ancho)], columnas, opcionales)
                     buscadas = set(indices.values())
                     continue
                 yield {k: valores.get(i, "") for k, i in indices.items()}
@@ -179,11 +190,11 @@ def leer_excluidos(ruta: Path | None) -> frozenset[str]:
                      if plegar(n) and not n.lstrip().startswith("#"))
 
 
-def leer(ruta: Path, columnas: dict[str, str]):
+def leer(ruta: Path, columnas: dict[str, str], opcionales: frozenset[str] = frozenset()):
     if ruta.suffix.lower() in (".xlsx", ".xlsm"):
-        return leer_xlsx(ruta, columnas)
+        return leer_xlsx(ruta, columnas, opcionales)
     if ruta.suffix.lower() in (".csv", ".txt"):
-        return leer_csv(ruta, columnas)
+        return leer_csv(ruta, columnas, opcionales)
     raise ErrorExportacion("la entrada tiene que ser .xlsx o .csv")
 
 
@@ -341,6 +352,98 @@ class Agregador:
         ])
 
 
+SIN_MODELO_VENTAS = "(sin modelo)"
+
+
+class Negociaciones:
+    """Ventas por semana de la venta, tipo y modelo, desde la exportación de negociaciones."""
+
+    def __init__(self, cfg: dict, conc: cc.Concesionario, excluidos: frozenset[str] = frozenset()):
+        n = cfg["negociaciones"]
+        self.conc, self.excluidos = conc, excluidos
+        self.ventas = [plegar(x) for x in n.get("estados_venta") or [] if plegar(x)]
+        self.tipos = {plegar(a): t for t, alias in (n.get("tipos") or {}).items() for a in alias or [] if plegar(a)}
+        self.sedes = [plegar(x) for x in n.get("sedes_excluidas") or [] if plegar(x)]
+        self.equipos = [plegar(x) for x in n.get("equipos_excluidos") or [] if plegar(x)]
+        self.modelos = sorted({m for m in (*conc.modelos_vn, *conc.modelos_vo)}, key=lambda m: -len(m))
+        self.filas: Counter = Counter()
+        self.cuentas: Counter = Counter()
+        self.tipos_vistos: Counter = Counter()
+
+    def modelo(self, valor: str) -> str:
+        """Sin la marca delante y, si empieza por un modelo del catálogo, ese nombre («T-ROC 1.5 TSI» → «T-Roc»)."""
+        texto = re.sub(r"\s+", " ", str(valor or "")).strip()
+        marca = plegar(self.conc.marca)
+        if marca and plegar(texto).startswith(marca + " "):
+            texto = texto[len(self.conc.marca):].strip()
+        p = plegar(texto)
+        for m in self.modelos:
+            q = plegar(m)
+            if p == q or p.startswith(q + " "):
+                return m
+        if not texto or walcu.personal(texto):
+            return SIN_MODELO_VENTAS
+        return texto
+
+    def anadir(self, neg: dict) -> None:
+        self.cuentas["leidas"] += 1
+        if not any(v in plegar(neg.get("estado")) for v in self.ventas):
+            return
+        self.cuentas["ventas_leidas"] += 1
+        if self.excluidos and plegar(neg.get("comercial")) in self.excluidos:
+            self.cuentas["excluidas"] += 1
+            return
+        sede, equipo = plegar(neg.get("sede")), plegar(neg.get("equipo"))
+        if any(x in sede for x in self.sedes) or any(x in equipo for x in self.equipos) \
+                or self.conc.otra_empresa(neg.get("sede")) or self.conc.otra_empresa(neg.get("equipo")):
+            self.cuentas["otra_sede"] += 1
+            return
+        tipo = self.tipos.get(plegar(neg.get("tipo")))
+        self.tipos_vistos[plegar(neg.get("tipo")) or "(vacío)"] += 1
+        if tipo is None:
+            self.cuentas["tipo_desconocido"] += 1
+            return
+        d = fecha(neg.get("fecha_cierre") or "")
+        if d is None:
+            self.cuentas["sin_fecha"] += 1
+            return
+        self.filas[((d - timedelta(days=d.weekday())).isoformat(), tipo, self.modelo(neg.get("modelo")))] += 1
+        self.cuentas["ventas"] += 1
+
+    def csv(self) -> bytes:
+        salida = io.StringIO()
+        w = csv.writer(salida, lineterminator="\n")
+        w.writerow(["semana", "tipo", "modelo", "ventas"])
+        for (semana, tipo, modelo), n in sorted(self.filas.items()):
+            w.writerow([semana, tipo, modelo, n])
+        return salida.getvalue().encode("utf-8")
+
+    def registro(self) -> str:
+        c = self.cuentas
+        tipos = ", ".join(f"«{t}» {n}" for t, n in self.tipos_vistos.most_common() if not walcu.personal(t))
+        return (f"Negociaciones leídas: {c['leidas']}; ventas: {c['ventas_leidas']}; comerciales excluidos: "
+                f"{c['excluidas']}; otras sedes o empresas: {c['otra_sede']}; tipo desconocido: "
+                f"{c['tipo_desconocido']}; sin fecha de cierre: {c['sin_fecha']}; ventas que cuentan: {c['ventas']}."
+                f"\nTipo negociación de las ventas: {tipos or '—'}")
+
+
+def agregar_negociaciones(entrada: Path, cfg: dict | None = None, conc: cc.Concesionario | None = None,
+                          excluidos: frozenset[str] = frozenset()) -> tuple[Negociaciones, list[str]]:
+    cfg = cfg or cargar_config()
+    neg = Negociaciones(cfg, conc or cc.cargar(), excluidos)
+    columnas = dict(cfg["negociaciones"]["columnas"])
+    opcionales = frozenset(cfg["negociaciones"].get("opcionales") or [])
+    if not excluidos:
+        columnas.pop("comercial", None)
+    vistas: set[str] = set()
+    for fila in leer(entrada, columnas, opcionales):
+        vistas.update(fila)
+        neg.anadir(fila)
+    avisos = [f"la exportación no trae «{columnas[k]}»: no se excluye por esa columna"
+              for k in sorted(opcionales & set(columnas) - vistas) if neg.cuentas["leidas"]]
+    return neg, avisos
+
+
 def agregar(entrada: Path, cfg: dict | None = None, conc: cc.Concesionario | None = None,
             excluidos: frozenset[str] = frozenset()) -> Agregador:
     cfg = cfg or cargar_config()
@@ -355,11 +458,17 @@ def agregar(entrada: Path, cfg: dict | None = None, conc: cc.Concesionario | Non
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("entrada", type=Path)
-    parser.add_argument("salida", type=Path)
+    parser.add_argument("entrada", type=Path, nargs="?")
+    parser.add_argument("salida", type=Path, nargs="?")
     parser.add_argument("--excluidos", type=Path, default=None,
                         help=f"comerciales excluidos, uno por línea (por defecto {EXCLUIDOS}, si existe)")
+    parser.add_argument("--negociaciones", type=Path, help="exportación de negociaciones: ventas por fecha de venta")
+    parser.add_argument("--ventas", type=Path, help="con --negociaciones: CSV de ventas que se escribe")
     args = parser.parse_args(argv)
+    if args.negociaciones:
+        return _main_negociaciones(args)
+    if not (args.entrada and args.salida):
+        parser.error("hacen falta ENTRADA y SALIDA (o --negociaciones FICHERO --ventas SALIDA)")
     try:
         ag = agregar(args.entrada, excluidos=leer_excluidos(args.excluidos))
         contenido = ag.csv()
@@ -377,6 +486,28 @@ def main(argv=None) -> int:
               "(prefijos_excluidos y palabras_excluidas de config/concesionario.yaml).")
     print(f"Escrito {args.salida.name}: {len(v.filas)} filas." + "".join(f"\nAviso: {a}." for a in v.avisos))
     print(f"Para cargarlo en el servidor: make walcu-cargar FICHERO=<ruta en el servidor>/{args.salida.name}")
+    return 0
+
+
+def _main_negociaciones(args) -> int:
+    from ingesta import walcu_ventas
+    if not args.ventas:
+        print("Con --negociaciones hace falta --ventas SALIDA.csv", file=sys.stderr)
+        return 1
+    try:
+        neg, avisos = agregar_negociaciones(args.negociaciones, excluidos=leer_excluidos(args.excluidos))
+        contenido = neg.csv()
+        v = walcu_ventas.validar(contenido)        # la misma validación que en el servidor
+    except (ErrorExportacion, walcu.ErrorWalcu, OSError, zipfile.BadZipFile, KeyError) as exc:
+        print(f"No se ha escrito nada: {type(exc).__name__ if isinstance(exc, KeyError) else exc}", file=sys.stderr)
+        return 1
+    args.ventas.write_bytes(contenido)
+    print(neg.registro())
+    for a in avisos + v.avisos:
+        print(f"Aviso: {a}.")
+    print(f"Escrito {args.ventas.name}: {len(v.filas)} filas, {sum(f['ventas'] for f in v.filas)} ventas, de la "
+          f"semana del {v.desde:%d-%m-%Y} a la del {v.hasta:%d-%m-%Y}.")
+    print(f"Para cargarlo en el servidor: make walcu-ventas-cargar FICHERO=<ruta en el servidor>/{args.ventas.name}")
     return 0
 
 

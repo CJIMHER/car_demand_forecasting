@@ -26,6 +26,7 @@ import psycopg
 
 from ingesta.concesionario import Concesionario
 from panel import alertas as pal
+from panel import campana_general as cg
 from panel import contrato
 from panel import formato as fmt
 from panel import negocio as ng
@@ -192,6 +193,7 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, tipo: str, h
         "fecha": fmt.fecha_larga(hoy),
         "ventas_mes": ventas_mes, "ventas_crm": ventas_crm, "salidas": salidas, "prevision": pv.direccion(pg, org["prevision"], tipo), "alertas": alertas, "edad": edad, "mercado": mercado(pg, conc, tipo),
         "precio": pr.bloque(pg, conc, org["precio"], modelo_vo, f"/direccion?tipo={tipo}", "#direccion"),
+        "campana_general": cg.bloque(pg, org["campana_general"], tipo),
         "origenes": org,
     }
 

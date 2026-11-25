@@ -61,7 +61,7 @@ from datetime import date, timedelta
 import psycopg
 from psycopg.types.json import Jsonb
 
-from analitica import colores, competidores, precio, salidas, segmentos, versiones
+from analitica import campana_general, colores, competidores, precio, salidas, segmentos, versiones
 from ingesta import aviso_copia, telegram
 from ingesta.concesionario import Concesionario, cargar as cargar_concesionario
 from ingesta.db import conectar
@@ -493,6 +493,11 @@ def precalcular(pg: psycopg.Connection, desde: date | None = None, hasta: date |
         resumen["salidas_desde"] = str(desde_s)
     resumen["filas_segmento_por_nivel"] = dict(sorted(por_nivel.items()))
     resumen["segundos_segmento"] = round(t_segmentos, 1)
+    # Cuándo lanzar una campaña general (VN y VO), para el último día calculado
+    try:
+        resumen["campana_general"] = campana_general.actualizar(pg, hasta)
+    except campana_general.ErrorCampanaGeneral as exc:
+        resumen["campana_general"] = f"sin calcular: {exc}"
     resumen["segundos"] = round(time.monotonic() - inicio, 1)
     return resumen
 

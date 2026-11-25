@@ -452,7 +452,9 @@ def test_marketing_muestra_la_atencion_real_con_la_fecha_de_descarga(pg, tmp_pat
     origen, html = bloques(dentro(app_con(panel_url), "tecnico").get("/marketing").text)["atencion"]
     assert origen == "real"
     assert "descarga de Google Trends del 20/11/2026" in html and "hasta el 14/11" in html
-    assert ">+10,0<" in html and ">−25,0<" in html
+    # Para todos, sube, estable o baja; los puntos, en el detalle técnico
+    assert ">Sube<" in html and ">Baja<" in html and "Detalle técnico" in html
+    assert "+10,0 puntos" in html and "−25,0 puntos" in html
     assert html.index("Golf") < html.index("Polo")
     assert "Es una señal direccional" in html and "Cuota de búsquedas: 45,0 %, frente a 35,0 %" in html
 

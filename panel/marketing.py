@@ -43,17 +43,12 @@ ESTADOS = {"bien": "Bien", "vigilar": "Vigilar", "revisar": "Revisar", "sin_dato
 GRAVEDAD = {"revisar": 3, "vigilar": 2, "bien": 1}
 ESLABONES = {"entrega": "Entrega", "anuncio": "Anuncio", "web": "Web", "calidad_lead": "Calidad del lead",
              "stock": "Stock"}
-NIVELES = {"favorable": "Favorable", "normal": "Normal", "poco_favorable": "Poco favorable"}
-MOTIVOS = {"estacionalidad": "Estacionalidad", "calendario": "Calendario", "stock_envejecido": "Stock envejecido",
-           "atencion": "Atención", "presion_competencia": "Presión de otros concesionarios"}
 AMBITOS = {"VN": "Nuevos (VN)", "VO": "Ocasión (VO)", "ambos": "VN y VO"}
 SIN_MERCADO = "sin datos de mercado"
 COMUN = "gasto común a VN y VO"
 # Reglas cuyo texto de «revisar» es una lista de cosas (como en sus avisos de alertas/reglas.yaml): llevan
 # «Revisar:» delante; las demás (b, c) ya son una frase completa
 CON_REVISAR = ("a", "d", "f")
-VEREDICTOS = {"por_encima": "Por encima de lo esperado", "normal": "Dentro de lo normal",
-              "por_debajo": "Por debajo de lo esperado"}
 
 
 def _euros(x: float | None) -> str:
@@ -161,8 +156,45 @@ def _hay(pg, tabla: str, origen) -> bool:
     return ng.ultimo_dia(pg, tabla, origen) is not None
 
 
+def _resultado(pg, origen, tipo: str, cids: list[str], desde: date | None, hasta: date | None,
+               walcu: dict[str, list], walcu_tipo: dict[str, list]) -> dict:
+    """Gasto, leads, citas y ventas de unas campañas, como las tarjetas de campaña y las reglas: Walcu por semanas
+    (las semanas de [desde, hasta] con carga que casa) y, de las que no casan, los leads según Meta. Los costes,
+    con el gasto de las semanas con Walcu; «provisional» si alguna semana con leads aún puede sumar citas o
+    ventas. Sin `desde`, toda la vida de cada campaña."""
+    ambito = _ambitos(pg, origen)
+    r = {"gasto": 0.0, "gasto_walcu": 0.0, "leads": 0, "citas": 0, "ventas": 0, "leads_meta": 0, "segun_meta": 0,
+         "con_walcu": 0, "citas_prov": False, "ventas_prov": False}
+    for cid in cids:
+        comun = tipo != "todo" and ambito.get(cid) == "ambos"
+        gasto, leads_meta = pg.execute(
+            """SELECT coalesce(sum(gasto_cents), 0) / 100.0, sum(leads_meta) FROM panel_campana_dia
+               WHERE origen = %s AND campana_id = %s AND (%s::date IS NULL OR dia >= %s) AND (%s::date IS NULL OR dia <= %s)""",
+            (origen, cid, desde, desde, hasta, hasta)).fetchone()
+        lunes_ini = desde - timedelta(days=desde.weekday()) if desde else None
+        semanas = [s for s in (walcu_tipo if comun else walcu).get(cid, [])
+                   if (lunes_ini is None or s[0] >= lunes_ini) and (hasta is None or s[0] <= hasta)]
+        if not comun:
+            r["gasto"] += float(gasto)
+        if any(s[7] for s in semanas):
+            r["con_walcu"] += 1
+            if not comun:
+                r["gasto_walcu"] += sum(s[1] for s in semanas)
+            for i, k in ((2, "leads"), (3, "citas"), (4, "ventas")):
+                r[k] += sum(s[i] for s in semanas)
+            r["citas_prov"] |= any(not s[5] and s[2] for s in semanas)
+            r["ventas_prov"] |= any(not s[6] and s[2] for s in semanas)
+        elif leads_meta is not None:
+            r["segun_meta"] += 1
+            r["leads_meta"] += int(leads_meta)
+    return r
+
+
 def kpis(pg, origen, tipo: str = "todo") -> dict:
-    """En VN o VO, solo las campañas de ese ámbito (sin las de ambos, cuyo gasto no se reparte)."""
+    """Últimos 28 días: inversión de Meta y, como las tarjetas de campaña y las reglas, leads, citas y ventas de
+    Walcu por semanas de las campañas que casan (de las que no, los leads según Meta) y sus costes por lead, cita
+    y venta, «provisional» si las semanas aún no tienen las citas o las ventas completas. En VN o VO, solo las
+    campañas de ese ámbito (sin las de ambos, cuyo gasto no se reparte)."""
     v = _ventana(pg, origen)
     if v is None:
         return ng.bloque(origen, hay=False)
@@ -172,36 +204,49 @@ def kpis(pg, origen, tipo: str = "todo") -> dict:
         """SELECT coalesce(sum(gasto_cents), 0) / 100.0, count(DISTINCT campana_id) FILTER (WHERE dia = %s)
            FROM panel_campana_dia WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = ANY(%s)""",
         (fin, origen, ini, fin, list(ambitos))).fetchone()
-    gasto_ant = pg.execute("SELECT coalesce(sum(gasto_cents), 0) / 100.0 FROM panel_campana_dia "
-                           "WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = ANY(%s)",
-                           (origen, ini_ant, fin_ant, list(ambitos))).fetchone()[0]
     comunes = 0 if tipo == "todo" else pg.execute(
         """SELECT count(DISTINCT campana_id) FROM panel_campana_dia
            WHERE origen = %s AND dia BETWEEN %s AND %s AND ambito = 'ambos'""", (origen, ini, fin)).fetchone()[0]
     sin_comun = f" · {_sin_comunes(comunes)}" if comunes else ""
-    hay_leads = _hay(pg, "panel_leads_dia", origen)
     tarjetas = [{"etiqueta": "Inversión" if tipo == "todo" else f"Inversión {tipo}", "valor": _euros(gasto),
                  "sub": f"{activas} campaña{'s' if activas != 1 else ''} activa{'s' if activas != 1 else ''}"
                         + sin_comun}]
-    if hay_leads:
-        ambito = _ambitos(pg, origen)
+    walcu = _walcu_vida(pg, origen, "todo")
+    walcu_t = walcu if tipo == "todo" else _walcu_vida(pg, origen, tipo)
 
-        def cuenta(k):          # campañas del ámbito de las tarjetas (en Todo, cualquier campaña)
-            return k is not None and (tipo == "todo" or ambito.get(k) == tipo)
-        actual = _leads(pg, origen, ini, fin)
-        previo = _leads(pg, origen, ini_ant, fin_ant)
-        l, c, ve = (sum(x[i] for k, x in actual.items() if cuenta(k)) for i in range(3))
-        l_ant = sum(x[0] for k, x in previo.items() if cuenta(k))
-        cpl, cpl_ant = _div(float(gasto), l), _div(float(gasto_ant), l_ant)
-        tarjetas.append({"etiqueta": "Leads", "valor": fmt.miles(l),
-                         "sub": f"{fmt.miles(c)} citas · {fmt.miles(ve)} ventas atribuidas"})
+    def de(desde, hasta):
+        cids = [c for (c,) in pg.execute(
+            """SELECT DISTINCT campana_id FROM panel_campana_dia WHERE origen = %s AND dia BETWEEN %s AND %s
+               AND gasto_cents > 0 AND ambito = ANY(%s)""", (origen, desde, hasta, list(ambitos)))]
+        return _resultado(pg, origen, tipo, cids, desde, hasta, walcu, walcu_t)
+    r, r_ant = de(ini, fin), de(ini_ant, fin_ant)
+    if r["con_walcu"] or r["segun_meta"]:
+        if r["con_walcu"]:
+            l, base = r["leads"], r["gasto_walcu"]
+            meta = f" · más {fmt.miles(r['leads_meta'])} según Meta (sin cruce con Walcu)" if r["segun_meta"] else ""
+            sub_l = f"{fmt.miles(r['citas'])} citas · {fmt.miles(r['ventas'])} ventas" + meta
+            cpl, cpl_ant = _div(base, l), (_div(r_ant["gasto_walcu"], r_ant["leads"]) if r_ant["con_walcu"] else None)
+        else:
+            l, base = r["leads_meta"], float(gasto)
+            sub_l = "según Meta (sin cruce con Walcu): sin citas ni ventas"
+            cpl, cpl_ant = _div(base, l), (_div(r_ant["gasto"], r_ant["leads_meta"]) if r_ant["segun_meta"] else None)
         comp = (f"{fmt.porcentaje((cpl / cpl_ant - 1) * 100, 0, signo=True)} frente a los {VENTANA} días anteriores"
                 if cpl is not None and cpl_ant else f"Sin datos de los {VENTANA} días anteriores")
+        tarjetas.append({"etiqueta": "Leads", "valor": fmt.miles(l), "sub": sub_l})
         tarjetas.append({"etiqueta": "Coste por lead", "valor": _euros(cpl), "sub": comp})
-        tarjetas.append({"etiqueta": "Coste por venta", "valor": _euros(_div(float(gasto), ve)),
-                         "sub": "Lo que de verdad importa"})
+        if r["con_walcu"]:
+            tarjetas.append({"etiqueta": "Coste por cita", "valor": _euros(_div(base, r["citas"])),
+                             "sub": "provisional: las citas de las últimas semanas aún pueden crecer"
+                             if r["citas_prov"] else "Con las citas de Walcu"})
+            tarjetas.append({"etiqueta": "Coste por venta", "valor": _euros(_div(base, r["ventas"])),
+                             "sub": "provisional: las ventas de las últimas semanas aún pueden crecer"
+                             if r["ventas_prov"] else "Lo que de verdad importa"})
+        else:
+            for e in ("Coste por cita", "Coste por venta"):
+                tarjetas.append({"etiqueta": e, "valor": fmt.GUION, "sub": "Sin carga de Walcu que case",
+                                 "sin_dato": True})
     else:
-        for e in ("Leads", "Coste por lead", "Coste por venta"):
+        for e in ("Leads", "Coste por lead", "Coste por cita", "Coste por venta"):
             tarjetas.append({"etiqueta": e, "valor": fmt.GUION, "sub": "Sin datos todavía", "sin_dato": True})
     nota = (f"Solo las campañas de {AMBITOS[tipo]}, {_sin_comunes(comunes)}: su gasto es común a VN y VO "
             f"y no se reparte." if comunes else "")
@@ -371,50 +416,42 @@ def atencion(pg, origen) -> dict:
                      semana_fin=fmt.fecha_corta(semana_fin + timedelta(days=6)) if semana_fin else None)
 
 
-def semanas(pg, origen, tipo: str = "todo") -> dict:
-    """Las seis semanas siguientes con la venta esperada del tipo elegido."""
-    dia = ng.ultimo_dia(pg, "panel_semana_campana", origen)
-    if dia is None:
-        return ng.bloque(origen, hay=False)
-    filas = []
-    for semana, nivel, p10, p50, p90, motivos, n in pg.execute(
-            """SELECT semana, nivel, indice_p10, indice_p50, indice_p90, motivos, n FROM panel_semana_campana
-               WHERE origen = %s AND dia = %s AND tipo = %s ORDER BY semana LIMIT 6""", (origen, dia, tipo)):
-        filas.append({"semana": f"Semana del {semana.day} de {fmt.MESES[semana.month - 1]}", "nivel": nivel,
-                      "nivel_texto": NIVELES[nivel],
-                      "indice": f"Ventas{'' if tipo == 'todo' else ' ' + tipo} esperadas: "
-                                f"{fmt.decimal(float(p50), 2)} veces una semana media "
-                                f"({fmt.decimal(float(p10), 2)}–{fmt.decimal(float(p90), 2)}) · n = {n} años",
-                      "motivos": [{"tipo": MOTIVOS.get(m.get("tipo"), m.get("tipo")), "texto": m.get("texto", "")}
-                                  for m in motivos]})
-    return ng.bloque(origen, filas=filas, tipo=tipo)
+PASADAS_MAX = 10
 
 
 def pasadas(pg, origen, tipo: str = "todo") -> dict:
-    """Todo: el resultado completo de cada campaña. VN o VO: las de ese ámbito y las de ambos con sus
-    leads y ventas de ese tipo."""
-    dia = ng.ultimo_dia(pg, "panel_campana_resultado", origen)
-    if dia is None:
+    """Campañas terminadas (sin gasto en el último día de datos de Meta), de la más reciente a la más antigua:
+    fechas, gasto, leads, citas, ventas y costes de toda su vida, como las tarjetas de campaña. En VN o VO, las de
+    ese ámbito y las de ambos con sus leads, citas y ventas de ese tipo (sin costes: su gasto no se reparte). Sin
+    comparación con lo que habría pasado sin la campaña: no hay modelo que lo calcule todavía."""
+    fin_datos = ng.ultimo_dia(pg, "panel_campana_dia", origen)
+    if fin_datos is None:
         return ng.bloque(origen, hay=False)
+    terminadas = pg.execute(
+        """SELECT campana_id, max(titulo), max(ambito), min(dia), max(dia) FILTER (WHERE gasto_cents > 0)
+           FROM panel_campana_dia WHERE origen = %s AND ambito = ANY(%s) GROUP BY campana_id
+           HAVING max(dia) FILTER (WHERE gasto_cents > 0) < %s ORDER BY 5 DESC, 1 LIMIT %s""",
+        (origen, list(_de_tipo(tipo)), fin_datos, PASADAS_MAX)).fetchall()
+    walcu = _walcu_vida(pg, origen, "todo")
+    walcu_t = walcu if tipo == "todo" else _walcu_vida(pg, origen, tipo)
     filas = []
-    for (titulo, ambito, inicio, fin, gasto, leads, l10, l50, l90, ventas, v10, v50, v90, vl, vv, n) in pg.execute(
-            """SELECT titulo, ambito, inicio, fin, gasto_cents / 100.0, leads, leads_sin_p10, leads_sin_p50,
-                      leads_sin_p90, ventas, ventas_sin_p10, ventas_sin_p50, ventas_sin_p90, veredicto_leads,
-                      veredicto_ventas, n
-               FROM panel_campana_resultado WHERE origen = %s AND dia = %s
-                AND (CASE WHEN %s = 'todo' THEN tipo = 'todo'
-                          ELSE (ambito = %s AND tipo = 'todo') OR (ambito = 'ambos' AND tipo = %s) END)
-               ORDER BY fin DESC, campana_id""", (origen, dia, tipo, tipo, tipo)):
+    for cid, titulo, ambito, inicio, fin in terminadas:
         comun = tipo != "todo" and ambito == "ambos"
+        r = _resultado(pg, origen, tipo, [cid], None, None, walcu, walcu_t)
+        gasto = float(pg.execute("SELECT coalesce(sum(gasto_cents), 0) / 100.0 FROM panel_campana_dia "
+                                 "WHERE origen = %s AND campana_id = %s", (origen, cid)).fetchone()[0])
+        con_walcu = bool(r["con_walcu"])
+        coste = (lambda n: None) if comun or not con_walcu else (lambda n: _div(r["gasto_walcu"], n) if n else None)
         filas.append({
             "nombre": titulo, "ambito": AMBITOS[ambito], "fechas": f"{fmt.fecha(inicio)} – {fmt.fecha(fin)}",
-            "gasto": _euros(float(gasto)) + (f" ({COMUN})" if comun else ""),
-            "de_tipo": f" {tipo}" if comun else "",
-            "leads": fmt.miles(leads), "leads_sin": f"{fmt.miles(l50)} ({fmt.miles(l10)}–{fmt.miles(l90)})",
-            "ventas": fmt.miles(ventas), "ventas_sin": f"{fmt.miles(v50)} ({fmt.miles(v10)}–{fmt.miles(v90)})",
-            "veredicto_leads": vl, "veredicto_ventas": vv,
-            "veredicto_leads_texto": VEREDICTOS[vl], "veredicto_ventas_texto": VEREDICTOS[vv], "n": n})
-    return ng.bloque(origen, filas=filas, tipo=tipo)
+            "gasto": _euros(gasto) + (f" ({COMUN})" if comun else ""), "de_tipo": f" {tipo}" if comun else "",
+            "leads": fmt.miles(r["leads"] if con_walcu else r["leads_meta"] if r["segun_meta"] else None),
+            "segun_meta": not con_walcu and bool(r["segun_meta"]),
+            "citas": fmt.miles(r["citas"]) if con_walcu else fmt.GUION,
+            "ventas": fmt.miles(r["ventas"]) if con_walcu else fmt.GUION,
+            "citas_prov": r["citas_prov"], "ventas_prov": r["ventas_prov"],
+            "cpl": _euros(coste(r["leads"])), "cpc": _euros(coste(r["citas"])), "cpv": _euros(coste(r["ventas"]))})
+    return ng.bloque(origen, hay=bool(filas), filas=filas, tipo=tipo)
 
 
 def ocasion(pg, origen, conc: Concesionario) -> dict:
@@ -672,11 +709,15 @@ SEMANAS_PREVISION = 4
 
 
 def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, hoy: date,
-          tipo: str = "todo", gasto: int = 0, objetivos: dict | None = None) -> dict:
+          tipo: str = "todo", gasto: int = 0, objetivos: dict | None = None, ejemplo: bool = True) -> dict:
     """`gasto`: escenario de gasto de la previsión (% sobre el previsto); `objetivos`: citas objetivo por tipo
-    para «cuánto gasto haría falta»."""
+    para «cuánto gasto haría falta». `ejemplo`: modo ejemplo explícito; sin él, solo filas reales."""
+    from panel import campana_general as cg
     from panel import prevision as pp
-    org = contrato.origenes(modos, "marketing")
+    org = contrato.origenes(modos, "marketing", ejemplo)
+    ocasion_b = ocasion(pg, org["ocasion"], conc) if tipo == "VO" else None
+    if ocasion_b is not None and not ocasion_b.get("hay"):
+        ocasion_b["pendiente"] = "stock interno (API de Walcu)"
     return {
         "prevision": pp.marketing(pg, org["prevision"], tipo, gasto, objetivos or {}, SEMANAS_PREVISION,
                                   f"/marketing?tipo={tipo}&orden={orden}", "#marketing"),
@@ -684,8 +725,9 @@ def datos(pg: psycopg.Connection, conc: Concesionario, modos: dict, orden: str, 
         "kpis": kpis(pg, org["kpis"], tipo), "recomendacion": recomendacion(pg, org["recomendacion"], tipo, conc.ciudad),
         "campanas": campanas(pg, org["campanas"], orden, tipo, conc.ciudad),
         "atencion": atencion(pg, org["atencion"]) if tipo != "VO" else None,
-        "ocasion": ocasion(pg, org["ocasion"], conc) if tipo == "VO" else None,
-        "semanas": semanas(pg, org["semanas"], tipo), "pasadas": pasadas(pg, org["pasadas"], tipo), "origenes": org,
+        "ocasion": ocasion_b,
+        "campana_general": cg.bloque(pg, org["campana_general"], tipo),
+        "pasadas": pasadas(pg, org["pasadas"], tipo), "origenes": org,
         "trafico": trafico(pg, org["trafico"], tipo),
         "mes": ultimas_semanas(pg, org["mes"], tipo), "referencias": referencias(pg, org["referencias"], tipo),
         "alertas": pal.bloque_rol(pg, org["alertas"], "marketing", tipo),

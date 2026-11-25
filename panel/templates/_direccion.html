@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, sin_datos_o_pendiente, segmentos, precio_vo, salida, mensual_por_modelo %}
+{% from "_bloques.html" import attrs, marca, sin_datos, sin_datos_o_pendiente, segmentos, precio_vo, salida, mensual_por_modelo, campana_general %}
 <div id="direccion" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -70,6 +70,8 @@
 
   {% if d.ventas_crm.hay %}{{ mensual_por_modelo("ventas_crm", d.ventas_crm, "Ninguna venta.", "") }}{% endif %}
   {{ mensual_por_modelo("salidas", d.salidas, "Ninguna salida.", " En gris, las provisionales: aún pueden volver a publicarse.") }}
+
+  {{ campana_general(d.campana_general, tecnico) }}
 
   <section aria-labelledby="t-dir-prevision" class="tarjeta bloque-prevision"{{ attrs("prevision", d.prevision) }}>
     <div class="tarjeta-cabeza">

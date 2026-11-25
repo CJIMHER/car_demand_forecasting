@@ -59,3 +59,30 @@ origenes:
   Carwow: [carwow]
   Coches.net: [coches.net, cochesnet]
   Google Ads: [google ads, google, adwords]
+
+# ---------------------------------------------------------------------------- negociaciones (ventas por fecha)
+# scripts/walcu_agregar.py --negociaciones: exportación de NEGOCIACIONES de Walcu → CSV de ventas por semana de la
+# venta (semana, tipo, modelo, ventas) para  make walcu-ventas-cargar  (regla de caída de ventas de la campaña
+# general). Solo se leen estas columnas; sede, equipo y vendedor solo sirven para excluir y nunca se escriben
+# (si la exportación no las trae, no se excluye por ellas y se avisa).
+negociaciones:
+  columnas:
+    estado: Estado
+    fecha_cierre: Fecha de cierre
+    tipo: Tipo negociación
+    modelo: Modelo
+    sede: Sede
+    equipo: Equipo
+    comercial: Vendedor           # solo si hay comerciales excluidos (fichero local)
+  opcionales: [sede, equipo, comercial]
+  # Venta: el Estado CONTIENE alguno de estos (valor real: «Cerrada / Vendido»)
+  estados_venta: [Cerrada / Vendido]
+  # Tipo negociación → VN o VO (Km0 es VO); otro valor: la negociación no cuenta y se avisa
+  tipos:
+    VN: [Nuevo]
+    VO: [VO, Km0]
+  # Sedes y equipos de otras marcas o empresas del grupo que no cuentan (contiene, sin mayúsculas ni tildes),
+  # además de propio.empresas_excluidas de config/concesionario.yaml
+  sedes_excluidas: []
+  equipos_excluidos: []
+

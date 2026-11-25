@@ -86,11 +86,11 @@ def test_el_modo_ejemplo_explicito_sigue_mostrando_el_ejemplo(pg, panel_url, per
     assert not _ve(dentro(_app(panel_url), "tecnico"), "/direccion")
 
 
-def test_marketing_no_cambia_y_ventas_tampoco_muestra_el_ejemplo(pg, panel_url, personas, conc):
-    """Dirección y Ventas no muestran nunca el ejemplo; Marketing sigue con su banda."""
+def test_ventas_y_marketing_tampoco_muestran_el_ejemplo(pg, panel_url, personas, conc):
+    """Dirección, Ventas y Marketing no muestran nunca el ejemplo fuera del modo ejemplo."""
     ejemplo.cargar(pg, HOY, conc)
     tec = dentro(_app(panel_url), "tecnico")
-    assert BANDA in tec.get("/marketing").text
+    assert BANDA not in tec.get("/marketing").text
     assert BANDA not in tec.get("/ventas").text
 
 
@@ -107,7 +107,7 @@ def test_estados_sin_modo_ejemplo():
     M = contrato.Modo
     modos = {t: M(False, True) for t in contrato.TABLAS + contrato.MOTOR}
     assert contrato.estados(modos, modo_ejemplo=False) == {"direccion": "vacia", "ventas": "vacia",
-                                                          "marketing": "ejemplo"}
+                                                          "marketing": "vacia"}
     modos["panel_precio_vo"] = M(True, True)
     assert contrato.estados(modos, modo_ejemplo=False)["direccion"] == "real"
     assert contrato.estados(modos)["direccion"] == "ejemplo"

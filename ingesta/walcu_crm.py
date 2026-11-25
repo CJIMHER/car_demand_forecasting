@@ -34,6 +34,7 @@ no se deduce ninguna venta ni se excluye ninguna sede, y todo sigue como ahora:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from collections import Counter, defaultdict
 from collections.abc import Mapping
@@ -434,6 +435,33 @@ def ventas_crm(leads: list[Lead], ag: Agregador) -> dict[tuple[date, str, str], 
     return dict(cuenta)
 
 
+def ventas_semana(pg: psycopg.Connection, leads: list[Lead], ag: Agregador, desde: date | None, hoy: date) -> dict:
+    """Ventas del CRM por semana de la venta, tipo y modelo (walcu_ventas_semana, fuente api; manda sobre el CSV),
+    para la regla de caída de ventas de la campaña general. Cubre desde la primera semana completa de la carga
+    inicial hasta la semana de hoy. Solo se escribe si cambia algo frente a la última carga de la API."""
+    from ingesta import walcu_ventas as wv
+    if desde is None:
+        return {"escrito": False, "motivo": "sin carga inicial"}
+    hasta = hoy - timedelta(days=hoy.weekday())
+    cuenta: Counter = Counter()
+    for lead in leads:
+        if lead.venta is None or ag.excluido(lead):
+            continue
+        semana = lead.venta - timedelta(days=lead.venta.weekday())
+        if desde <= semana <= hasta:
+            tipo = ag.m.tipo(lead.tipo_vehiculo) or ag.tipo_y_via(lead, ag.campana(lead))[0]
+            cuenta[(semana, tipo, lead.modelo or SIN_MODELO)] += 1
+    filas = [{"semana": s, "tipo": t, "modelo": mo, "ventas": n} for (s, t, mo), n in sorted(cuenta.items())]
+    h = hashlib.sha256(json.dumps([desde.isoformat(), hasta.isoformat()] + [[str(f["semana"]), f["tipo"], f["modelo"],
+                                  f["ventas"]] for f in filas]).encode()).hexdigest()
+    previa = pg.execute("SELECT huella FROM walcu_ventas_carga WHERE fuente = 'api' ORDER BY fecha_carga DESC, id DESC "
+                        "LIMIT 1").fetchone()
+    resumen = {"semanas": (hasta - desde).days // 7 + 1, "ventas": sum(cuenta.values())}
+    if previa and previa[0] == h:
+        return {**resumen, "escrito": False}
+    return {**resumen, "escrito": True, "run_id": wv.escribir(pg, filas, "api", desde, hasta, h)}
+
+
 # --------------------------------------------------------------------------- código postal (solo agregado)
 
 def actualizar_cp(pg: psycopg.Connection, leads: list[Lead], ag: Agregador, desde: date | None,
@@ -559,6 +587,7 @@ def actualizar(pg: psycopg.Connection, cfg, hoy: date, entorno: Mapping[str, str
                                            for (mes, t, mo), (n, c) in sorted(ventas.items())])
         resumen["ventas"] = sum(n for n, _ in ventas.values())
         resumen["ventas_con_cita"] = sum(c for _, c in ventas.values())
+        resumen["ventas_semana"] = ventas_semana(pg, leads, ag, desde, hoy)
         if postales:
             resumen["codigo_postal"] = actualizar_cp(pg, leads, ag, desde, postales,
                                                      run_id or f"walcu-api-cp-{momento:%Y%m%dT%H%M%S%f}")

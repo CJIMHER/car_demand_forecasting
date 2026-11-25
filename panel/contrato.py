@@ -6,9 +6,9 @@ tablas tiene una fila real; si no, 'ejemplo' si alguna tiene filas de ejemplo; s
 entra la primera fila real de una tabla, sus filas de ejemplo (y las de las demás tablas del mismo
 bloque) dejan de mostrarse, y conectar una fuente es sustituir filas sin tocar las vistas.
 
-Dirección y Ventas no mezclan nunca: fuera del modo ejemplo explícito (PANEL_MODO_EJEMPLO=1), sus bloques
-solo leen filas reales y, sin ellas, dicen «Pendiente de conectar: <fuente>», «Pendiente: …» o «Sin datos
-todavía» (VISTAS_SOLO_REAL; panel/direccion.py y panel/ventas.py).
+Dirección, Ventas y Marketing no mezclan nunca: fuera del modo ejemplo explícito (PANEL_MODO_EJEMPLO=1), sus
+bloques solo leen filas reales y, sin ellas, dicen «Pendiente de conectar: <fuente>», «Pendiente: …» o «Sin
+datos todavía» (VISTAS_SOLO_REAL; panel/direccion.py, panel/ventas.py y panel/marketing.py).
 
 El estado de una vista sale de sus bloques: 'ejemplo' si alguno es de ejemplo, 'real' si alguno es
 real y ninguno de ejemplo, 'vacia' si no hay filas. Quién ve cada estado lo decide permisos.py.
@@ -30,7 +30,7 @@ TABLAS = (
     "panel_recomendacion_modelo", "panel_atencion_relativa", "panel_semana_campana",
     "panel_campana_resultado", "panel_trafico_canal_dia", "panel_campana_semana", "panel_referencia_meta",
     "panel_campana_otra_marca", "panel_precio_vo", "panel_salidas_stock",
-    "panel_prevision_modelo", "panel_prevision_semana", "panel_ventas_crm",
+    "panel_prevision_modelo", "panel_prevision_semana", "panel_ventas_crm", "panel_campana_general",
 )
 
 # Tablas del motor de alertas (migración 0009) con el mismo formato (dia, origen, calculado_at). No
@@ -59,6 +59,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "referencias": ("panel_referencia_meta",),  # 2025 frente a 2026
         "trafico": ("panel_trafico_canal_dia",),    # GA4 por canal
         "prevision": ("panel_prevision_modelo", "panel_prevision_semana"),   # ventas de Meta, próximas 4 semanas
+        "campana_general": ("panel_campana_general",),   # cuándo lanzar una campaña general (VN y VO)
     },
     "ventas": {
         "resumen": ("panel_riesgo_vehiculo",),      # tarjetas del modelo de probabilidad de venta (aún de ejemplo)
@@ -72,14 +73,15 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
         "stock_crm": ("panel_stock_vehiculo",),     # stock VO completo del CRM, con su fecha de entrada real
     },
     "marketing": {
-        "kpis": ("panel_campana_dia", "panel_leads_dia"),
+        # Tarjetas de arriba: Meta y Walcu por semanas (como las tarjetas de campaña y las reglas)
+        "kpis": ("panel_campana_dia", "panel_campana_semana"),
         "recomendacion": ("panel_recomendacion_modelo",),
         "campanas": ("panel_campana_dia", "panel_campana_semana", "panel_campana_salud", "panel_campana_decision",
                      "panel_campana_otra_marca"),     # otras marcas: solo la línea de debajo
         "atencion": ("panel_atencion_relativa",),
         "ocasion": ("panel_riesgo_vehiculo",),      # solo en VO: stock de ocasión que mover
-        "semanas": ("panel_semana_campana",),
-        "pasadas": ("panel_campana_resultado",),
+        "campana_general": ("panel_campana_general",),   # cuándo lanzar una campaña general (VN y VO)
+        "pasadas": ("panel_campana_dia", "panel_campana_semana"),   # campañas terminadas: Meta y Walcu
         "trafico": ("panel_trafico_canal_dia",),    # tráfico de la web por canal (GA4)
         "mes": ("panel_campana_semana", "panel_campana_decision"),   # últimas 4 semanas: Meta y Walcu por campaña
         "referencias": ("panel_referencia_meta",),  # referencias históricas de coste (por año)
@@ -89,7 +91,7 @@ BLOQUES: dict[str, dict[str, tuple[str, ...]]] = {
 }
 VISTAS = tuple(BLOQUES)
 # Vistas que, fuera del modo ejemplo explícito, nunca muestran filas de ejemplo
-VISTAS_SOLO_REAL = ("direccion", "ventas")
+VISTAS_SOLO_REAL = ("direccion", "ventas", "marketing")
 
 
 @dataclass(frozen=True)

@@ -156,6 +156,14 @@ con la regla «≥ N».
   fuente y estado de la ficha: anuncios, con color y anulados por VIN) y
   `panel_mercado_color_sin_familia` (textos sin familia, España) alimentan «Estado de las fuentes».
 
+## campana_general.py · cuándo lanzar una campaña general (al final del mismo precálculo)
+
+Por VN y VO, tres reglas de `config/campana_general.yaml`, cada una suficiente: caída de ventas (8 semanas frente a
+las 8 anteriores, por fecha de venta: `walcu_ventas_semana`, `ingesta/walcu_ventas.py`), subida del stock (hoy
+frente a hace 30 días: CRM o, sin él, nuestros anuncios en la web) y temporada. Escribe `panel_campana_general` con
+los motivos en lenguaje de negocio, lo pendiente, la próxima temporada y las cifras (solo técnico). Pruebas:
+`tests/test_campana_general.py`.
+
 ## Cómo se prueba
 
 `tests/test_mercado.py`: una prueba por regla, con capturas sintéticas escritas por el código real

@@ -221,6 +221,18 @@ reglas:
     texto: "Campaña «{titulo}» · subir presupuesto: {mensaje}"
     texto_tecnico: "Campaña «{titulo}» · subir presupuesto: {cifras}."
 
+  - id: campana_general
+    nombre: Conviene lanzar una campaña general
+    calculo: campana_general
+    roles: [marketing, direccion]
+    fuente: [panel_campana_general]
+    tema: campanas
+    nivel: aviso
+    # Reglas y textos en config/campana_general.yaml (analitica/campana_general.py, en el precálculo). Se envía
+    # una vez, cuando la tarjeta pasa a «Conviene lanzar»; mientras sigue así, la alerta queda abierta sin repetirse.
+    texto: "Campaña general {tipo}: conviene lanzarla. {motivos}."
+    texto_tecnico: "Campaña general {tipo}: conviene lanzarla. {motivos}. {detalle}"
+
   - id: ventana_favorable
     nombre: Ventana favorable para una campaña general
     calculo: ventana_favorable

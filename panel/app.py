@@ -389,7 +389,7 @@ def crear_app(*, dsn: str | None = None, concesionario: Concesionario | None = N
                      if v.isdigit() and int(v) > 0}
         return vista_contrato(request, pg, "marketing", "marketing.html", "_marketing.html", lambda: {
             "d": marketing.datos(pg, app.state.conc, modos_de(request, pg), orden, app.state.hoy(), tipo, escenario,
-                                 objetivos)})
+                                 objetivos, ejemplo=app.state.modo_ejemplo)})
 
     @app.get("/estado-fuentes")
     def estado(request: Request, pg=Depends(bd)):

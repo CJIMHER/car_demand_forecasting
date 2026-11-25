@@ -34,7 +34,7 @@ siempre con datos reales (ver `analitica/README.md`).
   - porcentajes en tanto por cien (`_pct`, y las medidas con `unidad = '%'`);
   - días, enteros.
 
-## Dirección y Ventas: solo datos reales salvo en el modo ejemplo explícito
+## Dirección, Ventas y Marketing: solo datos reales salvo en el modo ejemplo explícito
 
 Sin `PANEL_MODO_EJEMPLO=1` (variable del panel, vacía por defecto), Dirección nunca muestra filas de ejemplo,
 aunque estén cargadas (`make ejemplo-cargar`): cada bloque lee solo filas reales. Sin ellas, dice «Pendiente de
@@ -48,8 +48,14 @@ tiene modelo (necesita el historial de stock del CRM): sin filas reales, la list
 modelo de probabilidad de venta (necesita el stock del CRM)» y las tarjetas de arriba salen de fuentes reales:
 nuestro stock publicado en la web (`panel_mercado_dia`), los VO con el precio a bajar o revisar
 (`panel_precio_vo`), las salidas del mes (`panel_salidas_stock`) y los leads y citas de Walcu por semanas de las
-últimas 4 semanas (`panel_campana_semana`); cada una dice «Pendiente de conectar: <fuente>» sin ella. Marketing no
-cambia.
+últimas 4 semanas (`panel_campana_semana`); cada una dice «Pendiente de conectar: <fuente>» sin ella.
+
+Marketing, igual: sin `PANEL_MODO_EJEMPLO`, ni bloques de ejemplo ni el aviso amarillo. Las tarjetas de arriba
+(«Dónde invertir esta semana») leen Meta y Walcu por semanas como las tarjetas de campaña y las reglas; «Qué dieron
+las campañas pasadas», las campañas terminadas reales (Meta y Walcu), sin «sin campaña» ni veredictos hasta que
+haya un modelo que lo calcule; «Cuándo lanzar una campaña general» pasa a ser «Campaña general»
+(`panel_campana_general`). Lo que solo tiene ejemplo (recomendación por modelo sin criterios reales, interés frente a
+sus rivales sin descarga de Google Trends, ocasión) dice «Sin datos todavía» o «Pendiente de conectar».
 
 ## Lo que ve cada rol: qué pasa y qué hacer
 
@@ -117,13 +123,13 @@ Después, todas las tablas del bloque se leen solo con ese origen. En consecuenc
 | Ventas y Dirección | Precio de nuestros VO (provisional; Marketing no lo ve) | `panel_precio_vo` |
 | Ventas | Salidas de nuestro stock de las últimas 4 semanas, un coche por fila | `panel_salidas_stock` |
 | Ventas | Stock VO en el CRM: cuántos, días de media desde su entrada y los que no están publicados | `panel_stock_vehiculo` |
-| Marketing | Tarjetas de 28 días | `panel_campana_dia` y `panel_leads_dia` |
+| Marketing | Tarjetas de 28 días: inversión, leads, coste por lead, por cita y por venta («provisional» si las semanas no están completas) | `panel_campana_dia` y `panel_campana_semana` (Walcu por semanas, como las reglas; sin cruce, los leads según Meta) |
 | Marketing | Campañas: del gasto a la venta, con su salud | `panel_campana_dia`, `panel_campana_semana` (Walcu por semanas, como las reglas), `panel_campana_salud` y `panel_campana_decision` |
 | Marketing | Recomendación por modelo | `panel_recomendacion_modelo` |
 | Marketing | Interés de búsqueda frente a sus rivales (Todo y VN): sube, estable o baja (los puntos, solo técnico) | `panel_atencion_relativa` |
 | Marketing | Ocasión: dónde hay stock que mover (solo VO) | `panel_riesgo_vehiculo`, la misma tabla que Ventas |
-| Marketing | Cuándo lanzar una campaña general | `panel_semana_campana` |
-| Marketing | Qué dieron las campañas pasadas | `panel_campana_resultado` |
+| Marketing y Dirección | Campaña general: VN y VO, conviene lanzar o ahora no hace falta | `panel_campana_general` |
+| Marketing | Qué dieron las campañas pasadas: campañas terminadas, toda su vida | `panel_campana_dia` y `panel_campana_semana` |
 | Marketing | Tráfico de la web por canal | `panel_trafico_canal_dia` |
 | Marketing | Campañas de las últimas 4 semanas (Meta y Walcu) | `panel_campana_semana` y la decisión de `panel_campana_decision` |
 | Marketing | Referencias históricas | `panel_referencia_meta` |
@@ -399,7 +405,34 @@ No lleva intervalo porque es una decisión, no una cifra. Las cifras en que se a
 
 No es salida de un modelo, así que no lleva intervalo. Es una señal direccional: la nota de la vista lo dice.
 
-### panel_semana_campana · cuándo lanzar una campaña general
+### panel_campana_general · cuándo lanzar una campaña general
+
+- **Grano**: día del cálculo × tipo (VN, VO). Lo escribe `analitica/campana_general.py` al final de
+  `make precalcular` (cron 09:10), con origen `real`. Reglas, umbrales y textos en `config/campana_general.yaml`.
+- **Reglas** (cada una basta sola; si se cumplen varias, se dicen todas):
+  1. caída de ventas: las de las últimas 8 semanas completas, por fecha de venta (`walcu_ventas_semana`: CSV de
+     `make walcu-ventas-cargar` o la API de Walcu, que manda), más de un 20 % por debajo de las 8 anteriores y con
+     al menos `diferencia_minima` coches de diferencia;
+  2. subida del stock: el stock propio de hoy, más de un 25 % por encima del de hace 30 días (el del CRM si cubre
+     esos días; si no, nuestros anuncios en la web de la marca);
+  3. temporada: VN marzo-abril, junio-julio y octubre-noviembre (liquidación); VO marzo-abril y junio-julio.
+
+| Columna | Unidad | Significado |
+| --- | --- | --- |
+| `conviene` | sí/no | Alguna regla se cumple |
+| `motivos` | JSON | `[{regla, texto}]`: los textos que ve todo el mundo, sin umbrales |
+| `pendientes` | JSON | `[{regla, texto}]`: reglas que no se pueden aplicar todavía («Pendiente: hace falta un mes de datos del stock») |
+| `proxima` | texto | Próxima temporada («marzo-abril») |
+| `cifras` | JSON | Ventas de cada ventana, % de cambio, stock de hoy y de hace 30 días, umbrales: solo para el rol técnico («Detalle técnico») |
+| `version` | | Versión de `config/campana_general.yaml` |
+
+La alerta `campana_general` (marketing y dirección) se abre cuando una tarjeta pasa a «Conviene lanzar»; como toda
+alerta, se envía por Telegram al abrirse y no cada día que sigue abierta.
+
+### panel_semana_campana · (antiguo) semanas para una campaña general
+
+Ya no la lee el panel (la sustituye `panel_campana_general`); solo la usa la alerta `ventana_favorable` sobre los
+datos de ejemplo.
 
 - **Grano**: día × tipo (`todo`, VN, VO) × semana (lunes), las seis siguientes. El índice es la
   venta esperada de ese tipo.

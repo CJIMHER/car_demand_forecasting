@@ -1,4 +1,4 @@
-{% from "_bloques.html" import attrs, marca, sin_datos, segmentos, lista_alertas, accion, detalle_tecnico %}
+{% from "_bloques.html" import attrs, marca, sin_datos, sin_datos_o_pendiente, segmentos, lista_alertas, accion, detalle_tecnico, campana_general %}
 <div id="marketing" class="vista">
   <div class="vista-cabecera">
     <div>
@@ -205,56 +205,39 @@
         </tbody>
       </table>
       <p class="nota">Las mismas cifras que la vista Ventas. Precio frente a mercado: media de sus unidades con similares publicados en {{ d.ocasion.provincia }}; en positivo, más caro que esos similares.</p>
-      {% else %}{{ sin_datos() }}{% endif %}
+      {% else %}{{ sin_datos_o_pendiente(d.ocasion) }}{% endif %}
     </section>
     {% else %}
     <section aria-labelledby="t-atencion" class="tarjeta tarjeta-estrecha"{{ attrs("atencion", d.atencion) }}>
       <div>
-        <h2 id="t-atencion">Interés de búsqueda frente a sus rivales</h2>
-        {% if not tecnico %}
-        <p class="nota">Si las búsquedas en Google del modelo suben, están estables o bajan frente a sus rivales{% if d.atencion.hay and d.atencion.semana_fin %} · hasta el {{ d.atencion.semana_fin }}{% endif %}</p>
-        {% elif d.atencion.hay and d.atencion.entrega %}
-        <p class="nota">Cuota de búsquedas en Google del modelo frente a sus competidores: últimas 4 semanas (hasta el {{ d.atencion.semana_fin }}) frente a las 4 anteriores, en puntos · descarga de Google Trends del {{ d.atencion.entrega }}</p>
-        {% else %}
-        <p class="nota">Búsquedas en Google del modelo frente a su segmento, en puntos{% if d.atencion.hay %} · {{ d.atencion.mes }}{% endif %}</p>
-        {% endif %}
+        <h2 id="t-atencion">Interés frente a sus rivales</h2>
       </div>
       {{ marca(d.atencion) }}
       {% if d.atencion.hay %}
       {% for m in d.atencion.filas %}
-      <div class="atencion"{% if m.detalle and tecnico %} title="{{ m.detalle }}"{% endif %}>
+      <div class="atencion">
         <span class="atencion-modelo">{{ m.modelo }}</span>
         <svg class="atencion-barra neg" viewBox="0 0 100 18" preserveAspectRatio="none" aria-hidden="true"><rect class="relleno viejo" x="{{ 100 - m.neg }}" width="{{ m.neg }}" height="18"></rect></svg>
         <svg class="atencion-barra pos" viewBox="0 0 100 18" preserveAspectRatio="none" aria-hidden="true"><rect class="relleno" width="{{ m.pos }}" height="18"></rect></svg>
-        <span class="atencion-texto">{% if tecnico %}{{ m.texto }}{% else %}{{ m.interes|capitalize }}{% endif %}</span>
+        <span class="atencion-texto">{{ m.interes|capitalize }}</span>
       </div>
       {% endfor %}
-      {% if not tecnico %}<p class="nota">Es una pista, no una orden.</p>{% else %}
-      <p class="nota">Es una señal direccional: la única externa que ha anticipado algo las matriculaciones. Anticipa poco, así que se usa como pista, no como orden.{% if d.atencion.entrega %} Cuota: búsquedas del modelo entre las de todos los términos de su comparación (con varias comparaciones, la media); Google Trends se descarga a mano una vez al mes (última descarga: {{ d.atencion.entrega }}).{% endif %}</p>{% endif %}
+      {% call detalle_tecnico(tecnico) %}
+      {% if d.atencion.entrega %}
+      <p class="nota">Cuota de búsquedas en Google del modelo frente a sus competidores: últimas 4 semanas (hasta el {{ d.atencion.semana_fin }}) frente a las 4 anteriores, en puntos · descarga de Google Trends del {{ d.atencion.entrega }}</p>
+      {% else %}
+      <p class="nota">Búsquedas en Google del modelo frente a su segmento, en puntos · {{ d.atencion.mes }}</p>
+      {% endif %}
+      <ul class="puntos">{% for m in d.atencion.filas %}<li>{{ m.modelo }}: {{ m.texto }} puntos{% if m.detalle %} · {{ m.detalle }}{% endif %}</li>{% endfor %}</ul>
+      <p class="nota">Es una señal direccional: la única externa que ha anticipado algo las matriculaciones. Anticipa poco, así que se usa como pista, no como orden.{% if d.atencion.entrega %} Cuota: búsquedas del modelo entre las de todos los términos de su comparación (con varias comparaciones, la media); Google Trends se descarga a mano una vez al mes (última descarga: {{ d.atencion.entrega }}).{% endif %}</p>
+      {% endcall %}
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
     {% endif %}
   </div>
 
   <div class="dos-columnas">
-    <section aria-labelledby="t-semanas" class="tarjeta tarjeta-ancha"{{ attrs("semanas", d.semanas) }}>
-      <h2 id="t-semanas">Cuándo lanzar una campaña general</h2>
-      {{ marca(d.semanas) }}
-      {% if d.semanas.hay %}
-      <ul class="semanas">
-        {% for s in d.semanas.filas %}
-        <li class="semana">
-          <div class="semana-cabeza"><span class="semana-nombre">{{ s.semana }}</span><span class="chip chip-nivel-{{ s.nivel }}">{{ s.nivel_texto }}</span></div>
-          <ul class="motivos">
-            {% for m in s.motivos %}<li><span class="motivo-tipo">{{ m.tipo }}:</span> {{ m.texto }}</li>{% endfor %}
-          </ul>
-          <span class="semana-indice">{{ s.indice }}</span>
-        </li>
-        {% endfor %}
-      </ul>
-      <p class="nota">Orientativo: describe cómo viene cada semana{% if d.tipo != "todo" %} para las ventas de {{ d.tipo }}{% endif %}; no mide el efecto de lanzar en una u otra.</p>
-      {% else %}{{ sin_datos() }}{% endif %}
-    </section>
+    {{ campana_general(d.campana_general, tecnico, "tarjeta tarjeta-ancha") }}
 
     <section aria-labelledby="t-pasadas" class="tarjeta tarjeta-estrecha"{{ attrs("pasadas", d.pasadas) }}>
       <h2 id="t-pasadas">Qué dieron las campañas pasadas</h2>
@@ -265,13 +248,19 @@
         <li class="pasada">
           <div class="pasada-cabeza"><span class="campana-nombre">{{ c.nombre }}</span><span class="campana-nota">{{ c.ambito }} · {{ c.fechas }} · {{ c.gasto }}</span></div>
           <div class="pasada-cifras">
-            <div><span class="pasada-etiqueta">Leads{{ c.de_tipo }}</span><strong>{{ c.leads }}</strong><span class="n">sin campaña: {{ c.leads_sin }}</span><span class="chip chip-veredicto-{{ c.veredicto_leads }}">{{ c.veredicto_leads_texto }}</span></div>
-            <div><span class="pasada-etiqueta">Ventas{{ c.de_tipo }}</span><strong>{{ c.ventas }}</strong><span class="n">sin campaña: {{ c.ventas_sin }}</span><span class="chip chip-veredicto-{{ c.veredicto_ventas }}">{{ c.veredicto_ventas_texto }}</span></div>
+            <div><span class="pasada-etiqueta">Leads{{ c.de_tipo }}</span><strong>{{ c.leads }}</strong>{% if c.segun_meta %}<span class="n">según Meta</span>{% endif %}</div>
+            <div><span class="pasada-etiqueta">Citas{{ c.de_tipo }}</span><strong>{{ c.citas }}</strong>{% if c.citas_prov %}<span class="n">provisional</span>{% endif %}</div>
+            <div><span class="pasada-etiqueta">Ventas{{ c.de_tipo }}</span><strong>{{ c.ventas }}</strong>{% if c.ventas_prov %}<span class="n">provisional</span>{% endif %}</div>
+          </div>
+          <div class="pasada-cifras pasada-costes">
+            <div><span class="pasada-etiqueta">€ / lead</span>{{ c.cpl }}</div>
+            <div><span class="pasada-etiqueta">€ / cita</span>{{ c.cpc }}</div>
+            <div><span class="pasada-etiqueta">€ / venta</span>{{ c.cpv }}</div>
           </div>
         </li>
         {% endfor %}
       </ul>
-      {% if not tecnico %}<p class="nota">«Sin campaña»: lo que se esperaba sin la campaña. Es orientativo.</p>{% endif %}{% if tecnico %}<p class="nota">«Sin campaña»: lo esperado si no se hubiera lanzado, con su intervalo (del percentil 10 al 90). Por encima o por debajo, si lo observado queda fuera del intervalo. Es una comparación con un modelo, no un experimento.{% if d.tipo != "todo" %} En las generales, solo los leads y ventas de {{ d.tipo }}.{% endif %}</p>{% endif %}
+      <p class="nota">Campañas terminadas, toda su vida: Meta y los leads, citas y ventas de Walcu de la misma campaña. «Provisional»: la cifra aún puede crecer.</p>
       {% else %}{{ sin_datos() }}{% endif %}
     </section>
   </div>
@@ -282,7 +271,7 @@
       {{ marca(d.trafico) }}
     </div>
     {% if d.trafico.hay %}
-    <p class="nota">Google Analytics · últimos 28 días ({{ d.trafico.desde }}–{{ d.trafico.hasta }}) frente a los 28 anteriores · {{ d.trafico.total }} sesiones{% if d.tipo != "todo" %} de {{ d.tipo }}{% endif %}</p>
+    <p class="nota">{% if tecnico %}Google Analytics · {% endif %}Visitas a la web · últimos 28 días ({{ d.trafico.desde }}–{{ d.trafico.hasta }}) frente a los 28 anteriores · {{ d.trafico.total }} sesiones{% if d.tipo != "todo" %} de {{ d.tipo }}{% endif %}</p>
     <div class="tabla-scroll">
       <table class="tabla tabla-movil tabla-trafico">
         <thead>

@@ -98,7 +98,7 @@ def test_reglas_en_yaml_con_todo_lo_necesario():
     assert {r.id for r in todas} == {
         "fuente_caida", "competidor_stock", "competidor_precio", "perdida_peso", "vehiculo_envejecido",
         "riesgo_inmovilizacion", "ventas_fuera_banda", "caida_leads", "meta_a", "meta_b", "meta_c", "meta_d",
-        "meta_f", "meta_subir", "ventana_favorable", "gtrends_pendiente"}
+        "meta_f", "meta_subir", "ventana_favorable", "gtrends_pendiente", "campana_general"}
     for r in todas:
         assert r.calculo in CALCULOS and r.roles and r.fuente and (r.datos.get("texto") or r.datos.get("textos"))
     assert {r.id: r.roles for r in todas}["fuente_caida"] == ("tecnico",)
@@ -582,7 +582,9 @@ def test_competidores_cuadran_con_el_mercado_y_con_sql_directo(pg, datos):
     # Y el motor entero corre sobre el escenario sintético
     motor.evaluar(pg, DIA_ESCENARIO, conc)
     estados = dict(pg.execute("SELECT regla, estado FROM alertas_evaluacion WHERE origen = 'real'").fetchall())
-    assert set(estados) == {"fuente_caida", "gtrends_pendiente", "competidor_stock", "competidor_precio", "perdida_peso"}
+    # (la campaña general, del precálculo de Mercado: también real)
+    assert set(estados) == {"fuente_caida", "gtrends_pendiente", "competidor_stock", "competidor_precio", "perdida_peso",
+                            "campana_general"}
 
 
 # ================================================================== vistas

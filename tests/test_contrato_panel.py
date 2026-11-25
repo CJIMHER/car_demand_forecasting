@@ -292,6 +292,11 @@ def test_cada_bloque_de_ejemplo_lleva_su_etiqueta_y_la_vista_la_banda(pg, datos,
                 esperados.discard("precio")
                 origen, trozo = bloques(html)["precio"]
                 assert origen == "real" and ETIQUETA not in trozo and "Precio de nuestros VO" in trozo, url
+            # La campaña general también sale del precálculo (real)
+            if "campana_general" in esperados:
+                esperados.discard("campana_general")
+                origen, trozo = b["campana_general"]
+                assert origen == "real" and ETIQUETA not in trozo and "Campaña general" in trozo, url
             for nombre in {"salidas", "ventas_kpi"} & esperados:
                 esperados.discard(nombre)
                 origen, trozo = b[nombre]
@@ -433,11 +438,18 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     fin = max(f["dia"] for f in filas["panel_campana_dia"])
     ini = fin - timedelta(days=27)
     gasto = sum(f["gasto_cents"] for f in filas["panel_campana_dia"] if ini <= f["dia"] <= fin) / 100
-    leads = sum(f["leads"] for f in filas["panel_leads_dia"] if f["campana_id"] and ini <= f["dia"] <= fin)
+    # Leads y costes: Walcu por semanas de las campañas de los 28 días (como las tarjetas de campaña y las reglas)
+    activas = {f["campana_id"] for f in filas["panel_campana_dia"] if ini <= f["dia"] <= fin and f["gasto_cents"] > 0}
+    lunes_ini = ini - timedelta(days=ini.weekday())
+    semanas = [w for w in filas["panel_campana_semana"] if w["campana_id"] in activas and w["walcu"]
+               and lunes_ini <= w["semana"] <= fin]
+    leads = sum(w["leads"] for w in semanas)
+    gasto_walcu = sum(w["gasto_cents"] for w in semanas) / 100
     from panel import formato as fmt
     assert f'<span class="kpi-valor">{fmt.miles(gasto)} €</span>' in b["kpis"][1]
     assert f'<span class="kpi-valor">{fmt.miles(leads)}</span>' in b["kpis"][1]
-    assert f'{fmt.miles(gasto / leads)} €' in b["kpis"][1]
+    assert f'{fmt.miles(gasto_walcu / leads)} €' in b["kpis"][1]
+    assert "Sin datos todavía" not in b["kpis"][1]
     # La salud frente a su referencia queda como detalle de cada campaña (la decisión es de los criterios
     # de Meta: sin pasar el motor, «Sin decidir todavía»)
     camp = b["campanas"][1]
@@ -462,15 +474,11 @@ def test_marketing_cifras_salud_y_notas(pg, panel_url, personas, con_ejemplo):
     for accion in ("Subir presupuesto", "Continuar", "Revisar o parar"):
         assert f'<span class="reco-titulo">{accion}</span>' in b["recomendacion"][1]
     assert "Es una señal direccional" in b["atencion"][1]
-    sem = b["semanas"][1]
-    assert sem.count('class="semana"') == 6
-    assert "Orientativo: describe cómo viene cada semana; no mide el efecto de lanzar en una u otra." in sem
-    for motivo in ("Estacionalidad:", "Calendario:", "Stock envejecido:", "Atención:", "Presión de otros concesionarios:"):
-        assert motivo in sem, motivo
+    cg = b["campana_general"][1]
+    assert "Conviene lanzar una campaña general" in cg and "Ahora no hace falta" in cg and "Detalle técnico" in cg
     pas = b["pasadas"][1]
-    assert pas.count('class="pasada"') == 6 and "sin campaña:" in pas
-    for v in ("Por encima de lo esperado", "Dentro de lo normal"):
-        assert v in pas
+    assert pas.count('class="pasada"') == 2 and "sin campaña" not in pas.lower()
+    assert "de lo esperado" not in pas and "€ / venta" in pas
     # Ordenar por gasto
     html = cl.get("/marketing?orden=gasto").text
     nombres = re.findall(r'<span class="campana-nombre">([^<]+)</span>', bloques(html)["campanas"][1])
@@ -552,11 +560,18 @@ def test_marketing_selector_cuadra_con_las_filas(pg, panel_url, personas, con_ej
     # Tarjetas: en VN o VO, solo las campañas de ese ámbito, y lo dicen
     de_tarjetas = {cid for cid in gasto if tipo == "todo" or ambito[cid] == tipo}
     g = sum(gasto[c] for c in de_tarjetas)
-    l = sum(leads(c) for c in de_tarjetas)
+    # Leads, citas, ventas y costes: Walcu por semanas (las semanas de los 28 días), como las reglas
+    lunes_ini = ini - timedelta(days=ini.weekday())
+    semanas = [w for w in filas["panel_campana_semana"] if w["campana_id"] in de_tarjetas and w["walcu"]
+               and lunes_ini <= w["semana"] <= fin]
+    l = sum(w["leads"] for w in semanas)
+    g_walcu = sum(w["gasto_cents"] for w in semanas) / 100
     valor, sub = _kpi(b["kpis"][1], "Inversión")
     assert valor == f"{fmt.miles(g)} €"
     assert _kpi(b["kpis"][1], "Leads")[0] == fmt.miles(l)
-    assert _kpi(b["kpis"][1], "Coste por lead")[0] == f"{fmt.miles(g / l)} €"
+    assert _kpi(b["kpis"][1], "Coste por lead")[0] == f"{fmt.miles(g_walcu / l)} €"
+    assert _kpi(b["kpis"][1], "Coste por cita")[0] == f"{fmt.miles(g_walcu / sum(w['citas'] for w in semanas))} €"
+    assert _kpi(b["kpis"][1], "Coste por venta")[0] != "—"
     # (las tarjetas son de los últimos 28 días; la tabla, de toda la vida de cada campaña)
     if tipo == "todo":
         assert "sin la campaña de VN y VO" not in html
@@ -569,25 +584,18 @@ def test_marketing_selector_cuadra_con_las_filas(pg, panel_url, personas, con_ej
     assert reco.count('class="reco-modelo"') == len(esperadas)
     etiquetas = re.findall(r'<span class="chip chip-tipo">(V[NO])</span>', reco)
     assert sorted(etiquetas) == (sorted(f["tipo"] for f in esperadas) if tipo == "todo" else [])
-    # Semanas con la venta esperada del tipo elegido
-    sem = [f for f in filas["panel_semana_campana"] if f["tipo"] == tipo]
-    texto = b["semanas"][1]
-    for f in sem:
-        assert f"{fmt.decimal(f['indice_p50'], 2)} veces una semana media" in texto
-    assert ("Ventas esperadas:" in texto) == (tipo == "todo")
-    # Campañas pasadas: las de ambos en los tres, con los leads y ventas del tipo elegido
-    res = [f for f in filas["panel_campana_resultado"]
-           if (tipo == "todo" and f["tipo"] == "todo")
-           or (tipo != "todo" and ((f["ambito"] == tipo and f["tipo"] == "todo") or (f["ambito"] == "ambos"
-                                                                                     and f["tipo"] == tipo)))]
+    # Campañas pasadas: las terminadas de verdad (sin gasto el último día de Meta), sin «sin campaña»
+    terminadas = {f["campana_id"] for f in filas["panel_campana_dia"]} - {
+        f["campana_id"] for f in filas["panel_campana_dia"] if f["dia"] == fin and f["gasto_cents"] > 0}
+    de_tipo = {c for c in terminadas if tipo == "todo" or ambito[c] in (tipo, "ambos")}
     pas = b["pasadas"][1]
-    assert pas.count('class="pasada"') == len(res)
-    assert sum(f["ambito"] == "ambos" for f in res) == 2
-    for f in res:
-        assert f'<strong>{fmt.miles(f["leads"])}</strong>' in pas
-    if tipo != "todo":
-        assert f'<span class="pasada-etiqueta">Leads {tipo}</span>' in pas and "(gasto común a VN y VO)" in pas
-
+    assert de_tipo and pas.count('class="pasada"') == len(de_tipo)
+    for c in de_tipo:
+        assert titulo[c] in pas
+    assert "sin campaña" not in pas.lower() and "de lo esperado" not in pas
+    # Campaña general: VN y VO en Todo; en VN o VO, la suya
+    cg = b["campana_general"][1]
+    assert cg.count('class="tarjeta-cg') == (2 if tipo == "todo" else 1)
 
 def test_marketing_atencion_en_todo_y_vn_y_ocasion_en_vo(pg, panel_url, personas, con_ejemplo):
     from panel import formato as fmt
@@ -680,7 +688,7 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
     # se abre a dirección, sin banda ni etiquetas
     a_real(pg, "panel_ventas_mes", "panel_alertas", "panel_precio_vo", "panel_campana_semana", "panel_referencia_meta",
            "panel_trafico_canal_dia", "panel_salidas_stock", "panel_prevision_semana",
-           "panel_prevision_modelo", "panel_ventas_crm")
+           "panel_prevision_modelo", "panel_ventas_crm", "panel_campana_general")
     html = dire.get("/direccion").text
     assert _ve(dire, "/direccion") and BANDA not in html and ETIQUETA not in html
     assert 'href="/direccion"' in html
@@ -713,7 +721,7 @@ def test_al_sustituir_por_filas_reales_el_bloque_pierde_la_etiqueta(pg, panel_ur
 
 def test_sin_filas_dice_sin_datos_todavia_nunca_cero(pg, panel_url, personas, con_ejemplo):
     for t in ("panel_alertas", "panel_ventas_mes", "panel_atencion_relativa", "panel_campana_resultado",
-              "panel_salidas_stock", "panel_ventas_crm"):
+              "panel_salidas_stock", "panel_ventas_crm", "panel_campana_general"):
         pg.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(t)))
     cl = dentro(app_con(panel_url), "tecnico")
     b = bloques(cl.get("/direccion").text)
@@ -725,7 +733,7 @@ def test_sin_filas_dice_sin_datos_todavia_nunca_cero(pg, panel_url, personas, co
         assert origen == "" and esperado in trozo and ETIQUETA not in trozo, nombre
         assert 'class="kpi-valor">0<' not in trozo
     b = bloques(cl.get("/marketing").text)
-    for nombre in ("atencion", "pasadas"):
+    for nombre in ("atencion", "campana_general"):
         assert b[nombre][0] == "" and "Sin datos todavía" in b[nombre][1], nombre
     # Sin ninguna fila, las vistas de datos quedan desactivadas para todos
     ejemplo.borrar(pg)

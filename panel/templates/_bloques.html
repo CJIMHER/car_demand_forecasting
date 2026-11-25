@@ -171,3 +171,29 @@
 {% macro detalle_tecnico(tecnico) %}
 {% if tecnico %}<details class="detalle-tecnico"><summary>Detalle técnico</summary>{{ caller() }}</details>{% endif %}
 {% endmacro %}
+
+{# Cuándo lanzar una campaña general (panel/campana_general.py): Marketing y Dirección #}
+{% macro campana_general(b, tecnico, clase="tarjeta seccion") %}
+<section aria-labelledby="t-campana-general" class="{{ clase }} bloque-campana-general"{{ attrs("campana_general", b) }}>
+  <div class="tarjeta-cabeza">
+    <h2 id="t-campana-general">Campaña general</h2>
+    {% if b.hay %}<span class="nota">{{ b.dia }}</span>{% endif %}
+  </div>
+  {{ marca(b) }}
+  {% if b.hay %}
+  <div class="campana-general">
+    {% for t in b.tarjetas %}
+    <div class="tarjeta-cg{% if t.conviene %} conviene{% endif %}" data-tipo="{{ t.tipo }}" data-conviene="{{ 'si' if t.conviene else 'no' }}">
+      <span class="kpi-etiqueta">{{ t.nombre }}</span>
+      <p class="cg-titulo"><strong>{{ t.titulo }}</strong></p>
+      {% if t.motivos %}<ul class="acciones">{% for m in t.motivos %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+      {% if t.proxima %}<p class="nota">{{ t.proxima }}</p>{% endif %}
+      {% for p in t.pendientes %}<p class="nota pendiente">{{ p }}</p>{% endfor %}
+      {% call detalle_tecnico(tecnico) %}{% for l in t.detalle %}<p class="nota">{{ l }}</p>{% endfor %}{% endcall %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}{{ sin_datos() }}{% endif %}
+</section>
+{% endmacro %}
+

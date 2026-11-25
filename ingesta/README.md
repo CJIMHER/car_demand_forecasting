@@ -213,6 +213,20 @@ antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la c
   inexistente, con la diferencia entre años) y lo que no casa.
 - Pruebas: `tests/test_walcu_meta_hist.py`.
 
+## Ventas de Walcu por fecha de venta (walcu_ventas.py)
+
+- `make walcu-ventas-cargar FICHERO=… [HASTA=…]`: CSV con exactamente `semana, tipo, modelo, ventas` (semana: lunes de
+  la semana de la VENTA), con las mismas comprobaciones de datos personales que el de leads; se rechaza entero si no
+  vale. Cada carga cubre de la primera a la última semana (o a `HASTA`): una semana cubierta sin filas es 0 ventas.
+  Para cada semana vale la última carga que la cubre; la de la API de Walcu (`walcu_crm.py`, ventas del CRM por su
+  fecha) manda sobre la del CSV. Tablas `walcu_ventas_carga` y `walcu_ventas_semana` (solo añadir).
+- En el Mac, `make walcu-ventas-agregar NEGOCIACIONES=… SALIDA=…` (`scripts/walcu_agregar.py --negociaciones`): de la
+  exportación de negociaciones, las «Cerrada / Vendido» por «Fecha de cierre», tipo de «Tipo negociación» y modelo
+  del catálogo, con las mismas exclusiones (sedes y equipos de `config/walcu_export.yaml`, empresas del grupo,
+  comerciales excluidos).
+- Lo usa la regla de caída de ventas de la campaña general (`analitica/campana_general.py`). Pruebas:
+  `tests/test_campana_general.py`.
+
 ## API de Walcu (walcu_api.py) y lo que se deriva (walcu_crm.py)
 
 - Coches (`/cars/all`), leads de venta (`/saleleads/all`) y citas (`/dates/all`), solo lectura (el cliente solo

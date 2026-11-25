@@ -1,5 +1,21 @@
 # Cambios
 
+## 2026-11-25 · Marketing solo con datos reales, sin explicar Google Trends, y campaña general (rama hito-1b-campana-general)
+
+- **Marketing solo con datos reales** (`VISTAS_SOLO_REAL`): sin `PANEL_MODO_EJEMPLO`, ni ejemplo ni aviso amarillo.
+  Tarjetas de arriba con Meta y Walcu por semanas (leads, coste por lead, por cita y por venta, «provisional»);
+  «Qué dieron las campañas pasadas» con las campañas terminadas reales, sin contrafactual.
+- **Google Trends no se explica** a quien no es técnico: «Interés frente a sus rivales» con Sube, Estable o Baja; el
+  método, en «Detalle técnico».
+- **Campaña general** (`analitica/campana_general.py`, `config/campana_general.yaml`, `panel_campana_general`): por VN
+  y VO, caída de ventas, subida del stock o temporada (VO sin octubre-noviembre); bloque en Marketing y Dirección y
+  aviso por Telegram a marketing y dirección al pasar a «Conviene lanzar».
+- **Ventas por fecha de venta** (`walcu_ventas_semana`, migración 0024): `make walcu-ventas-cargar`,
+  `make walcu-ventas-agregar` (`scripts/walcu_agregar.py --negociaciones`) y, con la API de Walcu, desde las ventas
+  del CRM.
+- Resumen con el inventario de Marketing y la frecuencia de la regla de caída de ventas en el histórico:
+  `docs/hitos/hito_1b_campana_general_resumen.md`. Pruebas en `tests/test_campana_general.py`.
+
 ## 2026-11-25 · Google Trends: competidores chinos en comparaciones nuevas (rama hito-1b-mensajes)
 
 - `data/competidores.csv` (la lista cerrada con el jefe de ventas): MG3 («mg3») y BYD Dolphin Surf («byd dolphin

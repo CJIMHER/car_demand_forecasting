@@ -569,6 +569,20 @@ configurar» en `fuentes_estado` (`make estado`), sin alerta de fuente caída. E
 
 A partir de ahí, cada día a las 06:30 (`make walcu-api` a mano).
 
+### 7.17 Marketing solo con datos reales y campaña general
+
+1. `make deploy` (migración 0024: `walcu_ventas_carga`, `walcu_ventas_semana` y `panel_campana_general`).
+2. Ventas por fecha de venta (para la regla de caída de ventas): copiar al servidor el CSV ya filtrado
+   (`walcu_ventas_semana_historico.csv`, del Mac, sin versionarlo) y `make walcu-ventas-cargar FICHERO=<ruta>`. Las
+   siguientes, desde la exportación de negociaciones de Walcu: en el Mac,
+   `make walcu-ventas-agregar NEGOCIACIONES=<export> SALIDA=walcu_ventas_semana.csv` (sedes y equipos que excluir en
+   `config/walcu_export.yaml`, negociaciones) y, en el servidor, `make walcu-ventas-cargar`. Con la API de Walcu y su
+   mapeo, la carga diaria las genera sola y manda sobre el CSV.
+3. `make precalcular DIA=<hoy>` para ver ya el bloque «Campaña general» (si no, sale con el precálculo de la noche).
+   Sin un mes de datos del stock, la regla del stock dice «Pendiente».
+4. Revisar `ventas.diferencia_minima` de `config/campana_general.yaml` con el cálculo del resumen
+   (`docs/hitos/hito_1b_campana_general_resumen.md`).
+
 ## 8. Día a día
 
 ```bash

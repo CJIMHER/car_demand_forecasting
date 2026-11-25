@@ -19,7 +19,7 @@ PYTHON ?= .venv/bin/python
         estado copia restaurar-prueba test hora logs ps psql precalcular salidas-diagnostico panel-deploy panel-rol \
         panel-comprobar panel-logs usuario-alta usuario-baja usuario-rol usuario-restablecer usuarios panel-dev \
         ejemplo-cargar ejemplo-borrar alertas meta ga4 campanas gtrends gtrends-enlaces gtrends-subir \
-        meta-historico walcu-cargar walcu-agregar referencias-meta prevision walcu-api walcu-api-inicial \
+        meta-historico walcu-cargar walcu-ventas-cargar walcu-ventas-agregar walcu-agregar referencias-meta prevision walcu-api walcu-api-inicial \
         walcu-api-probar walcu-api-mapeo
 
 help:
@@ -144,6 +144,14 @@ meta-historico: ## Histórico de Meta por meses: make meta-historico DESDE=2025-
 walcu-cargar: ## Carga el CSV agregado de Walcu: make walcu-cargar FICHERO=/ruta.csv (rechaza el fichero entero si no vale)
 	@test -n "$(FICHERO)" -a -f "$(FICHERO)" || { echo "Uso: make walcu-cargar FICHERO=/ruta/del/fichero.csv"; exit 1; }
 	$(JOBS) python -m ingesta.walcu cargar --nombre "$(notdir $(FICHERO))" < "$(FICHERO)"
+
+walcu-ventas-agregar: ## (Mac) Ventas por fecha de venta desde la exportación de negociaciones: make walcu-ventas-agregar NEGOCIACIONES=… SALIDA=…
+	@test -n "$(NEGOCIACIONES)" -a -n "$(SALIDA)" || { echo "Uso: make walcu-ventas-agregar NEGOCIACIONES=negociaciones.xlsx SALIDA=walcu_ventas_semana.csv"; exit 1; }
+	$(PYTHON) scripts/walcu_agregar.py --negociaciones "$(NEGOCIACIONES)" --ventas "$(SALIDA)" $(if $(EXCLUIDOS),--excluidos "$(EXCLUIDOS)")
+
+walcu-ventas-cargar: ## Ventas de Walcu por semana de la venta: make walcu-ventas-cargar FICHERO=/ruta.csv [HASTA=AAAA-MM-DD]
+	@test -n "$(FICHERO)" -a -f "$(FICHERO)" || { echo "Uso: make walcu-ventas-cargar FICHERO=/ruta/del/fichero.csv"; exit 1; }
+	$(JOBS) python -m ingesta.walcu_ventas cargar --nombre "$(notdir $(FICHERO))" $(if $(HASTA),--hasta $(HASTA)) < "$(FICHERO)"
 
 walcu-agregar: ## (Mac) Agrega la exportación de leads de Walcu: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu.csv [EXCLUIDOS=…]
 	@test -n "$(ENTRADA)" -a -n "$(SALIDA)" || { echo "Uso: make walcu-agregar ENTRADA=leads.xlsx SALIDA=walcu_semanal.csv"; exit 1; }

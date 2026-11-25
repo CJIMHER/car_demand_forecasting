@@ -1,0 +1,44 @@
+# Cuándo lanzar una campaña general (analitica/campana_general.py, dentro de make precalcular). Por separado para
+# VN y VO. Cada regla basta sola para recomendar lanzar; si se cumplen varias, se dicen todas. Tras cambiar
+# algo: make precalcular DIA=<hoy> (o esperar al de la noche).
+version: campana-general-2026-11-25
+
+# 1. Caída de ventas: las de las últimas `semanas` semanas completas (por fecha de venta: walcu_ventas_semana)
+#    son más de un `caida_pct` % inferiores a las de las `semanas` anteriores, y la diferencia es de al menos
+#    `diferencia_minima` coches (0: la regla tal cual). Con pocas ventas por semana, la caída salta a menudo por
+#    azar: ver docs/hitos/hito_1b_campana_general_resumen.md antes de bajar o subir `diferencia_minima`.
+ventas:
+  semanas: 8
+  caida_pct: 20
+  diferencia_minima: 0
+  # Las ventas tienen que llegar al menos hasta esta cantidad de semanas antes de la última semana completa (el CSV
+  # se carga a mano): con datos más viejos, la regla queda pendiente.
+  retraso_max_semanas: 4
+
+# 2. Subida del stock: el stock propio de hoy frente al de hace `dias` días ha subido más de un `subida_pct` %.
+#    Stock: el del CRM (panel_stock_vehiculo, API de Walcu) si cubre esos días; si no, nuestros anuncios en la web
+#    de la marca (scrapers, panel_mercado_dia). Sin `dias` días de datos, la regla queda pendiente.
+stock:
+  dias: 30
+  subida_pct: 25
+
+# 3. Temporada: meses (1-12) en que conviene una campaña general, por tipo, con su nombre.
+temporadas:
+  VN:
+    - {meses: [3, 4], nombre: campaña}
+    - {meses: [6, 7], nombre: campaña}
+    - {meses: [10, 11], nombre: liquidación}
+  VO:                              # en octubre-noviembre no: hay un salón del motor donde se vende todo
+    - {meses: [3, 4], nombre: campaña}
+    - {meses: [6, 7], nombre: campaña}
+
+# Textos (lo que ven dirección y marketing, sin umbrales). {semanas}, {nombre}, {meses}, {dias}: huecos.
+textos:
+  conviene: Conviene lanzar una campaña general
+  no_hace_falta: Ahora no hace falta
+  ventas: Las ventas han bajado en las últimas {semanas} semanas
+  stock: El stock ha subido mucho en el último mes
+  temporada: Temporada de {nombre} ({meses})
+  proxima: "Próxima temporada: {meses}"
+  ventas_pendiente: "Pendiente: hacen falta {semanas} semanas de ventas por fecha de venta"
+  stock_pendiente: "Pendiente: hace falta un mes de datos del stock"

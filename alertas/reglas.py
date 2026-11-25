@@ -396,6 +396,25 @@ def ventana_favorable(ctx: Contexto) -> Resultado:
     return r
 
 
+def campana_general(ctx: Contexto) -> Resultado:
+    """Conviene lanzar una campaña general (panel_campana_general, del precálculo): un disparo por tipo mientras
+    conviene. Como toda alerta, se envía por Telegram cuando se abre (al pasar de «Ahora no hace falta» a
+    «Conviene lanzar»), no cada día que sigue abierta."""
+    from panel import campana_general as cg
+    r = Resultado()
+    dia = ctx.ultimo_dia("panel_campana_general")
+    if dia is None:
+        return r
+    for tipo, motivos, cifras in ctx.pg.execute(
+            """SELECT tipo, motivos, cifras FROM panel_campana_general
+               WHERE origen = %s AND dia = %s AND conviene ORDER BY tipo""", (ctx.origen, dia)):
+        r.disparos.append(Disparo(
+            tipo, {"tipo": tipo, "motivos": [m["regla"] for m in motivos]},
+            {"tipo": tipo, "motivos": ". ".join(m["texto"] for m in motivos),
+             "detalle": " ".join(cg.detalle(cifras))}, tipo=tipo))
+    return r
+
+
 CALCULOS = {f.__name__: f for f in (fuente_caida, gtrends_pendiente, competidor_stock, competidor_precio, perdida_peso,
                                     vehiculo_envejecido, riesgo_inmovilizacion, ventas_fuera_banda, caida_leads,
-                                    criterio_meta, ventana_favorable)}
+                                    criterio_meta, ventana_favorable, campana_general)}

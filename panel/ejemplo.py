@@ -26,6 +26,7 @@ import random
 import sys
 from collections import defaultdict
 from datetime import date, timedelta
+from pathlib import Path
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -128,9 +129,18 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
          "ambito": "VO", "modelo": vo_campana, "inicio": hoy - timedelta(days=19), "gasto": 3100, "cpm": 5.0,
          "ctr": 0.0105, "conv": 0.0105},
     ]
+    # Campañas ya terminadas (fuera de los últimos 28 días): «Qué dieron las campañas pasadas»
+    terminadas = [
+        {"campana_id": "EJ-C7", "titulo": f"{vn[0]} · Primavera", "tipo_campana": "modelo", "ambito": "VN",
+         "modelo": vn[0], "inicio": hoy - timedelta(days=55), "fin": hoy - timedelta(days=32), "gasto": 5200,
+         "cpm": 5.3, "ctr": 0.011, "conv": 0.016},
+        {"campana_id": "EJ-C8", "titulo": "Ocasión · Fin de mes", "tipo_campana": "general", "ambito": "VO",
+         "modelo": None, "inicio": hoy - timedelta(days=50), "fin": hoy - timedelta(days=36), "gasto": 3800,
+         "cpm": 4.6, "ctr": 0.012, "conv": 0.015},
+    ]
     leads: dict[tuple[date, str, str, str | None], list[int]] = {}
 
-    def sumar(d, modelo, tipo, campana, n):
+    def sumar(d, modelo, tipo, campana, n, r=r):
         citas = sum(r.random() < 0.34 for _ in range(n))
         ventas = sum(r.random() < 0.17 for _ in range(citas))
         f = leads.setdefault((d, modelo, tipo, campana), [0, 0, 0])
@@ -138,24 +148,26 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
         f[1] += citas
         f[2] += ventas
 
-    for c in campanas:
+    # Las terminadas, con su propio generador: las cifras de las demás no cambian
+    r_terminadas = random.Random(SEMILLA + 2)
+    for c, rg in [(c, r) for c in campanas] + [(c, r_terminadas) for c in terminadas]:
         d = max(c["inicio"], hoy - timedelta(days=56))
-        while d <= fin_meta:
-            gasto = round(c["gasto"] * r.uniform(0.8, 1.2))          # céntimos
+        while d <= c.get("fin", fin_meta):
+            gasto = round(c["gasto"] * rg.uniform(0.8, 1.2))          # céntimos
             impresiones = round(gasto / 100 / c["cpm"] * 1000)
-            clics = round(impresiones * c["ctr"] * r.uniform(0.9, 1.1))
+            clics = round(impresiones * c["ctr"] * rg.uniform(0.9, 1.1))
             conv = c["conv"]
             if c["campana_id"] == "EJ-C3" and d > fin_meta - timedelta(days=7):
                 conv *= 0.42                                       # el coste por lead se dispara la última semana
-            n = sum(r.random() < conv for _ in range(clics))
+            n = sum(rg.random() < conv for _ in range(clics))
             filas["panel_campana_dia"].append({
                 "dia": d, "campana_id": c["campana_id"], "titulo": c["titulo"], "tipo_campana": c["tipo_campana"],
                 "ambito": c["ambito"], "modelo": c["modelo"], "inicio": c["inicio"], "gasto_cents": gasto,
                 "impresiones": impresiones, "clics": clics})
             for _ in range(n):
-                tipo = c["ambito"] if c["ambito"] != "ambos" else ("VN" if r.random() < 0.62 else "VO")
-                modelo = c["modelo"] or r.choice(vn[:6] if tipo == "VN" else vo[:6])
-                sumar(d, modelo, tipo, c["campana_id"], 1)
+                tipo = c["ambito"] if c["ambito"] != "ambos" else ("VN" if rg.random() < 0.62 else "VO")
+                modelo = c["modelo"] or rg.choice(vn[:6] if tipo == "VN" else vo[:6])
+                sumar(d, modelo, tipo, c["campana_id"], 1, rg)
             d += UN_DIA
     d = hoy - timedelta(days=56)
     while d <= fin_meta:                                           # leads sin campaña (orgánicos)
@@ -351,18 +363,18 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     recomendaciones = []
     m_aum = vn[1]
     recomendaciones.append((m_aum, "aumentar",
-                            f"Gana atención frente a sus rivales ({_signo(atencion.get(m_aum, 0))}), "
+                            f"El interés frente a sus rivales sube, "
                             f"{viejos(m_aum)} unidades llevan más de 60 días"
                             + (f" y su coste por venta es de {round(cpv(m_aum))} €." if cpv(m_aum) else ".")))
     for m in (vn[2 % len(vn)], vn[3 % len(vn)]):
         if m in (m_aum, lento):
             continue
         recomendaciones.append((m, "mantener", (f"Coste por venta de {round(cpv(m))} €. " if cpv(m) else "")
-                                + f"Atención {_signo(atencion.get(m, 0))} frente a sus rivales: revisar en dos semanas."))
+                                + "El interés frente a sus rivales está estable: revisar en dos semanas."))
     recomendaciones.append((lento, "cambiar", f"El coste por lead de la última semana es {_coma(ratio)} veces su "
                                               f"media de 28 días. Cambiar la creatividad antes de invertir más."))
     m_red = vn[0] if vn[0] not in (m_aum, lento) else vn[5 % len(vn)]
-    recomendaciones.append((m_red, "reducir", f"Pierde atención frente a sus rivales ({_signo(atencion.get(m_red, -8))}) "
+    recomendaciones.append((m_red, "reducir", "El interés frente a sus rivales baja "
                                               f"y solo {viejos(m_red)} unidades llevan más de 60 días."))
     for m, accion, motivo in recomendaciones:
         filas["panel_recomendacion_modelo"].append({"dia": hoy, "tipo": "VN", "modelo": m, "accion": accion,
@@ -411,7 +423,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
             if i < 2:
                 motivos.append({"tipo": "stock_envejecido", "texto": f"{n_viejos} vehículos superan los 90 días"})
             if i in (1, 2) and tipo_s != "VO":
-                motivos.append({"tipo": "atencion", "texto": f"{vn[1]} gana atención frente a sus rivales"})
+                motivos.append({"tipo": "atencion", "texto": f"{vn[1]}: el interés frente a sus rivales sube"})
             if i in (3, 4):
                 motivos.append({"tipo": "presion_competencia",
                                 "texto": f"Más anuncios de otros concesionarios en {conc.provincia}"})
@@ -485,8 +497,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
                                  f"en {conc.provincia}, de media un {_coma(f['precio_mercado_pct'])} % más baratas."})
     alertas.append({"regla": "oportunidad_campana", "tema": "campanas", "tipo": "VN", "destinatarios": ["marketing"],
                     "nivel": "info", "abierta_desde": hoy - timedelta(days=6), "modelo": vn[1],
-                    "texto": f"{vn[1]} gana atención frente a sus rivales ({_signo(atencion[vn[1]])} puntos): "
-                             f"buen momento para una campaña."})
+                    "texto": f"{vn[1]}: el interés frente a sus rivales sube; buen momento para una campaña."})
     for i, a in enumerate(alertas, 1):
         filas["panel_alertas"].append({"dia": hoy, "alerta_id": f"EJ-A{i}", "stock_id": None, "campana_id": None,
                                        "modelo": None, **a})
@@ -525,6 +536,7 @@ def generar(hoy: date, conc: Concesionario) -> dict[str, list[dict]]:
     _precio_vo(filas, hoy, conc)
     _salidas(filas, hoy, conc)
     _ventas_crm(filas, hoy, conc)
+    _campana_general(filas, hoy)
     _prevision(filas, hoy, conc)
     return filas
 
@@ -637,11 +649,36 @@ def _ventas_crm(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) ->
             filas["panel_ventas_crm"].append({"dia": hoy, "mes": mes, "tipo": tipo, "modelo": modelo, "ventas": n})
 
 
+def _campana_general(filas: dict[str, list[dict]], hoy: date) -> None:
+    """panel_campana_general: VN, conviene (las ventas bajan); VO, no hace falta (pendiente el stock). Textos de
+    config/campana_general.yaml (sin importar analitica: el panel no la lleva)."""
+    import yaml
+    ruta = Path(__file__).resolve().parent.parent / "config" / "campana_general.yaml"
+    cfg = yaml.safe_load(ruta.read_text(encoding="utf-8")) or {}
+    tx, n = cfg.get("textos") or {}, int((cfg.get("ventas") or {}).get("semanas", 8))
+    ultima = hoy - timedelta(days=hoy.weekday() + 7)
+    ventas = {"estado": "si", "semanas": n, "caida_pct_umbral": 20.0, "diferencia_minima": 0, "actual": 10,
+              "anterior": 18, "cambio_pct": -44.4, "actual_desde": str(ultima - timedelta(weeks=n - 1)),
+              "actual_hasta": str(ultima), "anterior_desde": str(ultima - timedelta(weeks=2 * n - 1)),
+              "anterior_hasta": str(ultima - timedelta(weeks=n))}
+    for tipo, conviene in (("VN", True), ("VO", False)):
+        filas["panel_campana_general"].append({
+            "dia": hoy, "tipo": tipo, "conviene": conviene,
+            "motivos": [{"regla": "ventas", "texto": tx.get("ventas", "").format(semanas=n)}] if conviene else [],
+            "pendientes": [] if conviene else [{"regla": "stock", "texto": tx.get("stock_pendiente", "")}],
+            "proxima": "marzo-abril",
+            "cifras": {"ventas": ventas if conviene else {**ventas, "estado": "no", "actual": 9, "anterior": 9,
+                                                          "cambio_pct": 0.0},
+                       "stock": {"estado": "pendiente", "motivo": "menos de 30 días de datos"},
+                       "temporada": {"estado": "no"}},
+            "version": str(cfg.get("version", "ejemplo"))})
+
+
 # Previsión de ejemplo: (tipo, índice del modelo o None para el tipo, gasto semanal en euros, intercepto,
 # pocos datos)
 CASOS_PREVISION = (("VN", None, 1200, 0.30, False), ("VN", 0, 450, 0.20, False), ("VN", 1, 250, 0.10, True),
                    ("VO", None, 700, 0.45, False), ("VO", 0, 300, 0.35, False))
-JSONB = ("motivos", "columnas", "media", "covarianza")
+JSONB = ("motivos", "columnas", "media", "covarianza", "pendientes", "cifras")
 
 
 def _prevision(filas: dict[str, list[dict]], hoy: date, conc: Concesionario) -> None:
