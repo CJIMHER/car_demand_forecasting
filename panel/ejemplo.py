@@ -716,6 +716,7 @@ def _campana_semana(filas: dict[str, list[dict]], fin_meta: date) -> None:
             "walcu": True, "cruce": "nombre", "citas_completas": c_ok, "ventas_completas": v_ok,
             "leads": leads, "citas": w["citas"], "ventas": w["ventas"],
             **{f"{k}_{t}": w[f"{k}_{t}"] for k in ("leads", "citas", "ventas") for t in ("vn", "vo")},
+            "ventas_con_cita": w["ventas"], "ventas_con_cita_vn": w["ventas_vn"], "ventas_con_cita_vo": w["ventas_vo"],
             "leads_cercana": leads - fuera - sin_zona, "leads_fuera": fuera, "leads_sin_zona": sin_zona,
             "num_inexistente": round(leads * 0.08)})
     semana = _lunes(fin_meta) - timedelta(days=7)
@@ -725,7 +726,8 @@ def _campana_semana(filas: dict[str, list[dict]], fin_meta: date) -> None:
         "tipo_campana": None, "modelo": None, "gasto_cents": 0, "impresiones": 0, "clics": 0, "leads_meta": None,
         "walcu": True, "cruce": "nombre", "citas_completas": c_ok, "ventas_completas": v_ok,
         "leads": 4, "citas": 0, "ventas": 0, "leads_vn": 3, "leads_vo": 1,
-        "citas_vn": 0, "citas_vo": 0, "ventas_vn": 0, "ventas_vo": 0, "leads_cercana": 3, "leads_fuera": 1,
+        "citas_vn": 0, "citas_vo": 0, "ventas_vn": 0, "ventas_vo": 0, "ventas_con_cita": 0,
+        "ventas_con_cita_vn": 0, "ventas_con_cita_vo": 0, "leads_cercana": 3, "leads_fuera": 1,
         "leads_sin_zona": 0, "num_inexistente": 0})
 
 
@@ -751,6 +753,7 @@ def _referencias(filas: dict[str, list[dict]], fin_meta: date) -> None:
                      leads_citas=round(l * s_citas * factor), citas_citas=round(c * s_citas * (2 - factor)),
                      semanas_ventas=s_ventas, gasto_ventas_cents=round(g * s_ventas * factor * 100),
                      citas_ventas=round(c * s_ventas * (2 - factor)), ventas_ventas=round(v * s_ventas * (2 - factor)))
+            x["ventas_con_cita"], x["ventas_con_cita_ventas"] = x["ventas"], x["ventas_ventas"]
             for k, n in x.items():
                 if not k.startswith("semanas"):
                     total[k] += n

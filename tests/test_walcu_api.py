@@ -3,6 +3,8 @@
 Privacidad (lista blanca, seudónimos, nada personal en la base, el bucket ni el registro), solo GET, paginación por
 página y por cursor, incremental con marca de agua e idempotencia, 401/403, estados y location sin mapear,
 traspaso de sede, venta anulada, HMAC estable y Walcu por semanas generado desde la API con cita por showed_up.
+Código postal: solo en memoria; del lead, la zona y la provincia; el código postal completo, solo agregado.
+Ventas y ventas con cita. Sin WALCU_API_KEY: «sin configurar», sin error ni alerta.
 """
 
 from __future__ import annotations
@@ -129,6 +131,7 @@ class Walcu:
     def __init__(self, datos: dict[str, list[dict]], cfg: wa.Config, ignora_filtro=False, errores=None):
         self.datos, self.cfg, self.ignora_filtro = datos, cfg, ignora_filtro
         self.peticiones: list = []
+        self.unos: list[str] = []
         self.errores = list(errores or [])
 
     def __call__(self, peticion, timeout):
@@ -141,6 +144,13 @@ class Walcu:
         assert partes.path.startswith(f"/dealers/{DEALER}/")
         recurso = partes.path.split("/")[3]
         q = {k: v[0] for k, v in parse_qs(partes.query).items()}
+        uno = partes.path.split("/")[4]
+        if uno != "all":                                   # GET /<recurso>/{id}
+            self.unos.append(uno)
+            e = next((e for e in self.datos[recurso] if e["_id"] == uno), None)
+            if e is None:
+                raise urllib.error.HTTPError(peticion.full_url, 404, "x", {}, io.BytesIO(b"{}"))
+            return _Respuesta(json.dumps(e).encode())
         elementos = sorted(self.datos[recurso], key=lambda e: e["_id"])
         if not self.ignora_filtro:
             desde, hasta = wa.instante(q[self.cfg.filtro_desde]), wa.instante(q[self.cfg.filtro_hasta])
@@ -206,10 +216,13 @@ def _cargar(pg, monkeypatch, cfg, datos, momento=MOMENTO, desde=DESDE, entorno=E
     return resumen, w, bucket
 
 
-def _todo_el_texto(pg) -> str:
-    """Todas las filas de todas las tablas de la base, como texto."""
+AGREGADO_CP = "walcu_api_cp_semana"     # la única tabla con el código postal completo (sin lead ni cliente)
+
+
+def _todo_el_texto(pg, salvo: tuple[str, ...] = ()) -> str:
+    """Todas las filas de todas las tablas de la base (menos `salvo`), como texto."""
     tablas = [t for (t,) in pg.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' "
-                                       "AND table_type = 'BASE TABLE'")]
+                                       "AND table_type = 'BASE TABLE'") if t not in salvo]
     return "\n".join(str(fila) for t in tablas for fila in pg.execute(f'SELECT * FROM "{t}"'))
 
 
@@ -220,7 +233,7 @@ def test_nada_personal_en_la_base_el_bucket_ni_el_registro(pg, monkeypatch, cfg_
     resumen, w, bucket = _cargar(pg, monkeypatch, cfg_mapeado, datos_base())
     assert pg.execute("SELECT count(*) FROM walcu_api_lead").fetchone()[0] == 5
     assert bucket.ficheros, "el JSON filtrado va al bucket"
-    texto_base = _todo_el_texto(pg)
+    texto_base = _todo_el_texto(pg, salvo=(AGREGADO_CP,))
     texto_bucket = "\n".join(b.decode("utf-8") for b in bucket.ficheros.values())
     registro = caplog.text + json.dumps(resumen, default=str, ensure_ascii=False)
     for valor in PERSONALES + EN_CLARO + [CLAVE_API, SEUD]:
@@ -231,7 +244,7 @@ def test_nada_personal_en_la_base_el_bucket_ni_el_registro(pg, monkeypatch, cfg_
         for e in json.loads(contenido):
             for k in e:
                 assert k in {c.split(".")[0].removesuffix("[]") for r in cfg_mapeado.recursos.values()
-                             for c in r.campos}, (nombre, k)
+                             for c in r.campos} | {"zona", "provincia"}, (nombre, k)
             assert "computed" not in e and "custom" not in e and "description" not in e
     # Seudónimos: el mismo cliente, el mismo seudónimo; HMAC, no el valor
     seud = dict(pg.execute("SELECT id_walcu, cliente_seudo FROM walcu_api_lead_vigente"))
@@ -242,6 +255,11 @@ def test_nada_personal_en_la_base_el_bucket_ni_el_registro(pg, monkeypatch, cfg_
     assert b == wa.seudonimo(SEUD, "WVWZZZ1KZAW000001") and m == wa.seudonimo(SEUD, "1234BCD")
     usuarios = {u for (u,) in pg.execute("SELECT usuario_seudo FROM walcu_api_lead_estado")}
     assert wa.seudonimo(SEUD, "u1u1u1u1u1u1u1u1u1u1u1u1") in usuarios
+    # El código postal completo, solo en el agregado (sin lead ni cliente)
+    assert {c for (c,) in pg.execute(f"SELECT DISTINCT codigo_postal FROM {AGREGADO_CP}")} == {"41001"}
+    assert [c["column_name"] for c in pg.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = %s", (AGREGADO_CP,)).fetchall()
+            if c[0] in ("lead_id", "cliente_seudo", "id_walcu")] == []
     # El error de la API no copia su mensaje (podría llevar datos personales)
     monkeypatch.setattr(cx, "_urlopen", Walcu({}, cfg_mapeado, errores=[400]))
     with pytest.raises(cx.ErrorDescarga) as exc:
@@ -314,13 +332,32 @@ def test_el_cliente_solo_hace_get(pg, monkeypatch, cfg):
     assert not re.search(r"\b(POST|PUT|PATCH|DELETE)\b", fuente)
 
 
-def test_sin_credenciales_no_sale_a_la_red(pg, monkeypatch, cfg):
+def test_sin_api_key_sin_configurar_sin_error_ni_alerta(pg, monkeypatch, cfg):
     def prohibida(*a, **k):
         raise AssertionError("sin credenciales no se sale a la red")
     monkeypatch.setattr(cx, "_urlopen", prohibida)
     monkeypatch.setattr("ingesta.scrapers_vw.hoy_madrid", lambda: HOY)
+    # make walcu-api y la tarea de las 06:30: terminan sin error (aunque esté el resto de variables)
     assert wa.ejecutar({}) == 0
-    assert pg.execute("SELECT estado FROM fuentes_estado WHERE fuente = 'walcu_api'").fetchone()[0] == "sin_credenciales"
+    assert wa.ejecutar({"WALCU_DEALER_ID": DEALER, "WALCU_SEUDONIMO_CLAVE": SEUD}) == 0
+    assert wa.main(["incremental"]) == 0
+    estados = pg.execute("SELECT tipo, estado FROM fuentes_estado WHERE fuente = 'walcu_api'").fetchall()
+    assert estados and set(estados) == {("descarga", "sin_configurar")}
+    # No dispara la alerta de fuente caída
+    from alertas import motor
+    from ingesta.concesionario import cargar as cargar_concesionario
+    _, reglas = motor.cargar_reglas()
+    motor.evaluar(pg, HOY, cargar_concesionario(), [r for r in reglas if r.id == "fuente_caida"])
+    assert pg.execute("SELECT count(*) FROM alertas WHERE clave LIKE 'descarga|%'").fetchone()[0] == 0
+    # La carga inicial a mano sí lo dice con error
+    assert wa.ejecutar({}, desde=DESDE) == 1
+
+
+def test_con_api_key_pero_sin_dealer_es_un_error(pg, monkeypatch):
+    monkeypatch.setattr("ingesta.scrapers_vw.hoy_madrid", lambda: HOY)
+    assert wa.ejecutar({"WALCU_API_KEY": CLAVE_API, "WALCU_SEUDONIMO_CLAVE": SEUD}) == 1
+    estado, detalle = pg.execute("SELECT estado, detalle FROM fuentes_estado WHERE fuente = 'walcu_api'").fetchone()
+    assert estado == "error" and "WALCU_DEALER_ID" in detalle["error"] and CLAVE_API not in json.dumps(detalle)
 
 
 # ================================================================== paginación
@@ -440,12 +477,15 @@ def test_walcu_por_semanas_desde_la_api_con_cita_por_showed_up(pg, monkeypatch, 
     c = resumen["crm"]
     assert c["semanal"]["escrito"] and c["exclusiones"] == {
         "leidos": 5, "comerciales_excluidos": 1, "otra_sede": 1, "otra_empresa": 0, "otra_marca": 1, "sin_fecha": 0}
-    filas = pg.execute("""SELECT semana, origen, campana, tipo, leads, leads_sin_zona, citas, ventas, fuente
+    filas = pg.execute("""SELECT semana, origen, campana, tipo, leads, citas, ventas, ventas_con_cita, fuente
                           FROM walcu_campana_semana_vigente ORDER BY campana""").fetchall()
     assert filas == [
-        (date(2026, 9, 7), "Facebook", "[VN] T-Roc", "VN", 1, 1, 0, 0, "api"),     # cita sin asistir: no es cita
+        (date(2026, 9, 7), "Facebook", "[VN] T-Roc", "VN", 1, 0, 0, 0, "api"),     # cita sin asistir: no es cita
         (date(2026, 9, 7), "Facebook", "VO Golf ocasión septiembre", "VO", 1, 1, 1, 1, "api"),
     ]
+    # Zona por el código postal del cliente (41001), con la zona cercana del concesionario
+    zona = {"cercana": "leads_cercana", "fuera": "leads_fuera"}[wa.zona("41001", _cercanas())]
+    assert pg.execute(f"SELECT sum({zona}), sum(leads_sin_zona) FROM walcu_campana_semana_vigente").fetchone() == (2, 0)
     assert c["acuerdo_tipo_pct"] == 100.0 and c["tipo_por"] == {"campana": 2}
     assert "u9u9u9u9u9u9u9u9u9u9u9u9" not in caplog.text
     # Sin cambios, al día siguiente no se escribe otra carga
@@ -578,3 +618,132 @@ def test_ejecutar_anota_el_resumen_en_fuentes_estado(pg, monkeypatch, cfg):
     assert "pendiente de confirmar" in detalle["paginacion"] and detalle["crm"]["estado"].startswith("activo")
     for valor in PERSONALES + EN_CLARO + [CLAVE_API]:
         assert valor not in json.dumps(detalle, ensure_ascii=False)
+
+
+# ================================================================== código postal (solo agregado)
+
+def _cercanas():
+    from ingesta.concesionario import cargar as cargar_concesionario
+    return cargar_concesionario().zona_cercana
+
+
+def _cp(pg) -> list[tuple]:
+    return pg.execute("""SELECT coalesce(codigo_postal, '-'), semana, tipo, leads, citas, ventas, ventas_con_cita
+                         FROM walcu_api_cp_semana_total ORDER BY 1, 2, 3""").fetchall()
+
+
+def test_codigo_postal_y_zona_del_lead():
+    assert [wa.codigo_postal(v) for v in ("41001", "8001", "41001.0", " 28080 ", "99001", "4100", "abc", None,
+                                           {"x": 1}, 41001)] == \
+        ["41001", "08001", "41001", "28080", None, "04100", None, None, None, "41001"]
+    assert wa.zona("41001", ("41", "21")) == "cercana" and wa.zona("28080", ("41",)) == "fuera"
+    assert wa.zona(None, ("41",)) == "sin_dato"
+
+
+def test_codigo_postal_solo_en_memoria_y_en_el_agregado(pg, monkeypatch, cfg_mapeado, caplog):
+    caplog.set_level(logging.DEBUG)
+    resumen, _, bucket = _cargar(pg, monkeypatch, cfg_mapeado, datos_base())
+    # Del lead: zona y provincia, nunca el código postal
+    esperada = wa.zona("41001", _cercanas())
+    assert set(pg.execute("SELECT zona, provincia FROM walcu_api_lead_vigente").fetchall()) == {(esperada, "41")}
+    texto = (_todo_el_texto(pg, salvo=(AGREGADO_CP,)) + "\n".join(b.decode() for b in bucket.ficheros.values())
+             + caplog.text + json.dumps(resumen, default=str))
+    assert "41001" not in texto
+    # Agregado: por código postal, semana del lead y tipo (lead3 y lead4 se excluyen: otra marca y otra sede)
+    assert _cp(pg) == [("41001", date(2026, 9, 7), "VN", 2, 0, 1, 0),     # lead2 y lead5 (venta sin cita)
+                       ("41001", date(2026, 9, 7), "VO", 1, 1, 1, 1)]     # lead1: cita el 10-9 y Firmado el 20-9
+    assert resumen["codigo_postal"] == {"leads": 5, "con_codigo_postal": 5}
+    # Ningún otro campo de computed: ni en la lista blanca ni en el bucket
+    assert all("computed" not in c for r in cfg_mapeado.recursos.values() for c in r.campos)
+    # Otra carga sin cambios no suma nada
+    n = pg.execute("SELECT count(*) FROM walcu_api_cp_semana").fetchone()[0]
+    _cargar(pg, monkeypatch, cfg_mapeado, datos_base(), momento=MOMENTO + timedelta(days=1), desde=None)
+    assert pg.execute("SELECT count(*) FROM walcu_api_cp_semana").fetchone()[0] == n
+
+
+def test_el_agregado_por_codigo_postal_suma_los_cambios(pg, monkeypatch, cfg_mapeado):
+    datos = datos_base()
+    del datos["saleleads"][1]["computed"]["client_address"]          # lead2, primero sin código postal
+    _cargar(pg, monkeypatch, cfg_mapeado, datos)
+    assert ("-", date(2026, 9, 7), "VN", 1, 0, 0, 0) in _cp(pg)
+    assert pg.execute("SELECT zona, provincia FROM walcu_api_lead_vigente WHERE id_walcu = 'lead2'").fetchone() == \
+        ("sin_dato", None)
+    # lead2: llega su código postal, va a una cita (que no cambia el lead) y después se vende
+    datos = datos_base()
+    datos["saleleads"][1]["computed"]["client_address"]["postal_code"] = "28080"
+    datos["saleleads"][1]["updated_at"] = "2026-11-20T12:00:00Z"
+    datos["dates"].append(cita("date3", "lead2", True, inicio="2026-11-15T09:00:00Z",
+                               actualizado="2026-11-20T12:00:00Z"))
+    _cargar(pg, monkeypatch, cfg_mapeado, datos, momento=MOMENTO + timedelta(days=1), desde=None)
+    assert _cp(pg) == [("28080", date(2026, 9, 7), "VN", 1, 1, 0, 0),
+                       ("41001", date(2026, 9, 7), "VN", 1, 0, 1, 0),
+                       ("41001", date(2026, 9, 7), "VO", 1, 1, 1, 1)]     # el «sin código postal» se ha movido
+    # Una cita nueva de un lead que no cambia: se pide el lead (GET de uno) para su código postal
+    datos["dates"].append(cita("date4", "lead5", True, inicio="2026-09-12T09:00:00Z",
+                               actualizado="2026-11-21T12:00:00Z"))
+    r, w, _ = _cargar(pg, monkeypatch, cfg_mapeado, datos, momento=MOMENTO + timedelta(days=2), desde=None)
+    assert w.unos == ["lead5"] and r["leads_por_cita"]["pedidos"] == 1
+    assert ("41001", date(2026, 9, 7), "VN", 1, 1, 1, 1) in _cp(pg)        # lead5: cita antes de su venta
+    # Venta de lead2 con su cita antes
+    datos["saleleads"][1]["status"] = {"status": "Vendido", "assigned_at": "2026-11-21T10:00:00Z"}
+    datos["saleleads"][1]["status_history"].append({"status": "Vendido", "assigned_at": "2026-11-21T10:00:00Z"})
+    datos["saleleads"][1]["updated_at"] = "2026-11-22T10:00:00Z"
+    _cargar(pg, monkeypatch, cfg_mapeado, datos, momento=MOMENTO + timedelta(days=3), desde=None)
+    assert ("28080", date(2026, 9, 7), "VN", 1, 1, 1, 1) in _cp(pg)
+    # El total cuadra con Walcu por semanas
+    assert pg.execute("SELECT sum(leads), sum(citas), sum(ventas), sum(ventas_con_cita) FROM walcu_api_cp_semana_total"
+                      ).fetchone() == pg.execute(
+        "SELECT sum(leads), sum(citas), sum(ventas), sum(ventas_con_cita) FROM walcu_campana_semana_vigente").fetchone()
+
+
+def test_un_lead_pedido_por_su_cita_que_ya_no_existe_se_salta(pg, monkeypatch, cfg_mapeado):
+    _cargar(pg, monkeypatch, cfg_mapeado, datos_base())
+    datos = datos_base()
+    datos["dates"].append(cita("date9", "lead-borrado", True, actualizado="2026-11-21T12:00:00Z"))
+    r, w, _ = _cargar(pg, monkeypatch, cfg_mapeado, datos, momento=MOMENTO + timedelta(days=2), desde=None)
+    assert w.unos == ["lead-borrado"] and r["leads_por_cita"]["no_encontrados"] == 1
+
+
+def test_codigo_postal_solo_en_saleleads_y_solo_postal_code(tmp_path):
+    texto = (RAIZ / "config" / "walcu_api.yaml").read_text(encoding="utf-8")
+    for malo in ("computed.client_address.route", "computed.client_phones", "computed.appointments[].postal_code"):
+        (tmp_path / "w.yaml").write_text(texto.replace("codigo_postal: computed.client_address.postal_code",
+                                                        f"codigo_postal: {malo}"), encoding="utf-8")
+        with pytest.raises(wa.ErrorConfiguracion, match="codigo_postal"):
+            wa.cargar(tmp_path / "w.yaml")
+    # Sin la clave, no se lee: zona y provincia vacías
+    (tmp_path / "w.yaml").write_text(texto.replace("codigo_postal: computed.client_address.postal_code",
+                                                    "codigo_postal: \"\""), encoding="utf-8")
+    assert wa.cargar(tmp_path / "w.yaml").recursos["saleleads"].codigo_postal == ""
+
+
+# ================================================================== ventas y ventas con cita
+
+def test_ventas_y_ventas_con_cita(pg, monkeypatch, cfg_mapeado):
+    resumen, _, _ = _cargar(pg, monkeypatch, cfg_mapeado, datos_base())
+    assert (resumen["crm"]["ventas"], resumen["crm"]["ventas_con_cita"]) == (2, 1)
+    # Dirección (panel_ventas_crm): todas con su fecha; y aparte las que tuvieron cita antes
+    assert pg.execute("SELECT mes, tipo, modelo, ventas, ventas_con_cita FROM panel_ventas_crm ORDER BY tipo"
+                      ).fetchall() == [(date(2026, 9, 1), "VN", "T-Roc", 1, 0), (date(2026, 9, 1), "VO", "Golf", 1, 1)]
+    # Walcu por semanas y el cruce con Meta: ventas para el coste por venta, ventas_con_cita para cita a venta
+    assert pg.execute("SELECT sum(ventas), sum(ventas_con_cita) FROM walcu_campana_semana_vigente").fetchone() == (2, 1)
+    assert pg.execute("SELECT sum(ventas), sum(ventas_con_cita), sum(ventas_vn), sum(ventas_con_cita_vn) "
+                      "FROM panel_campana_semana WHERE origen = 'real'").fetchone() == (2, 1, 1, 0)
+
+
+def test_una_cita_despues_de_la_venta_no_la_hace_con_cita(pg, monkeypatch, cfg_mapeado):
+    datos = datos_base()
+    datos["dates"][0] = cita("date1", "lead1", True, inicio="2026-09-22T09:00:00Z", actualizado="2026-09-22T12:00:00Z")
+    resumen, _, _ = _cargar(pg, monkeypatch, cfg_mapeado, datos)
+    assert (resumen["crm"]["ventas"], resumen["crm"]["ventas_con_cita"]) == (2, 0)     # Firmado el 20-9
+
+
+def test_con_el_csv_ventas_con_cita_es_ventas(pg):
+    from ingesta import referencias_meta as ref
+    pg.execute("""INSERT INTO walcu_campana_semana (fecha_carga, run_id, fichero_origen, huella_fichero, semana, origen,
+                  campana, tipo, leads, leads_cercana, leads_fuera, leads_sin_zona, citas, ventas, num_inexistente)
+                  VALUES (now(), 'r', 'f.csv', 'h', '2026-09-07', 'Facebook', 'X', 'VN', 10, 5, 3, 2, 4, 2, 0)""")
+    assert pg.execute(f"SELECT {ref.SELECT_WALCU} FROM walcu_campana_semana_vigente").fetchone()[-1] == 2
+    m = ref.metricas({**{k: 0 for k in ref.CAMPOS_WALCU + ref.MADUREZ}, "gasto_cents": 1000, "leads_meta": 0,
+                      "citas_ventas": 4, "ventas_ventas": 3, "ventas_con_cita_ventas": 2, "gasto_ventas_cents": 600})
+    assert m["cita_venta"] == pytest.approx(50.0) and m["coste_venta"] == pytest.approx(2.0)

@@ -12,14 +12,21 @@ no se deduce ninguna venta ni se excluye ninguna sede, y todo sigue como ahora:
      propio marketing (en el origen o en la campaña) y campañas de otras marcas o de posventa (por el nombre).
    - Cita = el lead tiene una cita a la que el cliente asistió (showed_up). Venta = el lead está en un estado de
      venta (o de sus hitos); si vuelve a otro estado, deja de serlo. Las dos, en la semana del lead (cohorte).
+   - Dos cifras de ventas: ventas (todas: coste por venta y Dirección) y ventas_con_cita (el lead tuvo una cita
+     a la que el cliente asistió, que empezó antes de la venta: la tasa de cita a venta, comparable con el CSV,
+     donde toda venta tiene cita).
    - Tipo: la regla de siempre (el nombre de la campaña; si no lo dice, location de VO; si no, la tipología de
      car_list; si no, el tipo por defecto). Se informa del porcentaje de acuerdo con la tipología de car_list.
-   - Sin código postal (no se lee de la API): todos los leads van a leads_sin_zona.
+   - Zona: la del lead (cercana, fuera o sin_dato, de su código postal, que solo se lee en memoria).
    - Solo se escribe si cambia algo frente a lo vigente; las semanas empiezan en la primera semana completa de
      la carga inicial. Después se rehacen el cruce con Meta y las referencias. El CSV sigue de respaldo.
 2. panel_ventas_crm: ventas por mes de la venta (la fecha del primer hito Firmado; si no, la del primer estado de
    venta), tipo (la tipología del coche: car_list o el coche) y modelo. Dirección: «Ventas del mes».
-3. panel_stock_vehiculo (además, con el mapeo de estados del vehículo): los coches en stock (ni vendidos ni de
+3. walcu_api_cp_semana: leads, citas y ventas por código postal, semana del lead y tipo. El código postal solo
+   llega en memoria, con los leads de cada carga: se suma la diferencia entre lo que cuenta ahora cada lead y lo
+   ya sumado (walcu_api_cp_contado, sin el código postal). Si el código postal de un lead cambia, lo ya sumado
+   se resta del nuevo (no se sabe el anterior); si desaparece, el lead se queda como estaba.
+4. panel_stock_vehiculo (además, con el mapeo de estados del vehículo): los coches en stock (ni vendidos ni de
    baja) de las location que cuentan, con su fecha de entrada real. Un traspaso a otra sede mantiene el id: si la
    sede cuenta sigue en stock y, si no, sale del stock sin ser una venta (las ventas solo salen de los leads).
 """
@@ -214,6 +221,12 @@ class Lead:
     cita: bool
     venta: date | None               # día de la venta (None: no es venta)
     inexistente: bool
+    zona: str | None = None          # cercana, fuera o sin_dato (None: la carga no leía el código postal)
+    venta_con_cita: bool = False     # venta con una cita asistida que empezó antes de la venta
+
+
+def _leads_zona(zona: str | None) -> str:
+    return {"cercana": "leads_cercana", "fuera": "leads_fuera"}.get(zona or "", "leads_sin_zona")
 
 
 def _dia(d: datetime | None) -> date | None:
@@ -221,16 +234,21 @@ def _dia(d: datetime | None) -> date | None:
     return d.astimezone(MADRID).date() if d else None
 
 
-def fecha_venta(historia: list[tuple[str, datetime]], estado: str | None, estado_at: datetime | None,
-                m: Mapeo) -> date | None:
-    """Si el lead está ahora en un estado de venta: el día del primer Firmado; si no hay, el del primer estado de
-    venta de su historia (o, sin historia, el de su estado actual). Si no está en venta (venta anulada), None."""
+def momento_venta(historia: list[tuple[str, datetime]], estado: str | None, estado_at: datetime | None,
+                  m: Mapeo) -> datetime | None:
+    """Si el lead está ahora en un estado de venta: el primer Firmado; si no hay, el primer estado de venta de su
+    historia (o, sin historia, su estado actual). Si no está en venta (venta anulada), None."""
     if not m.es_venta(estado):
         return None
     firmado = [f for e, f in historia if plegar(e) in m.firmado]
     ventas = [f for e, f in historia if m.es_venta(e)]
-    cuando = min(firmado) if firmado else (min(ventas) if ventas else estado_at)
-    return _dia(cuando)
+    return min(firmado) if firmado else (min(ventas) if ventas else estado_at)
+
+
+def fecha_venta(historia: list[tuple[str, datetime]], estado: str | None, estado_at: datetime | None,
+                m: Mapeo) -> date | None:
+    """El día de momento_venta (Madrid)."""
+    return _dia(momento_venta(historia, estado, estado_at, m))
 
 
 def leer_leads(pg: psycopg.Connection, m: Mapeo) -> list[Lead]:
@@ -238,17 +256,20 @@ def leer_leads(pg: psycopg.Connection, m: Mapeo) -> list[Lead]:
     for lid, e, f in pg.execute("SELECT lead_id, estado, fecha FROM walcu_api_lead_estado ORDER BY lead_id, fecha"):
         historia[lid].append((e, f))
     leads = []
+    citas = {lid: (bool(n), primera) for lid, n, primera in pg.execute(
+        """SELECT lead_id, count(*), min(inicio_at) FROM walcu_api_cita_vigente
+           WHERE asistio AND coalesce(lead_tipo, 'salelead') = 'salelead' AND lead_id IS NOT NULL GROUP BY 1""")}
     for (lid, alta, source, campana, loc, estado, estado_at, comercial, tipo_l, modelo_l, tipo_v, modelo_v,
-         cita) in pg.execute(
+         zona) in pg.execute(
             """SELECT l.id_walcu, l.alta_at, l.origen_source, l.origen_campaign, l.location, l.estado, l.estado_at,
-                      l.comercial_seudo, l.tipo_vehiculo, l.modelo_vehiculo, v.tipo, v.modelo,
-                      EXISTS (SELECT 1 FROM walcu_api_cita_vigente c WHERE c.lead_id = l.id_walcu AND c.asistio
-                              AND coalesce(c.lead_tipo, 'salelead') = 'salelead')
+                      l.comercial_seudo, l.tipo_vehiculo, l.modelo_vehiculo, v.tipo, v.modelo, l.zona
                FROM walcu_api_lead_vigente l LEFT JOIN walcu_api_vehiculo_vigente v ON v.id_walcu = l.vehiculo_id
                ORDER BY l.id_walcu"""):
+        cita, primera = citas.get(lid, (False, None))
+        venta_at = momento_venta(historia[lid], estado, estado_at, m)
         leads.append(Lead(lid, _dia(alta), source, campana, loc, estado, comercial, tipo_l or tipo_v,
-                          modelo_l or modelo_v, bool(cita), fecha_venta(historia[lid], estado, estado_at, m),
-                          plegar(estado) in m.num_inexistente))
+                          modelo_l or modelo_v, cita, _dia(venta_at), plegar(estado) in m.num_inexistente, zona,
+                          venta_at is not None and primera is not None and primera <= venta_at))
     return leads
 
 
@@ -337,11 +358,21 @@ class Agregador:
         origen = self.base.origenes.get(plegar(lead.source), OTROS)
         a = self.filas[(semana.isoformat(), origen, campana, tipo)]
         a["leads"] += 1
-        a["leads_sin_zona"] += 1
+        a[_leads_zona(lead.zona)] += 1
         a["citas"] += lead.cita
         a["ventas"] += lead.venta is not None
+        a["ventas_con_cita"] += lead.venta_con_cita
         a["num_inexistente"] += lead.inexistente
         return tipo
+
+    def cuenta_semana(self, lead: Lead, desde: date | None) -> tuple[date, str] | None:
+        """(semana, tipo) en que cuenta el lead, sin tocar los recuentos; None si no cuenta."""
+        if self.excluido(lead) or lead.dia is None:
+            return None
+        semana = lead.dia - timedelta(days=lead.dia.weekday())
+        if desde is not None and semana < desde:
+            return None
+        return semana, self.tipo_y_via(lead, self.campana(lead))[0]
 
     def csv(self) -> bytes:
         return self.base.csv()
@@ -361,15 +392,20 @@ def primer_lunes(d: date | None) -> date | None:
     return d if d.weekday() == 0 else d + timedelta(days=7 - d.weekday())
 
 
-def escribir_semanal(pg: psycopg.Connection, contenido: bytes, momento: datetime) -> dict:
-    """Valida como un CSV de Walcu y, si cambia algo frente a lo vigente de esas semanas, lo añade (fuente api)."""
+def escribir_semanal(pg: psycopg.Connection, contenido: bytes, momento: datetime,
+                     con_cita: Mapping[tuple, int] | None = None) -> dict:
+    """Valida como un CSV de Walcu y, si cambia algo frente a lo vigente de esas semanas, lo añade (fuente api).
+    `con_cita`: (semana ISO, origen, campaña, tipo) → ventas con cita (las de la API; el CSV no las trae)."""
     v = walcu.validar(contenido)
+    con_cita = con_cita or {}
+    for f in v.filas:
+        f["ventas_con_cita"] = int(con_cita.get((f["semana"].isoformat(), f["origen"], f["campana"], f["tipo"]), 0))
     semanas = sorted({f["semana"] for f in v.filas})
-    cols = walcu.COLUMNAS
+    cols = walcu.COLUMNAS + ("ventas_con_cita",)
     nuevas = {tuple(f[c] for c in cols) for f in v.filas}
     vigentes = {tuple(r) for r in pg.execute(
-        f"SELECT {', '.join(cols)} FROM walcu_campana_semana_vigente WHERE semana BETWEEN %s AND %s",
-        (semanas[0], semanas[-1]))}
+        f"SELECT {', '.join(walcu.COLUMNAS)}, coalesce(ventas_con_cita, ventas) FROM walcu_campana_semana_vigente "
+        "WHERE semana BETWEEN %s AND %s", (semanas[0], semanas[-1]))}
     resumen = {"filas": len(v.filas), "semanas": len(semanas), "desde": str(semanas[0]), "hasta": str(semanas[-1]),
                "avisos": v.avisos}
     if nuevas == vigentes:
@@ -384,15 +420,63 @@ def escribir_semanal(pg: psycopg.Connection, contenido: bytes, momento: datetime
     return {**resumen, "escrito": True, "run_id": run_id}
 
 
-def ventas_crm(leads: list[Lead], ag: Agregador) -> dict[tuple[date, str, str], int]:
-    """(mes, tipo, modelo) → ventas. El tipo es la tipología del coche vendido; sin ella, la del lead."""
-    cuenta: Counter = Counter()
+def ventas_crm(leads: list[Lead], ag: Agregador) -> dict[tuple[date, str, str], list[int]]:
+    """(mes, tipo, modelo) → [ventas, ventas con cita]. El tipo es la tipología del coche vendido; sin ella, la
+    del lead."""
+    cuenta: dict = defaultdict(lambda: [0, 0])
     for lead in leads:
         if lead.venta is None or ag.excluido(lead):
             continue
         tipo = ag.m.tipo(lead.tipo_vehiculo) or ag.tipo_y_via(lead, ag.campana(lead))[0]
-        cuenta[(lead.venta.replace(day=1), tipo, lead.modelo or SIN_MODELO)] += 1
+        c = cuenta[(lead.venta.replace(day=1), tipo, lead.modelo or SIN_MODELO)]
+        c[0] += 1
+        c[1] += lead.venta_con_cita
     return dict(cuenta)
+
+
+# --------------------------------------------------------------------------- código postal (solo agregado)
+
+def actualizar_cp(pg: psycopg.Connection, leads: list[Lead], ag: Agregador, desde: date | None,
+                  postales: Mapping[str, str | None], run_id: str) -> dict:
+    """Suma a walcu_api_cp_semana la diferencia entre lo que cuenta ahora cada lead de `postales` (los de esta
+    carga: id → código postal, solo en memoria) y lo ya sumado (walcu_api_cp_contado). Recuentos, sin códigos."""
+    por_id = {lead.id: lead for lead in leads}
+    ids = [i for i in postales if i in por_id]
+    contado = {r[0]: r[1:] for r in pg.execute(
+        """SELECT lead_id, semana, tipo, con_cp, citas, ventas, ventas_con_cita FROM walcu_api_cp_contado_vigente
+           WHERE lead_id = ANY(%s)""", (ids,))} if ids else {}
+    delta: dict[tuple, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
+    nuevos_contados, cuentas = [], Counter()
+    for lid in ids:
+        lead, cp = por_id[lid], postales[lid]
+        antes = contado.get(lid)
+        if cp is None and antes is not None and antes[2]:
+            cuentas["codigo_postal_perdido"] += 1          # se queda como estaba
+            continue
+        donde = ag.cuenta_semana(lead, desde)
+        ahora = (None, None, cp is not None, 0, 0, 0) if donde is None else \
+            (donde[0], donde[1], cp is not None, int(lead.cita), int(lead.venta is not None), int(lead.venta_con_cita))
+        if antes is not None and tuple(antes) == ahora:
+            continue
+        if antes is not None and antes[0] is not None:
+            d = delta[(cp if antes[2] else None, antes[0], antes[1])]
+            for i, n in enumerate((1, antes[3], antes[4], antes[5])):
+                d[i] -= n
+        if ahora[0] is not None:
+            d = delta[(cp, ahora[0], ahora[1])]
+            for i, n in enumerate((1, ahora[3], ahora[4], ahora[5])):
+                d[i] += n
+        nuevos_contados.append((run_id, lid, *ahora))
+        cuentas["con_codigo_postal" if cp else "sin_codigo_postal"] += 1
+    filas = [(run_id, cp, semana, tipo, *v) for (cp, semana, tipo), v in delta.items() if any(v)]
+    with pg.cursor() as cur:
+        if filas:
+            cur.executemany("INSERT INTO walcu_api_cp_semana (run_id, codigo_postal, semana, tipo, leads, citas, "
+                            "ventas, ventas_con_cita) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", filas)
+        if nuevos_contados:
+            cur.executemany("INSERT INTO walcu_api_cp_contado (run_id, lead_id, semana, tipo, con_cp, citas, ventas, "
+                            "ventas_con_cita) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", nuevos_contados)
+    return {"leads_cambiados": len(nuevos_contados), "filas": len(filas), **dict(cuentas)}
 
 
 def stock(pg: psycopg.Connection, m: Mapeo, hoy: date) -> tuple[list[dict], Counter]:
@@ -437,7 +521,8 @@ def _insertar(pg, tabla: str, filas: list[dict]) -> None:
 
 def actualizar(pg: psycopg.Connection, cfg, hoy: date, entorno: Mapping[str, str],
                conc: cc.Concesionario | None = None, cfg_export: dict | None = None,
-               momento: datetime | None = None) -> dict:
+               momento: datetime | None = None, postales: Mapping[str, str | None] | None = None,
+               run_id: str | None = None) -> dict:
     """Inventario y, con el mapeo definido, Walcu por semanas, ventas y stock. Devuelve el resumen."""
     inv = inventario(pg, cfg)
     resumen: dict = {"sin_mapear": inv["sin_mapear"], "vehiculos": inv["vehiculos"], "leads": inv["leads"],
@@ -463,14 +548,20 @@ def actualizar(pg: psycopg.Connection, cfg, hoy: date, entorno: Mapping[str, str
     with pg.transaction():
         if m.generar and ag.filas:
             try:
-                resumen["semanal"] = escribir_semanal(pg, ag.csv(), momento)
+                resumen["semanal"] = escribir_semanal(pg, ag.csv(), momento,
+                                                      {k: a["ventas_con_cita"] for k, a in ag.filas.items()})
             except walcu.ErrorWalcu as exc:
                 resumen["semanal"] = {"escrito": False, "error": exc.problemas[:5]}
         ventas = ventas_crm(leads, ag)
         pg.execute("DELETE FROM panel_ventas_crm WHERE origen = 'real'")
         _insertar(pg, "panel_ventas_crm", [{"dia": hoy, "origen": "real", "mes": mes, "tipo": t, "modelo": mo,
-                                            "ventas": n} for (mes, t, mo), n in sorted(ventas.items())])
-        resumen["ventas"] = sum(ventas.values())
+                                            "ventas": n, "ventas_con_cita": c}
+                                           for (mes, t, mo), (n, c) in sorted(ventas.items())])
+        resumen["ventas"] = sum(n for n, _ in ventas.values())
+        resumen["ventas_con_cita"] = sum(c for _, c in ventas.values())
+        if postales:
+            resumen["codigo_postal"] = actualizar_cp(pg, leads, ag, desde, postales,
+                                                     run_id or f"walcu-api-cp-{momento:%Y%m%dT%H%M%S%f}")
         if m.stock_definido:
             filas, cuentas = stock(pg, m, hoy)
             pg.execute("DELETE FROM panel_stock_vehiculo WHERE origen = 'real' AND dia = %s", (hoy,))
@@ -481,7 +572,7 @@ def actualizar(pg: psycopg.Connection, cfg, hoy: date, entorno: Mapping[str, str
     if (resumen.get("semanal") or {}).get("escrito"):
         from ingesta import referencias_meta as ref
         resumen["referencias"] = ref.actualizar(pg)
-    resumen["estado"] = (f"activo: {resumen['ventas']} ventas; acuerdo del tipo con car_list "
+    resumen["estado"] = (f"activo: {resumen['ventas']} ventas ({resumen['ventas_con_cita']} con cita); acuerdo del tipo con car_list "
                          f"{resumen['acuerdo_tipo_pct'] if resumen['acuerdo_tipo_pct'] is not None else '—'} %")
     LOG.info("Walcu (CRM): %s", resumen["estado"])
     return resumen

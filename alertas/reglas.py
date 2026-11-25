@@ -120,7 +120,7 @@ def fuente_caida(ctx: Contexto) -> Resultado:
             dias = (hoy - ultima[0]).days
             if dias > int(ctx.u.get("dias_sin_copia", 2)):
                 disparo("copia", "sin_copia", ultima[0], dias=str(dias))
-    # Conectores: un error de descarga (sin credenciales no es un error)
+    # Conectores: un error de descarga (sin credenciales o sin configurar no es un error)
     for f, etiqueta in CONECTORES.items():
         estado, det = ultimos.get((f, "descarga"), ("ok", {}))
         if estado == "error":

@@ -536,7 +536,8 @@ Parámetros en `config/prevision.yaml`; tras cambiarlos, commit, `make deploy` y
 ### 7.16 API de Walcu (el día que llegue la credencial)
 
 Ya con el código desplegado (`make deploy`: migración 0023), el conector no hace nada mientras falte la
-credencial («sin credenciales» en `make estado`, sin alerta). El día que llegue:
+credencial: sin `WALCU_API_KEY`, `make walcu-api` y la tarea de las 06:30 terminan sin error y anotan «sin
+configurar» en `fuentes_estado` (`make estado`), sin alerta de fuente caída. El día que llegue:
 
 1. En `/opt/cdf/.env` (permisos 600): `WALCU_API_KEY`, `WALCU_DEALER_ID` y `WALCU_SEUDONIMO_CLAVE`
    (`openssl rand -hex 32`; guárdala también fuera del servidor: si cambia, los seudónimos nuevos no casan con los
@@ -556,9 +557,12 @@ credencial («sin credenciales» en `make estado`, sin alerta). El día que lleg
    duplicar nada.
 4. `make walcu-api-mapeo`: estados de coches y de leads y location, con sus recuentos. Con AVISA, rellenar en
    `config/walcu_api.yaml` `estados_vehiculo`, `estados_lead` (venta y sus hitos Firmado, Matriculado, Entregado) y
-   `locations` (incluidas, excluidas y de VO). Commit, `make deploy` y `make walcu-api`.
-5. Con el mapeo, cada carga genera Walcu por semanas desde la API (fuente `api`), las ventas del CRM de Dirección
-   y el stock con su fecha de entrada (Dirección y Ventas). El resumen de cada carga (`make estado`, `make logs`)
+   `locations` (incluidas, excluidas y de VO). Commit y `make deploy`. Después, **otra vez
+   `make walcu-api-inicial DESDE=…`** (no duplica nada): el agregado por código postal solo se llena con el mapeo
+   definido y solo con los leads que pasan por memoria en una carga.
+5. Con el mapeo, cada carga genera Walcu por semanas desde la API (fuente `api`, con la zona del código postal y
+   las dos cifras de ventas: todas y con cita), las ventas del CRM de Dirección, el stock con su fecha de entrada
+   (Dirección y Ventas) y el agregado por código postal (`walcu_api_cp_semana_total`). El resumen de cada carga (`make estado`, `make logs`)
    dice el acuerdo del tipo con la tipología de `car_list`. El CSV (`make walcu-cargar`) sigue de respaldo: si la
    API no está, se carga como siempre; si está, la carga siguiente de la API vuelve a tomar las semanas en que
    difiera.

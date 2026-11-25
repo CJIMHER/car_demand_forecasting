@@ -56,9 +56,14 @@ RAIZ = Path(__file__).resolve().parent.parent
 LOG = logging.getLogger("ingesta.referencias_meta")
 TIPOS = ("VN", "VO")
 SIN_CAMPANA = "(sin campaña)"
-CAMPOS_WALCU = ("leads", "citas", "ventas", "leads_cercana", "leads_fuera", "leads_sin_zona", "num_inexistente")
+# ventas: todas (coste por venta); ventas_con_cita: con una cita asistida antes (tasa de cita a venta). En las
+# cargas por CSV son lo mismo (toda venta tiene cita).
+CAMPOS_WALCU = ("leads", "citas", "ventas", "leads_cercana", "leads_fuera", "leads_sin_zona", "num_inexistente",
+                "ventas_con_cita")
+POR_TIPO = ("leads", "citas", "ventas", "ventas_con_cita")
 MADUREZ = ("semanas_citas", "gasto_citas_cents", "leads_citas", "citas_citas",
-           "semanas_ventas", "gasto_ventas_cents", "citas_ventas", "ventas_ventas")
+           "semanas_ventas", "gasto_ventas_cents", "citas_ventas", "ventas_ventas", "ventas_con_cita_ventas")
+SELECT_WALCU = ", ".join("coalesce(ventas_con_cita, ventas)" if k == "ventas_con_cita" else k for k in CAMPOS_WALCU)
 ZONA = "Europe/Madrid"
 
 
@@ -177,7 +182,7 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
     walcu: dict[tuple[date, str, str], list[int]] = defaultdict(lambda: [0] * len(CAMPOS_WALCU))
     semanas_walcu: set[date] = set(cargada)                # semanas con carga de Walcu
     for semana, origen, camp, tipo, *vals in pg.execute(
-            f"SELECT semana, origen, campana, tipo, {', '.join(CAMPOS_WALCU)} FROM walcu_campana_semana_vigente"):
+            f"SELECT semana, origen, campana, tipo, {SELECT_WALCU} FROM walcu_campana_semana_vigente"):
         if conc.otra_marca(camp) or conc.otra_empresa(camp):
             excluidas["walcu_filas"] += 1
             excluidas["walcu_leads"] += int(vals[0])
@@ -240,14 +245,14 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
                 "walcu": semana in semanas_walcu, "cruce": None,
                 "citas_completas": completas[semana][0] if semana in completas else None,
                 "ventas_completas": completas[semana][1] if semana in completas else None,
-                **{k: None for k in CAMPOS_WALCU}, **{f"{k}_{t.lower()}": None for k in ("leads", "citas", "ventas")
+                **{k: None for k in CAMPOS_WALCU}, **{f"{k}_{t.lower()}": None for k in POR_TIPO
                                                        for t in TIPOS}}
         return filas[clave]
     for (semana, cid) in meta:
         f = fila(semana, cid, titulo.get(cid) or "(sin nombre)")
         if cid in conocidas and f["walcu"]:
             f["cruce"] = next(como for c, como in asignada.values() if c == cid)
-            for k in CAMPOS_WALCU + tuple(f"{k}_{t.lower()}" for k in ("leads", "citas", "ventas") for t in TIPOS):
+            for k in CAMPOS_WALCU + tuple(f"{k}_{t.lower()}" for k in POR_TIPO for t in TIPOS):
                 f[k] = 0
     for (semana, camp, tipo), vals in walcu.items():
         if camp in asignada:
@@ -257,12 +262,12 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
         else:
             f = fila(semana, None, camp)
             f["cruce"] = "nombre"      # las cifras de Walcu son suyas: no hay campaña de Meta que casar
-        for k in CAMPOS_WALCU + tuple(f"{k}_{t.lower()}" for k in ("leads", "citas", "ventas") for t in TIPOS):
+        for k in CAMPOS_WALCU + tuple(f"{k}_{t.lower()}" for k in POR_TIPO for t in TIPOS):
             f[k] = f[k] or 0
         for i, k in enumerate(CAMPOS_WALCU):
             f[k] += vals[i]
-        for i, k in enumerate(("leads", "citas", "ventas")):
-            f[f"{k}_{tipo.lower()}"] += vals[i]
+        for k in POR_TIPO:
+            f[f"{k}_{tipo.lower()}"] += vals[CAMPOS_WALCU.index(k)]
     # ---- referencias por año ISO y tipo, en las semanas con Meta y Walcu ya terminadas al cargarse
     semanas_ref = {m for m, _ in meta} & terminada
     ref: dict[tuple[int, str], dict] = {}
@@ -300,6 +305,7 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
                 x["m_ventas"].add(semana)
                 x["citas_ventas"] += w["citas"]
                 x["ventas_ventas"] += w["ventas"]
+                x["ventas_con_cita_ventas"] += w["ventas_con_cita"]
     for (semana, cid), (g, _, _, lm, _) in meta.items():
         if semana not in semanas_ref:
             continue
@@ -336,7 +342,7 @@ def actualizar(pg: psycopg.Connection, campanas: cmp.Campanas | None = None, cru
     dia = dia_meta or (max(semanas_walcu) if semanas_walcu else None)
     cols = ("semana", "campana_id", "titulo", "ambito", "tipo_campana", "modelo", "gasto_cents", "impresiones",
             "clics", "leads_meta", "walcu", "cruce", "citas_completas", "ventas_completas") + CAMPOS_WALCU \
-        + tuple(f"{k}_{t.lower()}" for k in ("leads", "citas", "ventas") for t in TIPOS)
+        + tuple(f"{k}_{t.lower()}" for k in POR_TIPO for t in TIPOS)
     cols_ref = ("anio", "tipo", "desde_semana", "hasta_semana", "semanas", "gasto_cents", "leads_meta") \
         + CAMPOS_WALCU + MADUREZ
     for x in ref.values():
@@ -384,7 +390,7 @@ def metricas(x: dict) -> dict:
     return {"gasto": g, "leads_meta": x["leads_meta"], "leads": x["leads"], "citas": x["citas"], "ventas": x["ventas"],
             "coste_lead": _div(g, x["leads"]), "coste_cita": _div(x["gasto_citas_cents"] / 100, x["citas_citas"]),
             "coste_venta": _div(x["gasto_ventas_cents"] / 100, x["ventas_ventas"]),
-            "lead_cita": pct(x["citas_citas"], x["leads_citas"]), "cita_venta": pct(x["ventas_ventas"], x["citas_ventas"]),
+            "lead_cita": pct(x["citas_citas"], x["leads_citas"]), "cita_venta": pct(x["ventas_con_cita_ventas"], x["citas_ventas"]),
             "fuera_zona": pct(x["leads_fuera"], con_cp), "inexistente": pct(x["num_inexistente"], x["leads"])}
 
 

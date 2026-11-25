@@ -460,7 +460,8 @@ Es una comparación con un modelo, no un experimento.
 | `walcu` | sí/no | Hay carga de Walcu de esa semana |
 | `citas_completas`, `ventas_completas` | sí/no | Cohorte cumplida para citas y para ventas; vacías sin carga de Walcu |
 | `cruce` | nombre / equivalencia / vacío | Cómo casa con Walcu. Vacío: ningún lead de Walcu con ese nombre (sus cifras de Walcu quedan vacías, nunca cero). Una campaña que casa en alguna semana tiene 0 en las semanas con carga sin leads |
-| `leads`, `citas`, `ventas` y sus `_vn`, `_vo` | número | De Walcu, por semana del lead. Cita: el lead tiene negociación; venta: negociación cerrada como vendida |
+| `leads`, `citas`, `ventas` y sus `_vn`, `_vo` | número | De Walcu, por semana del lead. Cita: el lead tiene negociación (API: cita con `showed_up`); venta: negociación cerrada como vendida (API: lead en estado de venta, con o sin cita). Coste por venta |
+| `ventas_con_cita` y sus `_vn`, `_vo` | número | Ventas con una cita asistida antes de la venta: la tasa de cita a venta (criterio d, previsión). En las cargas por CSV, igual a `ventas` |
 | `leads_cercana`, `leads_fuera`, `leads_sin_zona`, `num_inexistente` | número | Zona por código postal (zona cercana del concesionario) y números inexistentes |
 
 **Cifras de Marketing («Campañas de las últimas 4 semanas»):** las 4 últimas semanas terminadas el último
@@ -484,7 +485,8 @@ costes (su gasto no se reparte).
 | `gasto_cents`, `leads_meta`, `leads`, `citas`, `ventas` | número | Sumas del año |
 | `leads_cercana`, `leads_fuera`, `leads_sin_zona`, `num_inexistente` | número | Para % fuera de zona (fuera / con código postal) y % de número inexistente (/ leads) |
 | `semanas_citas`, `gasto_citas_cents`, `leads_citas`, `citas_citas` | número | Solo las semanas con las citas completas: lead a cita y coste por cita |
-| `semanas_ventas`, `gasto_ventas_cents`, `citas_ventas`, `ventas_ventas` | número | Solo las semanas con las ventas completas: cita a venta y coste por venta |
+| `semanas_ventas`, `gasto_ventas_cents`, `citas_ventas`, `ventas_ventas` | número | Solo las semanas con las ventas completas: coste por venta (con todas las ventas) |
+| `ventas_con_cita`, `ventas_con_cita_ventas` | número | Ventas con una cita asistida antes (del año y de las semanas con las ventas completas): cita a venta |
 
 Las de 2025 (`criterios_meta.c.referencia_anio`) son la «media» de las reglas c y d.
 
@@ -551,7 +553,8 @@ Las de 2025 (`criterios_meta.c.referencia_anio`) son la «media» de las reglas 
 
 ### panel_ventas_crm · ventas del CRM (API de Walcu)
 
-- **Grano**: mes de la venta × tipo (VN, VO) × modelo; `ventas` es un recuento. Lo escribe
+- **Grano**: mes de la venta × tipo (VN, VO) × modelo; `ventas` es un recuento (todas las ventas) y
+  `ventas_con_cita`, las de leads con una cita asistida (`showed_up`) que empezó antes de la venta. Lo escribe
   `ingesta/walcu_crm.py` después de cada carga de la API de Walcu (`make walcu-api`, cron 06:30), con origen
   `real`, rehaciéndolo entero (`dia` = día del cálculo). Solo con datos de la API y el mapeo de
   `config/walcu_api.yaml` definido (estados de venta del lead y location); si no, no escribe nada y Dirección

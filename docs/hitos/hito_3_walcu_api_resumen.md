@@ -81,7 +81,8 @@ Lo que no cuadra o no está en `docs/walcu_api.pdf`:
    `make walcu-api-probar`.
 6. **Comercial**: el lead trae `current_assigned.to` (el asignado). Es el que se usa, seudonimizado, para los
    comerciales excluidos.
-7. **Sin código postal**: el lead no lo trae fuera de `computed` (que nunca se lee).
+7. **Código postal**: el lead solo lo trae dentro de `computed` (`computed.client_address.postal_code`). Desde
+   los ajustes (abajo) es la única excepción a «nunca `computed`».
 
 ## Decisiones tomadas sin preguntar
 
@@ -90,12 +91,11 @@ Lo que no cuadra o no está en `docs/walcu_api.pdf`:
 2. **Comerciales excluidos**: en el servidor, `WALCU_COMERCIALES_EXCLUIDOS` en el `.env` con sus ids de usuario de
    Walcu (no nombres), que solo se usan en memoria para calcular su seudónimo y compararlo. El fichero local de
    nombres sigue solo en el Mac para el CSV. El registro dice solo cuántos leads se excluyen.
-3. **Zona**: como el lead no trae código postal, en las semanas de la API todos los leads van a `leads_sin_zona`.
-   **El criterio de Meta de leads fuera de zona (regla e) se queda sin datos en las semanas que vengan de la
-   API.** Si hace falta, habrá que pedir a Walcu el código postal del lead como campo propio y confirmar que se
-   puede leer sin el resto de la dirección.
+3. **Zona**: sustituida por los ajustes (abajo): el código postal se lee en memoria y el lead guarda su zona, así
+   que la regla e vuelve a tener datos con la API.
 4. **Venta**: el lead está ahora en un estado de venta (o de sus hitos). Su fecha es la del primer Firmado; si no
-   lo hay, la del primer estado de venta. A diferencia del CSV, no exige cita. Si el lead sale del estado de venta
+   lo hay, la del primer estado de venta. A diferencia del CSV, no exige cita (con los ajustes se guarda además
+   `ventas_con_cita`). Si el lead sale del estado de venta
    (venta anulada), deja de contar en todo.
 5. **`car_list` con varios coches**: se toma el primero (se guarda cuántos trae).
 6. **La API manda sobre el CSV**: cada carga compara lo generado con lo vigente de esas semanas y, si difiere, lo
@@ -122,11 +122,12 @@ Los pasos están en `infra/deploy.md`, apartado 7.16:
 2. `make walcu-api-probar`;
 3. ajustar la cabecera, el filtro y la paginación;
 4. `make walcu-api-inicial DESDE=…`;
-5. `make walcu-api-mapeo` y mapear estados y sedes con AVISA.
+5. `make walcu-api-mapeo` y mapear estados y sedes con AVISA;
+6. repetir `make walcu-api-inicial DESDE=…` para llenar el agregado por código postal.
 
 ## Pruebas
 
-`tests/test_walcu_api.py`, 26 pruebas, con una API de Walcu simulada (filtra por fecha, pagina por página o por
+`tests/test_walcu_api.py`, 35 pruebas (26 + 9 de los ajustes), con una API de Walcu simulada (filtra por fecha, pagina por página o por
 cursor) y respuestas llenas de datos personales falsos. Cubren:
 - **Privacidad**:
   - nada personal ni ningún identificador en claro en la base, el bucket ni el registro;
@@ -156,3 +157,47 @@ Ajustes en las pruebas existentes:
 - `test_precio_provisional` y `test_acciones`: el bloque nuevo de Ventas lee `panel_stock_vehiculo`, que también
   tiene que ser real para abrir Ventas al rol de ventas;
 - `test_infra`: el crontab a las 06:30.
+
+## Ajustes (segundo commit, tras rebasar sobre `origin/main` `53af9c7`)
+
+1. **Código postal**, única excepción acotada a «nunca `computed`»: `saleleads.codigo_postal` en
+   `config/walcu_api.yaml` (`computed.client_address.postal_code`; la configuración no arranca con otra cosa que un
+   único campo `postal_code` de los leads). Se lee solo en memoria:
+   - el lead guarda la zona (`cercana`, `fuera` o `sin_dato`, con la zona cercana de `config/concesionario.yaml`)
+     y la provincia (los dos primeros dígitos); Walcu por semanas reparte `leads_cercana`, `leads_fuera` y
+     `leads_sin_zona` con ella;
+   - el código postal completo solo va a `walcu_api_cp_semana`: leads, citas, ventas y ventas con cita por código
+     postal, semana del lead y tipo, sin lead ni cliente. Nunca en el lead, el bucket ni el registro (la prueba de
+     privacidad lo comprueba en toda la base salvo esa tabla).
+2. **Ventas**: dos cifras en `walcu_campana_semana`, `panel_campana_semana`, `panel_referencia_meta` y
+   `panel_ventas_crm`: `ventas` (todas, con su fecha: coste por venta y Dirección) y `ventas_con_cita` (el lead tuvo
+   una cita con `showed_up` que empezó antes de la venta: tasa de cita a venta, comparable con el CSV). En las
+   filas del CSV, `ventas_con_cita` vale `ventas`. La usan la tasa de cita a venta de las referencias, el
+   criterio d y la previsión; el coste por venta sigue con todas.
+3. **Sin credencial**: sin `WALCU_API_KEY`, `make walcu-api` y la tarea de las 06:30 terminan sin error, anotan
+   `sin_configurar` en `fuentes_estado` (estado nuevo, migración 0023) y no disparan la alerta de fuente caída.
+
+### Decisiones de los ajustes tomadas sin preguntar
+
+1. **El agregado por código postal suma cambios**: el código postal solo está en memoria durante la carga, así
+   que cada carga suma la diferencia entre lo que cuenta ahora cada lead descargado y lo ya sumado
+   (`walcu_api_cp_contado`, sin el código postal). Si el código postal de un lead cambia, lo ya sumado se resta
+   del nuevo (no se sabe el anterior) y el reparto entre códigos queda algo desviado; si desaparece, el lead se
+   queda como estaba. Los totales siempre cuadran con Walcu por semanas.
+2. **Leads con citas nuevas**: una cita puede no cambiar el `updated_at` del lead. Los leads de las citas de cada
+   carga que no han venido en la de leads se piden uno a uno (`GET /saleleads/{id}`, `ruta_uno`, tope
+   `leads_por_cita_max` 2000), para leer su código postal y sumar su cita. Los que ya no existen (404) se saltan.
+3. **Solo con el mapeo definido**, como Walcu por semanas (sin él no se sabe qué sedes excluir ni qué es venta).
+   Por eso, tras definir el mapeo, hay que repetir `make walcu-api-inicial` (paso 4 de `infra/deploy.md` 7.16).
+4. **Código postal válido**: 5 dígitos de 01 a 52 (admite 4 dígitos sin el cero inicial); si no, `sin_dato` y
+   sin código postal en el agregado (fila vacía, para que los totales cuadren).
+5. **Cita antes de la venta**: la cita asistida más temprana empieza antes del primer Firmado (o del primer estado
+   de venta). Una cita sin fecha de inicio no cuenta para `ventas_con_cita`.
+6. **Con `WALCU_API_KEY` pero sin `WALCU_DEALER_ID`** es un error (y salta la alerta): alguien empezó a
+   configurarlo y le falta algo. `make walcu-api-inicial` sin clave termina con error, porque se lanza a mano.
+7. **Celdas pequeñas**: un código postal con un solo lead en una semana y tipo, cruzado con la semana y el tipo
+   del lead, podría señalarlo. La tabla no es del panel (sin permiso para `cdf_panel`); si se publica, habrá que
+   agrupar o suprimir las celdas pequeñas.
+8. Las filas ya calculadas de `panel_campana_semana` y `panel_referencia_meta` (todas del CSV) toman
+   `ventas_con_cita` = `ventas` en la migración.
+

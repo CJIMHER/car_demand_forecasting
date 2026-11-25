@@ -213,7 +213,8 @@ def leer(pg: psycopg.Connection, hoy: date, cfg: Config) -> Datos:
         return datos
     filas = pg.execute(
         """SELECT semana, campana_id, ambito, tipo_campana, modelo, gasto_cents, walcu, cruce, leads_vn, leads_vo,
-                  citas_vn, citas_vo, ventas_vn, ventas_vo, citas_completas, ventas_completas
+                  citas_vn, citas_vo, coalesce(ventas_con_cita_vn, ventas_vn), coalesce(ventas_con_cita_vo, ventas_vo),
+                  citas_completas, ventas_completas
            FROM panel_campana_semana WHERE origen = 'real' AND dia = %s AND campana_id IS NOT NULL""",
         (dia,)).fetchall()
     # Semanas con los leads completos: carga de Walcu hecha después de terminar la semana

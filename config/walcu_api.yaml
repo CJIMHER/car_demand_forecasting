@@ -39,6 +39,10 @@ paginacion:
     siguiente: next_cursor       # clave de la respuesta con el cursor de la página siguiente (vacía: no hay más)
   max_paginas: 10000             # tope de seguridad por petición
 
+# Leads con citas nuevas que no vienen en la descarga de leads (la cita no cambia el updated_at del lead): se
+# piden uno a uno (GET /saleleads/{id}) para sumar su cita en el agregado por código postal. Tope por carga.
+leads_por_cita_max: 2000
+
 # Reintentos ante errores de red, 429 y 5xx (esperas crecientes). 401 y 403: para y lo dice.
 reintentos: 6
 timeout_segundos: 60
@@ -84,6 +88,7 @@ recursos:
     seudonimizar: [license_plate, vin]
   saleleads:
     ruta: /saleleads/all
+    ruta_uno: /saleleads/{id}    # un lead por su _id (los de citas nuevas que no vienen en la descarga)
     campos:
       - _id
       - client_id
@@ -104,6 +109,11 @@ recursos:
       - car_list[].car.make
       - car_list[].car.model
     seudonimizar: [client_id, "status_history[].user", current_assigned.to]
+    # Única excepción a «nunca computed»: el código postal del cliente, solo este campo y solo en memoria. Del
+    # lead se guardan la zona (cercana, fuera o sin_dato, con la zona cercana de config/concesionario.yaml) y la
+    # provincia (dos primeros dígitos); el código postal completo, solo agregado por semana y tipo
+    # (walcu_api_cp_semana), nunca junto al lead, al cliente, en el bucket ni en el registro. Vacío: no se lee.
+    codigo_postal: computed.client_address.postal_code
   dates:
     ruta: /dates/all
     campos:

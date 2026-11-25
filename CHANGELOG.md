@@ -1,5 +1,20 @@
 # Cambios
 
+## 2026-11-25 · API de Walcu: código postal agregado, ventas con cita y «sin configurar» (rama hito-3-walcu-api)
+
+- Rama rebasada sobre `origin/main` (`53af9c7`, con `make salidas-diagnostico`).
+- **Código postal**, única excepción acotada a «nunca `computed`»: solo `computed.client_address.postal_code` del
+  lead, en memoria. El lead guarda la zona (cercana, fuera o sin_dato) y la provincia; el código postal completo,
+  solo en `walcu_api_cp_semana` (leads, citas, ventas y ventas con cita por código postal, semana y tipo). Walcu
+  por semanas desde la API vuelve a tener zona (regla e). Los leads de citas nuevas que no vienen en la descarga
+  se piden uno a uno (GET).
+- **Ventas**: `ventas` (todas: coste por venta y Dirección) y `ventas_con_cita` (cita asistida antes de la venta:
+  tasa de cita a venta en referencias, criterio d y previsión) en `walcu_campana_semana`, `panel_campana_semana`,
+  `panel_referencia_meta` y `panel_ventas_crm`. Del CSV, iguales.
+- **Sin credencial**: sin `WALCU_API_KEY`, `make walcu-api` y la tarea de las 06:30 terminan sin error, anotan
+  `sin_configurar` y no disparan la alerta de fuente caída.
+- Migración 0023 ampliada (aún sin desplegar). Pruebas nuevas en `tests/test_walcu_api.py`.
+
 ## 2026-11-24 · Conector de la API de Walcu, listo antes de la credencial (rama hito-3-walcu-api)
 
 - **Conector** (`ingesta/walcu_api.py`, `config/walcu_api.yaml`): coches, leads de venta y citas, solo lectura (el

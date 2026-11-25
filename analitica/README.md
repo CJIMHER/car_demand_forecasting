@@ -45,6 +45,8 @@ escribe `panel_prevision_modelo`, `panel_prevision_semana` y `panel_prevision_va
   multiplicada por `modelo_inflar`.
 - **Lead a cita y cita a venta**: Beta-binomiales. El tipo, con sus semanas completas desde `regimen_desde`;
   cada modelo, con la media de su tipo valiendo `peso_tipo` leads (o citas).
+  Las ventas de cita a venta son `ventas_con_cita_vn`/`_vo` (con la API de Walcu, una venta puede no tener cita;
+  del CSV, iguales a `ventas`): la previsión de ventas es de ventas con cita.
 - **Previsión** (`predictiva.py`, solo numpy, también la usa el panel): simulación de leads, citas y ventas
   de cada semana con una semilla fija por grupo. Da la mediana y el intervalo de `intervalo`.
 - **Gasto previsto**: la media de las últimas `semanas_gasto` semanas terminadas de cada campaña activa

@@ -215,8 +215,9 @@ antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la c
 
 - Coches (`/cars/all`), leads de venta (`/saleleads/all`) y citas (`/dates/all`), solo lectura (el cliente solo
   sabe hacer GET), incremental por `updated_at` con una marca de agua por recurso (`walcu_api_marca`).
-  Credenciales en el `.env`: `WALCU_API_KEY`, `WALCU_DEALER_ID` y `WALCU_SEUDONIMO_CLAVE`; sin las dos primeras
-  no hace ninguna petición. URL, cabecera, filtro, paginación (página o cursor, pendiente de confirmar con
+  Credenciales en el `.env`: `WALCU_API_KEY`, `WALCU_DEALER_ID` y `WALCU_SEUDONIMO_CLAVE`. Sin `WALCU_API_KEY` no
+  hace ninguna petición, anota `sin_configurar` y termina sin error (sin alerta); con ella pero sin el dealer, es
+  un error. URL, cabecera, filtro, paginación (página o cursor, pendiente de confirmar con
   Walcu), lista blanca y mapeo en `config/walcu_api.yaml`.
 - **Privacidad**: lista blanca de campos por recurso; todo lo demás se descarta en memoria antes de guardar
   nada, y el bucket (`walcu_api/raw/<día>/`) recibe el JSON ya filtrado, nunca la respuesta original. Clientes,
@@ -224,6 +225,12 @@ antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la c
   lleva nombres, teléfonos, correos, direcciones, DNI, notas, comentarios, `computed` o campos personalizados no
   confirmados; un texto de la lista blanca con aspecto de dato personal se guarda vacío. El registro y los
   errores solo llevan nombres de campo y recuentos; los errores de la API no copian su mensaje.
+- **Código postal** (única excepción a `computed`): solo `computed.client_address.postal_code` del lead, en
+  memoria. El lead guarda la zona (`cercana`, `fuera`, `sin_dato`, con la zona cercana de
+  `config/concesionario.yaml`) y la provincia (dos primeros dígitos). El código postal completo solo va a
+  `walcu_api_cp_semana` (leads, citas, ventas y ventas con cita por código postal, semana del lead y tipo, como
+  sumas de cambios; vista `walcu_api_cp_semana_total`), nunca junto al lead, al cliente, en el bucket ni en el
+  registro. Los leads con citas nuevas que no vienen en la descarga se piden uno a uno (`GET /saleleads/{id}`).
 - Tablas (migración 0023, solo añadir, versionadas por huella: volver a descargar no duplica):
   `walcu_api_vehiculo` (+ `_estado`, `_precio_dia`: nuestra foto diaria del precio), `walcu_api_lead` (+ `_estado`,
   con el usuario seudonimizado) y `walcu_api_cita`; vistas `*_vigente`.
@@ -234,8 +241,9 @@ antes de pedir el siguiente, en `campanas_meta_dia` con la misma huella que la c
   (estados y location encontrados, con recuentos y si están mapeados). Estado en `fuentes_estado` (`walcu_api`,
   tipo `descarga`) y alerta de fuente caída como Meta y GA4.
 - `walcu_crm.py`, tras cada carga: con el mapeo pendiente solo informa. Con él, genera `walcu_campana_semana`
-  (fuente `api`; cita = `showed_up`, venta = estado de venta; mismas exclusiones y cohortes que el CSV, que sigue de
-  respaldo), `panel_ventas_crm` y, con los estados del vehículo, `panel_stock_vehiculo`. Ver
+  (fuente `api`; cita = `showed_up`, venta = estado de venta; zona del código postal; mismas exclusiones y
+  cohortes que el CSV, que sigue de respaldo; `ventas` son todas y `ventas_con_cita` las que tuvieron una cita
+  asistida antes, para la tasa de cita a venta), `panel_ventas_crm` y, con los estados del vehículo, `panel_stock_vehiculo`. Ver
   `docs/contrato_panel.md`.
 - Pruebas: `tests/test_walcu_api.py` (respuestas de ejemplo; nunca sale a la red).
 

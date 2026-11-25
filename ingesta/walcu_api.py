@@ -15,13 +15,20 @@ Privacidad (config/walcu_api.yaml):
 - Nombres, teléfonos, correos, direcciones, DNI, notas, comentarios, «computed» y campos personalizados no se
   admiten en la lista blanca (el conector no arranca si aparecen). Un texto de la lista blanca con aspecto de
   dato personal se guarda vacío.
+- Única excepción a «computed»: el código postal del cliente del lead (saleleads.codigo_postal), solo ese campo
+  y solo en memoria. Del lead se guardan la zona (cercana, fuera o sin_dato) y la provincia (dos primeros
+  dígitos); el código postal completo, solo en el agregado por semana y tipo (walcu_api_cp_semana), nunca junto
+  al lead, al cliente, en el bucket ni en el registro.
 - El registro y los errores no llevan valores: solo nombres de campo y recuentos. Los errores de la API no
   copian su mensaje, solo el código HTTP.
 - El cliente HTTP solo sabe hacer GET.
 
 Descarga: incremental por updated_at con una marca de agua por recurso (walcu_api_marca); inserción idempotente
 (versionada por huella, como Meta y GA4: volver a descargar no duplica). Reintentos ante errores de red, 429 y
-5xx; 401 o 403 para en seco y lo dice. Estado en fuentes_estado (fuente walcu_api, tipo descarga).
+5xx; 401 o 403 para en seco y lo dice. Estado en fuentes_estado (fuente walcu_api, tipo descarga). Sin
+WALCU_API_KEY no hace ninguna petición, anota «sin_configurar» y termina sin error (no dispara la alerta de fuente
+caída). Los leads con citas nuevas que no vienen en la descarga de leads se piden uno a uno (GET), para sumar
+su cita en el agregado por código postal.
 
 Después de cada carga, ingesta/walcu_crm.py deriva lo que pueda: con el mapeo de config/walcu_api.yaml vacío,
 solo informa de los estados y location sin mapear.
@@ -83,6 +90,8 @@ class Recurso:
     ruta: str
     campos: tuple[str, ...]
     seudonimizar: frozenset[str]
+    codigo_postal: str = ""          # solo saleleads: ruta del código postal (solo en memoria)
+    ruta_uno: str = ""               # GET de un elemento por id: /saleleads/{id}
 
 
 @dataclass(frozen=True)
@@ -98,6 +107,7 @@ class Config:
     timeout: float
     recursos: dict[str, Recurso]
     mapeo: dict = field(default_factory=dict)       # estados_vehiculo, estados_lead, locations, tipos, semanal
+    leads_por_cita_max: int = 2000
 
 
 def ruta_config() -> Path:
@@ -136,7 +146,11 @@ def cargar(fichero: Path | None = None) -> Config:
                                          + ", ".join(sorted(seud - set(campos))))
             if "_id" not in campos or "updated_at" not in campos:
                 raise ErrorConfiguracion(f"{nombre}: la lista blanca necesita _id y updated_at")
-            recursos[nombre] = Recurso(nombre, str(r["ruta"]), campos, seud)
+            cp = str(r.get("codigo_postal") or "").strip()
+            if cp and (nombre != "saleleads" or cp.split(".")[-1] != "postal_code" or "[]" in cp or cp in campos):
+                raise ErrorConfiguracion(f"{nombre}: codigo_postal solo vale en saleleads, para un único campo "
+                                         "postal_code fuera de la lista blanca")
+            recursos[nombre] = Recurso(nombre, str(r["ruta"]), campos, seud, cp, str(r.get("ruta_uno") or ""))
         if pag.get("tipo") not in ("pagina", "cursor"):
             raise ErrorConfiguracion("paginacion.tipo tiene que ser pagina o cursor")
         if int(pag["tamano"]) < 1:
@@ -144,7 +158,8 @@ def cargar(fichero: Path | None = None) -> Config:
         mapeo = {k: datos.get(k) or {} for k in ("estados_vehiculo", "estados_lead", "locations", "tipos", "semanal")}
         return Config(str(datos["url_base"]), str(aut["cabecera"]), str(aut.get("prefijo") or ""),
                       str(filtro["desde"]), str(filtro["hasta"]), timedelta(minutes=int(filtro["solape_minutos"])),
-                      pag, int(datos["reintentos"]), float(datos["timeout_segundos"]), recursos, mapeo)
+                      pag, int(datos["reintentos"]), float(datos["timeout_segundos"]), recursos, mapeo,
+                      int(datos.get("leads_por_cita_max", 2000)))
     except (KeyError, TypeError, ValueError) as exc:
         raise ErrorConfiguracion(f"config/walcu_api.yaml incompleto: {type(exc).__name__} {exc}") from None
 
@@ -240,6 +255,26 @@ def valor(obj, ruta: str):
         if actual is None:
             return None
     return actual
+
+
+# --------------------------------------------------------------------------- código postal (solo en memoria)
+
+def codigo_postal(v) -> str | None:
+    """Código postal español de 5 dígitos (01–52), o None. Admite 4 dígitos (sin el cero) y «41001.0»."""
+    if v is None or isinstance(v, (bool, Mapping, list)):
+        return None
+    t = re.sub(r"\.0$", "", str(v).strip())
+    if not re.fullmatch(r"\d{4,5}", t):
+        return None
+    t = t.zfill(5)
+    return t if "01" <= t[:2] <= "52" else None
+
+
+def zona(cp: str | None, cercanas) -> str:
+    """cercana (la provincia del concesionario o una de las cercanas), fuera o sin_dato."""
+    if cp is None:
+        return "sin_dato"
+    return "cercana" if cp[:2] in cercanas else "fuera"
 
 
 # --------------------------------------------------------------------------- cliente (solo GET)
@@ -342,9 +377,28 @@ def tramos_mensuales(desde: date, hasta: datetime) -> list[tuple[datetime, datet
 
 # --------------------------------------------------------------------------- descarga
 
-def descargar(cliente: Cliente, filtro: Filtro, desde: datetime, hasta: datetime) -> tuple[list[dict], list[bytes]]:
+class Postales:
+    """Código postal de los leads, solo en memoria: id del lead → código postal (o None). Al elemento filtrado
+    (lo que se guarda y va al bucket) solo se le añaden la zona y la provincia."""
+
+    def __init__(self, ruta: str, cercanas):
+        self.ruta, self.cercanas = ruta, frozenset(cercanas)
+        self.por_lead: dict[str, str | None] = {}
+
+    def __call__(self, crudo, filtrado: dict) -> None:
+        cp = codigo_postal(valor(crudo, self.ruta)) if isinstance(crudo, Mapping) else None
+        filtrado["zona"] = zona(cp, self.cercanas)
+        filtrado["provincia"] = cp[:2] if cp else None
+        lid = _texto(crudo.get("_id")) if isinstance(crudo, Mapping) else None
+        if lid:
+            self.por_lead[lid] = cp
+
+
+def descargar(cliente: Cliente, filtro: Filtro, desde: datetime, hasta: datetime,
+              postales: Postales | None = None) -> tuple[list[dict], list[bytes]]:
     """Elementos filtrados de un recurso actualizados en [desde, hasta) y el JSON filtrado de cada página (para el
-    bucket). Si llega algo actualizado antes de `desde`, el filtro de la API no se está aplicando: para."""
+    bucket). Si llega algo actualizado antes de `desde`, el filtro de la API no se está aplicando: para. Con
+    `postales` (leads), lee el código postal de cada elemento en memoria."""
     cfg = cliente.cfg
     filtrados, brutos = [], []
     margen = timedelta(minutes=1)
@@ -357,10 +411,51 @@ def descargar(cliente: Cliente, filtro: Filtro, desde: datetime, hasta: datetime
                     f"{filtro.recurso.nombre}: la API devuelve elementos actualizados antes de lo pedido (el filtro "
                     "por updated_at no se aplica); se para para no descargarlo todo. Revisa filtro en "
                     "config/walcu_api.yaml con make walcu-api-probar")
-            pagina.append(filtro(e))
+            f = filtro(e)
+            if postales is not None:
+                postales(e, f)
+            pagina.append(f)
         filtrados.extend(pagina)
         if pagina:
             brutos.append(json.dumps(pagina, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+    return filtrados, brutos
+
+
+def leads_sueltos(cliente: Cliente, filtro: Filtro, ids: list[str], postales: Postales | None,
+                  cuentas: Counter) -> tuple[list[dict], list[bytes]]:
+    """Los leads de `ids`, uno a uno (GET de ruta_uno), filtrados como los demás. Los que ya no existen (404) se
+    cuentan y se saltan."""
+    ruta = filtro.recurso.ruta_uno
+    filtrados = []
+    if not ruta:
+        cuentas["sin_ruta_uno"] += len(ids)
+        return [], []
+    for lid in ids:
+        try:
+            datos = cliente.get(ruta.replace("{id}", lid), {})
+        except CredencialRechazada:
+            raise
+        except cx.ErrorDescarga as exc:
+            if exc.codigo == 404:
+                cuentas["no_encontrados"] += 1
+                continue
+            raise
+        e = datos if isinstance(datos, Mapping) and "_id" in datos else None
+        if e is None:
+            try:
+                lista = elementos(datos, cliente.cfg.paginacion.get("elementos") or "")
+            except cx.ErrorDescarga:
+                lista = []
+            e = lista[0] if lista and isinstance(lista[0], Mapping) else None
+        if e is None:
+            cuentas["respuesta_inesperada"] += 1
+            continue
+        f = filtro(e)
+        if postales is not None:
+            postales(e, f)
+        filtrados.append(f)
+        cuentas["pedidos"] += 1
+    brutos = [json.dumps(filtrados, ensure_ascii=False, sort_keys=True).encode("utf-8")] if filtrados else []
     return filtrados, brutos
 
 
@@ -422,7 +517,9 @@ def fila_lead(e: dict) -> dict:
             "comercial_seudo": _texto(valor(e, "current_assigned.to")),
             "vehiculo_id": _texto(coche.get("car_id")), "tipo_vehiculo": _texto(valor(coche, "car.type")),
             "marca_vehiculo": _texto(valor(coche, "car.make")), "modelo_vehiculo": _texto(valor(coche, "car.model")),
-            "coches": len(e.get("car_list") or []), "actualizado_at": instante(e.get("updated_at"))}
+            "coches": len(e.get("car_list") or []), "actualizado_at": instante(e.get("updated_at")),
+            "zona": e.get("zona") if e.get("zona") in ("cercana", "fuera", "sin_dato") else None,
+            "provincia": e.get("provincia") if re.fullmatch(r"\d\d", str(e.get("provincia") or "")) else None}
 
 
 def fila_cita(e: dict) -> dict:
@@ -510,10 +607,18 @@ def foto_precios(pg: psycopg.Connection, dia: date, run_id: str) -> int:
 
 # --------------------------------------------------------------------------- ejecución
 
+def configurada(entorno: Mapping[str, str]) -> bool:
+    """La API de Walcu está configurada si hay WALCU_API_KEY en el .env."""
+    return bool((entorno.get("WALCU_API_KEY") or "").strip())
+
+
 def credenciales(entorno: Mapping[str, str]) -> tuple[str, str, str]:
+    """Sin WALCU_API_KEY: SinCredenciales (sin configurar, no es un error). Con ella pero sin el resto: error."""
     clave, dealer = (entorno.get("WALCU_API_KEY") or "").strip(), (entorno.get("WALCU_DEALER_ID") or "").strip()
-    if not clave or not dealer:
-        raise cx.SinCredenciales("faltan WALCU_API_KEY o WALCU_DEALER_ID en el .env")
+    if not clave:
+        raise cx.SinCredenciales("falta WALCU_API_KEY en el .env")
+    if not dealer:
+        raise ErrorConfiguracion("hay WALCU_API_KEY pero falta WALCU_DEALER_ID en el .env")
     seud = (entorno.get("WALCU_SEUDONIMO_CLAVE") or "").strip()
     if len(seud) < 32:
         raise ErrorConfiguracion("WALCU_SEUDONIMO_CLAVE falta o es corta (al menos 32 caracteres: openssl rand -hex 32)")
@@ -522,10 +627,13 @@ def credenciales(entorno: Mapping[str, str]) -> tuple[str, str, str]:
 
 def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], cfg: Config | None = None,
                  desde: date | None = None, subir=None, dormir: Callable = time.sleep,
-                 momento: datetime | None = None) -> dict:
+                 momento: datetime | None = None, conc=None) -> dict:
     """Carga incremental (o inicial, con `desde`). Lanza SinCredenciales, CredencialRechazada o ErrorDescarga."""
-    cfg = cfg or cargar()
     clave, dealer, seud = credenciales(entorno)
+    cfg = cfg or cargar()
+    if conc is None:
+        from ingesta import concesionario as cc
+        conc = cc.cargar()
     cliente = Cliente(cfg, clave, dealer, dormir)
     momento = momento or cx.ahora()
     run_id = f"walcu-api-{momento:%Y%m%dT%H%M%S%f}"
@@ -533,6 +641,9 @@ def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], 
                      "paginacion": f"{cfg.paginacion['tipo']} (pendiente de confirmar con Walcu)"}
     if desde:
         resumen["desde"] = str(desde)
+    r_leads = cfg.recursos["saleleads"]
+    postales = Postales(r_leads.codigo_postal, conc.zona_cercana) if r_leads.codigo_postal else None
+    citas_de: set[str] = set()
     for recurso in RECURSOS:
         if desde:
             tramos = tramos_mensuales(desde, momento)
@@ -544,7 +655,10 @@ def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], 
         filtro = Filtro(cfg.recursos[recurso], seud)
         total: Counter = Counter()
         for ini, fin in tramos:
-            filtrados, brutos = descargar(cliente, filtro, ini, fin)
+            filtrados, brutos = descargar(cliente, filtro, ini, fin, postales if recurso == "saleleads" else None)
+            if recurso == "dates":
+                citas_de.update(lid for e in filtrados if (lid := _texto(e.get("lead_id")))
+                                and (_texto(e.get("lead_type")) or "salelead") == "salelead")
             if brutos:          # el JSON ya filtrado, al bucket antes de escribir nada en Postgres
                 cx.guardar_brutos(FUENTE, f"{run_id}_{recurso}_{ini.astimezone(MADRID):%Y%m%d}", hoy, brutos, subir)
             with pg.transaction():
@@ -555,10 +669,27 @@ def ejecutar_con(pg: psycopg.Connection, hoy: date, entorno: Mapping[str, str], 
         resumen["recursos"][recurso] = {**dict(total), **{f"filtro_{k}": n for k, n in filtro.cuentas.items()}}
         LOG.info("Walcu %s: %s elementos, %s versiones nuevas, %s campos descartados", recurso,
                  total["elementos"], total["nuevas"], filtro.cuentas["descartados"])
+    if postales is not None:
+        # Leads con citas de esta carga que no han venido en la de leads: uno a uno, para su código postal
+        faltan = sorted(citas_de - set(postales.por_lead))
+        sueltos: Counter = Counter()
+        pedir = faltan[:max(cfg.leads_por_cita_max, 0)]
+        sueltos["sin_pedir"] = len(faltan) - len(pedir)
+        filtro = Filtro(r_leads, seud)
+        filtrados, brutos = leads_sueltos(cliente, filtro, pedir, postales, sueltos)
+        if brutos:
+            cx.guardar_brutos(FUENTE, f"{run_id}_saleleads_por_cita", hoy, brutos, subir)
+        with pg.transaction():
+            sueltos.update({f"guardado_{k}": n for k, n in guardar(pg, "saleleads", filtrados, run_id, momento).items()})
+        resumen["leads_por_cita"] = dict(sueltos)
+        resumen["codigo_postal"] = {"leads": len(postales.por_lead),
+                                    "con_codigo_postal": sum(1 for c in postales.por_lead.values() if c)}
     resumen["peticiones"] = cliente.peticiones
     resumen["precios_del_dia"] = foto_precios(pg, hoy, run_id)
     from ingesta import walcu_crm
-    resumen["crm"] = walcu_crm.actualizar(pg, cfg, hoy, entorno)
+    resumen["crm"] = walcu_crm.actualizar(pg, cfg, hoy, entorno, conc=conc, momento=momento,
+                                          postales=postales.por_lead if postales is not None else None,
+                                          run_id=run_id)
     return resumen
 
 
@@ -568,17 +699,17 @@ def ejecutar(entorno: Mapping[str, str] | None = None, desde: date | None = None
     from ingesta.scrapers_vw import hoy_madrid
     entorno = os.environ if entorno is None else entorno
     hoy = hoy_madrid()
+    if not configurada(entorno) and desde:
+        LOG.error("Walcu sin configurar: falta WALCU_API_KEY en el .env")
+        return 1
     secretos = [entorno.get("WALCU_API_KEY"), entorno.get("WALCU_DEALER_ID"), entorno.get("WALCU_SEUDONIMO_CLAVE")]
     try:
         with conectar(autocommit=True) as pg:
             try:
                 resumen = ejecutar_con(pg, hoy, entorno, desde=desde, subir=subir, dormir=dormir)
             except cx.SinCredenciales as exc:
-                if desde:
-                    LOG.error("Walcu sin credenciales: %s", exc)
-                    return 1
-                cx.anotar(pg, FUENTE, hoy, "sin_credenciales", {"motivo": str(exc)})
-                LOG.info("Walcu sin credenciales: no se descarga nada")
+                cx.anotar(pg, FUENTE, hoy, "sin_configurar", {"motivo": str(exc)})
+                LOG.info("Walcu (API) sin configurar (%s): no se descarga nada", exc)
                 return 0
             except Exception as exc:
                 error = cx.limpiar(f"{type(exc).__name__}: {exc}", secretos)[:500]
@@ -664,6 +795,7 @@ def probar(entorno: Mapping[str, str], cfg: Config | None = None, escribir: Call
         if p["tipo"] == "pagina":
             parametros[q["parametro"]] = q.get("primera", 1)
         datos = cliente.get(r.ruta, parametros)
+        cp_ruta = r.codigo_postal
         escribir(f"\n== {nombre} ({r.ruta})")
         if isinstance(datos, Mapping):
             escribir("Respuesta: objeto con las claves " + ", ".join(_nombre(str(k)) for k in datos))
@@ -687,7 +819,8 @@ def probar(entorno: Mapping[str, str], cfg: Config | None = None, escribir: Call
                  + (" (¡el filtro por updated_at no se aplica!)" if antiguos else ""))
         lista_blanca = set(r.campos)
         for ruta in sorted(tipos):
-            estado = ("seudónimo" if ruta in r.seudonimizar else "se guarda") if ruta in lista_blanca else "se descarta"
+            estado = ("seudónimo" if ruta in r.seudonimizar else "se guarda") if ruta in lista_blanca else \
+                ("solo en memoria (zona, provincia y agregado por código postal)" if ruta == cp_ruta else "se descarta")
             escribir(f"  {ruta}: {', '.join(f'{t} {n}' for t, n in tipos[ruta].most_common())}; "
                      f"en {presentes[ruta]} de {len(lista)}; {estado}")
         faltan = sorted(c for c in r.campos if c not in tipos)

@@ -143,6 +143,12 @@ class Juicio:
         return self.cohorte.citas_ventas if self.cohorte else self.citas
 
     @property
+    def ventas_tasa(self) -> int:
+        """Ventas con que se calcula la tasa de venta: con la carga semanal, las que tuvieron una cita asistida
+        antes (las de la API pueden no tenerla; en el CSV, toda venta la tiene)."""
+        return self.cohorte.ventas_con_cita if self.cohorte else self.ventas
+
+    @property
     def gasto_venta(self) -> int:
         return self.cohorte.gasto_ventas if self.cohorte else self.gasto_cents
 
@@ -313,6 +319,7 @@ class Semanal:
     gasto_ventas: int
     citas_ventas: int
     ventas: int
+    ventas_con_cita: int        # las de esas semanas con una cita asistida antes (tasa de cita a venta)
     dias_cita: int = 14
     dias_venta: int = 60
 
@@ -347,7 +354,8 @@ def walcu_semana(pg, origen: str, cid: str, inicio: date, dia: date) -> tuple[Se
                   count(*) FILTER (WHERE ventas_completas),
                   coalesce(sum(gasto_cents) FILTER (WHERE ventas_completas), 0),
                   coalesce(sum(citas) FILTER (WHERE ventas_completas), 0),
-                  coalesce(sum(ventas) FILTER (WHERE ventas_completas), 0)
+                  coalesce(sum(ventas) FILTER (WHERE ventas_completas), 0),
+                  coalesce(sum(coalesce(ventas_con_cita, ventas)) FILTER (WHERE ventas_completas), 0)
            FROM panel_campana_semana
            WHERE origen = %s AND campana_id = %s AND walcu AND semana BETWEEN %s AND %s""",
         (origen, cid, inicio - timedelta(days=inicio.weekday()), semana)).fetchone()]
@@ -592,10 +600,11 @@ def _d(c: dict, j: Juicio, cpl_media: bool, cpc_media: bool, media_cpl, media_cp
         return Resultado("d", "sin_dato", "sin citas todavía")
     umbral = _f(c["tasa_venta_minima_pct"]) / CIEN
     n_min = int(c["n_minimo_citas"])
-    tasa = F(j.ventas, citas)
-    texto = (f"tasa de venta: {j.ventas} de {citas} citas = {pct(tasa)} (umbral {num(umbral * CIEN)} %)"
+    ventas = j.ventas_tasa
+    tasa = F(ventas, citas)
+    texto = (f"tasa de venta: {ventas} de {citas} citas = {pct(tasa)} (umbral {num(umbral * CIEN)} %)"
              f"{j.nota_ventas()}")
-    cifras = {"ventas": j.ventas, "citas": citas, "tasa_venta_pct": float(tasa * CIEN),
+    cifras = {"ventas": ventas, "citas": citas, "tasa_venta_pct": float(tasa * CIEN),
               "umbral_pct": float(umbral * CIEN), "n_minimo_citas": n_min}
     if citas < n_min:
         return Resultado("d", "sin_volumen" if tasa < umbral else "no",
