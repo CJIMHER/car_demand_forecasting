@@ -53,6 +53,7 @@ class Config:
     caida_pct: Fraction
     diferencia_minima: int
     retraso_max_semanas: int
+    semanas_recientes_excluidas: int
     dias_stock: int
     subida_pct: Fraction
     temporadas: dict[str, tuple[Temporada, ...]]
@@ -82,11 +83,12 @@ def cargar(fichero: Path | None = None) -> Config:
         if faltan:
             raise ErrorCampanaGeneral("textos: faltan " + ", ".join(sorted(faltan)))
         cfg = Config(str(d["version"]), int(v["semanas"]), Fraction(str(v["caida_pct"])),
-                     int(v.get("diferencia_minima") or 0), int(v.get("retraso_max_semanas", 4)), int(s["dias"]),
+                     int(v.get("diferencia_minima") or 0), int(v.get("retraso_max_semanas", 4)),
+                     int(v.get("semanas_recientes_excluidas") or 0), int(s["dias"]),
                      Fraction(str(s["subida_pct"])), temporadas, textos)
     except (KeyError, TypeError, ValueError) as exc:
         raise ErrorCampanaGeneral(f"config/campana_general.yaml incompleto: {type(exc).__name__} {exc}") from None
-    if cfg.semanas < 1 or cfg.dias_stock < 1:
+    if cfg.semanas < 1 or cfg.dias_stock < 1 or cfg.semanas_recientes_excluidas < 0:
         raise ErrorCampanaGeneral("config/campana_general.yaml: semanas y dias tienen que ser al menos 1")
     return cfg
 
@@ -99,13 +101,15 @@ def lunes(d: date) -> date:
 
 def regla_ventas(ventas: dict[tuple[date, str], int], cubiertas: set[date], tipo: str, hoy: date,
                  cfg: Config) -> dict:
-    """{'estado': si|no|pendiente, 'cifras': …}. Ventanas de semanas completas que terminan en la última semana
-    completa con datos (como mucho retraso_max_semanas antes de la última semana completa)."""
-    ultima = lunes(hoy) - UNA_SEMANA
+    """{'estado': si|no|pendiente, 'cifras': …}. Ventanas de semanas completas que terminan
+    semanas_recientes_excluidas semanas antes de la última semana completa (o en la última con datos, como mucho
+    retraso_max_semanas antes de esa)."""
+    ultima = lunes(hoy) - UNA_SEMANA * (1 + cfg.semanas_recientes_excluidas)
     con_datos = [s for s in cubiertas if s <= ultima]
     fin = max(con_datos) if con_datos else None
     n = cfg.semanas
-    cifras: dict = {"semanas": n, "caida_pct_umbral": float(cfg.caida_pct), "diferencia_minima": cfg.diferencia_minima}
+    cifras: dict = {"semanas": n, "caida_pct_umbral": float(cfg.caida_pct), "diferencia_minima": cfg.diferencia_minima,
+                    "semanas_recientes_excluidas": cfg.semanas_recientes_excluidas}
     if fin is None or fin < ultima - cfg.retraso_max_semanas * UNA_SEMANA:
         return {"estado": "pendiente", "cifras": {**cifras, "motivo": "sin ventas recientes",
                                                    "ultima_semana_con_datos": str(fin) if fin else None}}

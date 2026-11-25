@@ -159,7 +159,7 @@ con la regla «≥ N».
 ## campana_general.py · cuándo lanzar una campaña general (al final del mismo precálculo)
 
 Por VN y VO, tres reglas de `config/campana_general.yaml`, cada una suficiente: caída de ventas (8 semanas frente a
-las 8 anteriores, por fecha de venta: `walcu_ventas_semana`, `ingesta/walcu_ventas.py`), subida del stock (hoy
+las 8 anteriores, sin las 2 últimas semanas completas y con al menos 5 coches de diferencia, por fecha de venta: `walcu_ventas_semana`, `ingesta/walcu_ventas.py`), subida del stock (hoy
 frente a hace 30 días: CRM o, sin él, nuestros anuncios en la web) y temporada. Escribe `panel_campana_general` con
 los motivos en lenguaje de negocio, lo pendiente, la próxima temporada y las cifras (solo técnico). Pruebas:
 `tests/test_campana_general.py`.

@@ -35,6 +35,11 @@ def _app(panel_url, modo_ejemplo=False):
     return crear_app(dsn=panel_url, hoy=lambda: HOY, modo_ejemplo=modo_ejemplo)
 
 
+def _fin(hoy: date) -> date:
+    """Donde terminan las ventanas de la regla de ventas: semanas_recientes_excluidas antes de la última completa."""
+    return cg.lunes(hoy) - timedelta(weeks=1 + CFG.semanas_recientes_excluidas)
+
+
 def _semanas(hasta: date, n: int) -> list[date]:
     return [hasta - timedelta(weeks=i) for i in range(n)]
 
@@ -56,7 +61,7 @@ FUERA_DE_TEMPORADA = date(2026, 1, 14)        # enero: ni VN ni VO
 
 def test_solo_la_caida_de_ventas_basta():
     hoy = FUERA_DE_TEMPORADA
-    ventas, cub = _ventas(cg.lunes(hoy) - timedelta(weeks=1), 1, 2)      # 8 frente a 16: −50 %
+    ventas, cub = _ventas(_fin(hoy), 1, 2)      # 8 frente a 16: −50 %
     f = cg.evaluar("VN", hoy, ventas, cub, _stock(hoy, 50, 50), "web", CFG)
     assert f["conviene"] and [m["regla"] for m in f["motivos"]] == ["ventas"]
     assert f["motivos"][0]["texto"] == "Las ventas han bajado en las últimas 8 semanas"
@@ -66,11 +71,11 @@ def test_solo_la_caida_de_ventas_basta():
 
 def test_una_caida_del_20_justo_no_salta_y_la_diferencia_minima_se_respeta():
     hoy = FUERA_DE_TEMPORADA
-    ultima = cg.lunes(hoy) - timedelta(weeks=1)
+    ultima = _fin(hoy)
     s = _semanas(ultima, 16)
     ventas = {(x, "VN"): 1 for x in s}
     ventas.update({(s[0], "VN"): 0, (s[1], "VN"): 0})              # 6 frente a 8: −25 %
-    assert cg.regla_ventas(ventas, set(s), "VN", hoy, CFG)["estado"] == "si"
+    assert cg.regla_ventas(ventas, set(s), "VN", hoy, replace(CFG, diferencia_minima=0))["estado"] == "si"
     assert cg.regla_ventas(ventas, set(s), "VN", hoy, replace(CFG, diferencia_minima=3))["estado"] == "no"
     ventas = {(x, "VN"): (4 if i < 8 else 5) for i, x in enumerate(s)}   # 32 frente a 40: −20 %, no más
     assert cg.regla_ventas(ventas, set(s), "VN", hoy, CFG)["estado"] == "no"
@@ -78,7 +83,7 @@ def test_una_caida_del_20_justo_no_salta_y_la_diferencia_minima_se_respeta():
 
 def test_solo_la_subida_del_stock_basta():
     hoy = FUERA_DE_TEMPORADA
-    ventas, cub = _ventas(cg.lunes(hoy) - timedelta(weeks=1), 2, 2)
+    ventas, cub = _ventas(_fin(hoy), 2, 2)
     f = cg.evaluar("VO", hoy, ventas, cub, _stock(hoy, 40, 51), "web", CFG)   # +27,5 %
     assert f["conviene"] and [m["regla"] for m in f["motivos"]] == ["stock"]
     assert f["motivos"][0]["texto"] == "El stock ha subido mucho en el último mes"
@@ -87,13 +92,13 @@ def test_solo_la_subida_del_stock_basta():
 
 
 def test_solo_la_temporada_basta_y_vo_sin_octubre_noviembre():
-    ventas, cub = _ventas(LUNES - timedelta(weeks=1), 2, 2)
+    ventas, cub = _ventas(_fin(LUNES), 2, 2)
     for mes, vn, vo in ((3, "campaña (marzo-abril)", "campaña (marzo-abril)"),
                         (7, "campaña (junio-julio)", "campaña (junio-julio)"),
                         (10, "liquidación (octubre-noviembre)", None), (11, "liquidación (octubre-noviembre)", None),
                         (1, None, None), (5, None, None), (12, None, None)):
         hoy = date(2026, mes, 20)
-        v, c = _ventas(cg.lunes(hoy) - timedelta(weeks=1), 2, 2)
+        v, c = _ventas(_fin(hoy), 2, 2)
         for tipo, esperado in (("VN", vn), ("VO", vo)):
             f = cg.evaluar(tipo, hoy, v, c, _stock(hoy, 40, 40), "web", CFG)
             if esperado:
@@ -104,14 +109,14 @@ def test_solo_la_temporada_basta_y_vo_sin_octubre_noviembre():
 
 def test_varias_a_la_vez_se_dicen_todas():
     hoy = date(2026, 11, 18)
-    ventas, cub = _ventas(cg.lunes(hoy) - timedelta(weeks=1), 1, 3)
+    ventas, cub = _ventas(_fin(hoy), 1, 3)
     f = cg.evaluar("VN", hoy, ventas, cub, _stock(hoy, 40, 60), "web", CFG)
     assert [m["regla"] for m in f["motivos"]] == ["ventas", "stock", "temporada"]
 
 
 def test_ahora_no_hace_falta_con_la_proxima_temporada():
     hoy = date(2026, 12, 2)
-    ventas, cub = _ventas(cg.lunes(hoy) - timedelta(weeks=1), 2, 2)
+    ventas, cub = _ventas(_fin(hoy), 2, 2)
     vn = cg.evaluar("VN", hoy, ventas, cub, _stock(hoy, 40, 40), "web", CFG)
     assert not vn["conviene"] and vn["proxima"] == "marzo-abril"
     assert cg.proxima(date(2026, 8, 1), "VN", CFG).texto_meses == "octubre-noviembre"
@@ -121,7 +126,7 @@ def test_ahora_no_hace_falta_con_la_proxima_temporada():
 
 def test_regla_del_stock_pendiente_sin_30_dias():
     hoy = FUERA_DE_TEMPORADA
-    ventas, cub = _ventas(cg.lunes(hoy) - timedelta(weeks=1), 2, 2)
+    ventas, cub = _ventas(_fin(hoy), 2, 2)
     f = cg.evaluar("VO", hoy, ventas, cub, _stock(hoy, 10, 100, dias=20), "web", CFG)
     assert not f["conviene"]
     assert f["pendientes"] == [{"regla": "stock", "texto": "Pendiente: hace falta un mes de datos del stock"}]
@@ -130,7 +135,7 @@ def test_regla_del_stock_pendiente_sin_30_dias():
 
 def test_regla_de_ventas_pendiente_sin_16_semanas_o_con_ventas_viejas():
     hoy = FUERA_DE_TEMPORADA
-    ultima = cg.lunes(hoy) - timedelta(weeks=1)
+    ultima = _fin(hoy)
     s = _semanas(ultima, 15)
     assert cg.regla_ventas({}, set(s), "VN", hoy, CFG)["estado"] == "pendiente"
     viejas = set(_semanas(ultima - timedelta(weeks=5), 16))
@@ -190,7 +195,7 @@ def test_carga_por_fecha_de_venta_semanas_sin_ventas_y_la_api_manda(pg):
 
 
 def test_la_regla_usa_la_fecha_de_venta_y_escribe_el_panel(pg):
-    ultima = cg.lunes(HOY) - timedelta(weeks=1)
+    ultima = _fin(HOY)
     filas = [{"semana": s, "tipo": "VN", "modelo": "Polo", "ventas": 1 if i < 8 else 3}
              for i, s in enumerate(_semanas(ultima, 16))]
     wv.escribir(pg, filas, "csv", min(f["semana"] for f in filas), ultima, "h")
@@ -362,3 +367,32 @@ def test_campana_general_en_marketing_y_direccion_con_detalle_solo_para_tecnico(
             assert "Detalle técnico" in html and "−50,0 %" in html and "umbral" in html
         else:
             assert "Detalle técnico" not in html and "umbral" not in html and "%" not in html
+
+
+# ================================================================== diferencia mínima y semanas recientes excluidas
+
+def test_la_configuracion_pide_5_coches_y_excluye_las_2_ultimas_semanas():
+    assert (CFG.diferencia_minima, CFG.semanas_recientes_excluidas) == (5, 2)
+
+
+def test_las_ventanas_terminan_dos_semanas_antes_de_la_ultima_completa():
+    hoy = date(2026, 11, 25)                                          # miércoles: última completa, la del 16-11
+    s = _semanas(date(2026, 11, 16), 18)
+    # Las dos últimas semanas completas (16-11 y 9-11) sin ventas: Walcu aún no las ha cerrado. No cuentan.
+    ventas = {(x, "VN"): (0 if i < 2 else 2) for i, x in enumerate(s)}
+    r = cg.regla_ventas(ventas, set(s), "VN", hoy, CFG)
+    assert r["estado"] == "no" and (r["cifras"]["actual"], r["cifras"]["anterior"]) == (16, 16)
+    assert (r["cifras"]["actual_hasta"], r["cifras"]["actual_desde"]) == ("2026-11-02", "2026-09-14")
+    assert r["cifras"]["anterior_desde"] == "2026-07-20"
+    # Sin excluirlas (ni diferencia mínima), esas dos semanas a cero harían saltar la regla: 12 frente a 16, −25 %
+    sin = replace(CFG, semanas_recientes_excluidas=0, diferencia_minima=0)
+    assert cg.regla_ventas(ventas, set(s), "VN", hoy, sin)["estado"] == "si"
+
+
+def test_hacen_falta_5_coches_de_diferencia():
+    hoy = FUERA_DE_TEMPORADA
+    s = _semanas(_fin(hoy), 16)
+    cuatro = {(x, "VN"): 1 for x in s} | {(s[i], "VN"): 0 for i in range(4)}     # 4 frente a 8: −50 %, 4 coches
+    assert cg.regla_ventas(cuatro, set(s), "VN", hoy, CFG)["estado"] == "no"
+    cinco = {(x, "VN"): 1 for x in s[8:]} | {(x, "VN"): 2 for x in s[8:10]} | {(s[0], "VN"): 5}   # 5 frente a 10
+    assert cg.regla_ventas(cinco, set(s), "VN", hoy, CFG)["estado"] == "si"

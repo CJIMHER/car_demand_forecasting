@@ -3,14 +3,16 @@
 # algo: make precalcular DIA=<hoy> (o esperar al de la noche).
 version: campana-general-2026-11-25
 
-# 1. Caída de ventas: las de las últimas `semanas` semanas completas (por fecha de venta: walcu_ventas_semana)
-#    son más de un `caida_pct` % inferiores a las de las `semanas` anteriores, y la diferencia es de al menos
-#    `diferencia_minima` coches (0: la regla tal cual). Con pocas ventas por semana, la caída salta a menudo por
-#    azar: ver docs/hitos/hito_1b_campana_general_resumen.md antes de bajar o subir `diferencia_minima`.
+# 1. Caída de ventas: las de `semanas` semanas completas (por fecha de venta: walcu_ventas_semana) son más de un
+#    `caida_pct` % inferiores a las de las `semanas` anteriores, y la diferencia es de al menos `diferencia_minima`
+#    coches. Las dos ventanas terminan `semanas_recientes_excluidas` semanas antes de la última semana completa:
+#    Walcu cierra las ventas con retraso y las semanas más recientes siempre parecerían peores. Con pocas ventas por
+#    semana, la caída salta a menudo por azar: ver docs/hitos/hito_1b_ajustes_alertas_resumen.md.
 ventas:
   semanas: 8
   caida_pct: 20
-  diferencia_minima: 0
+  diferencia_minima: 5
+  semanas_recientes_excluidas: 2
   # Las ventas tienen que llegar al menos hasta esta cantidad de semanas antes de la última semana completa (el CSV
   # se carga a mano): con datos más viejos, la regla queda pendiente.
   retraso_max_semanas: 4

@@ -1,5 +1,11 @@
 # Cambios
 
+## 2026-11-25 · Ajustes: caída de ventas, reparto de alertas por rol y negociaciones (rama hito-1b-ajustes-alertas)
+
+- **Campaña general, caída de ventas**: diferencia mínima de 5 coches y sin las 2 últimas semanas completas
+  (`ventas.semanas_recientes_excluidas`), porque Walcu cierra las ventas con retraso. Con el histórico saltaría en el
+  27 % de las semanas en VN y el 19 % en VO (antes, 37 % y 36 %): `docs/hitos/hito_1b_ajustes_alertas_resumen.md`.
+
 ## 2026-11-25 · Marketing solo con datos reales, sin explicar Google Trends, y campaña general (rama hito-1b-campana-general)
 
 - **Marketing solo con datos reales** (`VISTAS_SOLO_REAL`): sin `PANEL_MODO_EJEMPLO`, ni ejemplo ni aviso amarillo.

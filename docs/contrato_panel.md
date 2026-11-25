@@ -410,9 +410,10 @@ No es salida de un modelo, así que no lleva intervalo. Es una señal direcciona
 - **Grano**: día del cálculo × tipo (VN, VO). Lo escribe `analitica/campana_general.py` al final de
   `make precalcular` (cron 09:10), con origen `real`. Reglas, umbrales y textos en `config/campana_general.yaml`.
 - **Reglas** (cada una basta sola; si se cumplen varias, se dicen todas):
-  1. caída de ventas: las de las últimas 8 semanas completas, por fecha de venta (`walcu_ventas_semana`: CSV de
+  1. caída de ventas: 8 semanas completas, por fecha de venta (`walcu_ventas_semana`: CSV de
      `make walcu-ventas-cargar` o la API de Walcu, que manda), más de un 20 % por debajo de las 8 anteriores y con
-     al menos `diferencia_minima` coches de diferencia;
+     al menos `diferencia_minima` (5) coches de diferencia; las dos ventanas terminan `semanas_recientes_excluidas`
+     (2) semanas antes de la última semana completa, porque Walcu cierra las ventas con retraso;
   2. subida del stock: el stock propio de hoy, más de un 25 % por encima del de hace 30 días (el del CRM si cubre
      esos días; si no, nuestros anuncios en la web de la marca);
   3. temporada: VN marzo-abril, junio-julio y octubre-noviembre (liquidación); VO marzo-abril y junio-julio.
