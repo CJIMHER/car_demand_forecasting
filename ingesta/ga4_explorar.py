@@ -12,6 +12,8 @@ consulta la GA4 Data API y enseña en pantalla:
   4. Desde qué día hay datos en la propiedad.
   5. Todos los dominios (hostName) con sus vistas, en cuáles aparecen las rutas /peticion/* y cómo se tratan
      (marca propia, compartido, otra marca del grupo o ajeno al grupo, con aviso).
+  6. Los eventos de intención (config/ga4_intencion.yaml) por dominio, y si cuentan en las series (solo los de
+     los dominios propios).
 
 Solo agregados: ninguna dimensión de usuario ni identificador; de las páginas, solo la ruta (sin
 parámetros). No guarda nada: ni en Postgres, ni en el bucket, ni en fuentes_estado.
@@ -37,6 +39,7 @@ from datetime import date, datetime, timedelta
 from ingesta import conectores as cx
 from ingesta import ga4
 from ingesta import ga4_paginas as gp
+from ingesta import ga4_series as gs
 from ingesta.scrapers_vw import hoy_madrid
 
 PRIMER_DIA_GA4 = date(2015, 8, 14)        # el primer día que admite la Data API
@@ -116,6 +119,15 @@ def agrupar_paginas(filas: list[tuple[str, str, int]], paginas: gp.Paginas) -> l
 TRATO = {"propio": "marca propia: cuenta", "compartido": "compartido: la marca sale de la ruta",
          "otra_marca": "otra marca del grupo: fuera", "ajeno": "AJENO AL GRUPO: fuera",
          "sin_dominio": "sin dominio en GA4: la marca sale de la ruta"}
+
+
+def eventos_por_dominio(cli: Cliente, desde: date, hasta: date, nombres: list[str]) -> dict[str, list[tuple[str, int]]]:
+    """{evento: [(dominio, recuento)], de más a menos} de los eventos de intención en [desde, hasta]."""
+    filtro = {"filter": {"fieldName": "eventName", "inListFilter": {"values": sorted(nombres)}}}
+    salida: dict[str, Counter] = defaultdict(Counter)
+    for d, m in cli.informe(desde, hasta, ["eventName", "hostName"], ["eventCount"], filtro=filtro):
+        salida[d[0]][gp.normalizar_host(d[1]) or "(not set)"] += int(_num(m[0]))
+    return {e: sorted(c.items(), key=lambda x: (-x[1], x[0])) for e, c in salida.items()}
 
 
 def dominios(filas: list[tuple[str, str, int]], paginas: gp.Paginas) -> list[dict]:
@@ -335,6 +347,25 @@ def explorar(entorno: Mapping[str, str], hoy: date, escribir: Callable[[str], No
     ajenos = [d["dominio"] for d in lista_d if d["trato"] == "ajeno"]
     if ajenos:
         escribir(f"  ¡AVISO! Dominios ajenos al grupo en la propiedad (excluidos de las señales): {', '.join(ajenos)}")
+
+    escribir("\n== 6. Eventos de intención por dominio (últimos 12 meses; en las series solo cuentan los de los "
+             "dominios propios)")
+    cfg_series = gs.cargar_config()
+    nombres = cfg_series.eventos_intencion()
+    en_series = {e for e, _ in cfg_series.eventos.values()}
+    por_evento = eventos_por_dominio(cli, desde, hasta, nombres)
+    ancho_e = max(len(e) for e in nombres)
+    ancho_d = max([len(h) for v in por_evento.values() for h, _ in v] + [7])
+    escribir(f"  {'evento':<{ancho_e}}  {'dominio':<{ancho_d}}  {'recuento':>10}  en las series")
+    for e in nombres:
+        filas = por_evento.get(e) or []
+        if not filas:
+            escribir(f"  {e:<{ancho_e}}  {'(ninguno)':<{ancho_d}}  {0:>10}")
+        for i, (h, n) in enumerate(filas):
+            trato = "sin_dominio" if h == "(not set)" else tipos.dominio(h)
+            cuenta = ("no (solo exploración)" if e not in en_series else
+                      "sí" if trato == "propio" else f"no ({TRATO[trato].split(':')[0]})")
+            escribir(f"  {e if i == 0 else '':<{ancho_e}}  {h:<{ancho_d}}  {_n(n):>10}  {cuenta}")
     escribir(f"\nPeticiones a la API: {cli.peticiones}. No se ha guardado nada.")
     return 0
 

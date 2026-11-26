@@ -42,7 +42,8 @@ EVENTOS_DIAS = [("page_view", "20230301"), ("page_view", "20261124"), ("session_
                 ("click_telefono", "20250610"), ("click_telefono", "20261101"), ("formulario_antiguo", "20230510"),
                 ("formulario_antiguo", "20231231")]
 PAGINAS = [("/", 30000), ("/ocasion", 20000), ("/ocasion/volkswagen-golf-life-12345", 9000),
-           ("/ocasion/volkswagen-t-roc-sport-67890/", 7000), ("/nuevos/t-roc", 8000), ("/nuevos", 3000),
+           ("/ocasion/volkswagen-t-roc-sport-67890/", 7000),
+           ("/coches/nuevos/volkswagen/t-roc/suv-5-puertas/2025/1000012345", 8000), ("/nuevos", 3000),
            ("/configurador/id-4", 2500), ("/ofertas/black-friday", 2000), ("/contacto", 1500),
            ("/gracias", 400), ("/vehiculos-especiales/serie-2025", 300), ("/vehiculos-especiales/serie-2024", 200),
            ("/Ocasión/Polo-99887", 100)]
@@ -51,6 +52,10 @@ VW = "volkswagen.avisa.es"
 OTRAS = [("audi.avisa.es", "/landing-audi-q3", 600), ("audi.avisa.es", "/landing-t-roc", 40),
          ("peticiones.ejemplo.org", "/peticion/una-causa", 250), ("(not set)", "/landing-seat-arona", 30),
          ("(not set)", "/financiacion", 20)]
+# (evento, dominio, recuento): page_view no es de intención y no se pide
+EVENTOS_DOMINIO = [("Configurar", VW, 1200), ("Configurar", "audi.avisa.es", 300), ("Lead - Nuevos", VW, 40),
+                   ("Lead - Nuevos", "(not set)", 2), ("Lead - Otros", VW, 10), ("form_start", "www.cear.es", 900),
+                   ("form_start", VW, 80), ("page_view", VW, 99999)]
 METRICAS_META = ["sessions", "engagedSessions", "engagementRate", "userEngagementDuration", "averageSessionDuration",
                  "screenPageViews", "screenPageViewsPerSession", "eventCount", "keyEvents", "activeUsers",
                  "totalUsers"]                                                    # sin newUsers
@@ -96,6 +101,10 @@ class Api:
             assert mets == ["screenPageViews"] and c["orderBys"][0]["desc"] is True
             filas = [(VW, p, n) for p, n in PAGINAS] + OTRAS
             return self._r({"rows": [_fila([h, p], [n]) for h, p, n in filas], "rowCount": len(filas)})
+        if dims == ["eventName", "hostName"]:
+            permitidos = c["dimensionFilter"]["filter"]["inListFilter"]["values"]
+            filas = [f for f in EVENTOS_DOMINIO if f[0] in permitidos]
+            return self._r({"rows": [_fila([e, h], [n]) for e, h, n in filas], "rowCount": len(filas)})
         if dims == ["date"]:
             assert c["limit"] == 1 and c["orderBys"] == [{"dimension": {"dimensionName": "date"}}]
             return self._r({"rows": [_fila(["20230301"], [500])], "rowCount": 1360})
@@ -284,3 +293,23 @@ def test_un_error_de_la_api_sale_sin_el_token(monkeypatch, entorno, sin_bd):
 def test_forma_de_las_rutas_sin_tipo():
     assert gx.forma("/a/b-123/" + "x" * 41) == "/a/*/*"
     assert gx.forma("/") == "/"
+
+
+def test_eventos_de_intencion_por_dominio(monkeypatch, entorno, sin_bd):
+    api = Api()
+    _, texto = _explorar(monkeypatch, entorno, api)
+    bloque = texto.split("== 6.")[1].split("Peticiones a la API")[0]
+    lineas = [x.split("  ") for x in bloque.splitlines()[2:] if x.strip()]
+    filas = [[c.strip() for c in x if c.strip()] for x in lineas]
+    assert ["Configurar", "volkswagen.avisa.es", "1.200", "sí"] in filas
+    assert ["audi.avisa.es", "300", "no (otra marca del grupo)"] in filas
+    assert ["Lead - Nuevos", "volkswagen.avisa.es", "40", "sí"] in filas
+    assert ["(not set)", "2", "no (sin dominio en GA4)"] in filas            # el tipo fijo no salta el dominio
+    assert ["Lead - Otros", "volkswagen.avisa.es", "10", "no (solo exploración)"] in filas
+    assert ["form_start", "www.cear.es", "900", "no (AJENO AL GRUPO)"] in filas
+    assert ["COLOR", "(ninguno)", "0"] in filas
+    assert "page_view" not in bloque
+    pedidos = next(c for c in api.informes() if [d["name"] for d in c["dimensions"]] == ["eventName", "hostName"])
+    assert set(pedidos["dimensionFilter"]["filter"]["inListFilter"]["values"]) == {
+        "Configurar", "COLOR", "Opcionales", "Precio", "Lead - Nuevos", "Lead - Segunda mano", "Lead - Otros",
+        "Click llamada o email", "Solicitar información", "form_start", "form_submit"}

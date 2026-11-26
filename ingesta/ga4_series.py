@@ -5,7 +5,8 @@ Por semana (lunes ISO), tipo (VN, VO o sin_tipo), grupo de canal (organico, dire
 - sesiones, sesiones con interacción y tiempo de interacción (segundos), por la página de destino;
 - vistas de fichas (de nuevo, de ocasión y de km 0, y las landings de modelo), por la página vista;
 - eventos de intención (config/ga4_intencion.yaml: configurador, form_start, form_submit, Solicitar información,
-  Click llamada o email, Lead - Nuevos y Lead - Segunda mano), por la página del evento;
+  Click llamada o email, Lead - Nuevos y Lead - Segunda mano), por la página del evento y solo de los dominios
+  propios (ni compartidos ni sin dominio);
 y, aparte, las vistas de fichas por modelo (ga4_fichas_modelo_semana).
 
 Las páginas se clasifican con config/ga4_paginas.yaml (ingesta/ga4_paginas.py) por su dominio (hostName: un
@@ -76,6 +77,12 @@ class Config:
     pagado_ga4: frozenset[str]
     eventos: dict[str, tuple[str, str | None]]          # columna → (evento, tipo fijo)
     analisis: dict
+    eventos_solo_explorar: tuple[str, ...] = ()
+
+    def eventos_intencion(self) -> list[str]:
+        """Los eventos de intención que enseña make ga4-explorar: los de las series y los solo de exploración."""
+        series = [e for e, _ in self.eventos.values()]
+        return series + [e for e in self.eventos_solo_explorar if e not in series]
 
 
 def ruta() -> Path:
@@ -119,7 +126,7 @@ def cargar_config(fichero: Path | None = None) -> Config:
         raise error("«analisis» debe ser un diccionario")
     return Config(inicio, enteros["semanas_recarga"], enteros["semanas_por_tramo"],
                   {str(k): v for k, v in grupos.items()}, frozenset(str(x) for x in cfg.get("pagado_ga4") or []),
-                  ev, analisis)
+                  ev, analisis, tuple(str(e) for e in cfg.get("eventos_solo_explorar") or []))
 
 
 # --------------------------------------------------------------------------- de las filas de GA4 a las de la tabla
@@ -174,9 +181,13 @@ class Agregador:
             self.modelos[(semana, p.tipo, p.modelo)] += n
 
     def eventos(self, d: list[str], m: list[str], host: str | None) -> None:
+        """Solo los eventos de los dominios propios (ni compartidos ni sin dominio): el tipo fijo del evento
+        (configurador y «Lead - Nuevos», VN…) nunca lo saca del filtro de dominio."""
         col, tipo = self.por_evento.get(d[1], (None, None))
+        if col is None or self.paginas.dominio(host) != "propio":
+            return
         p = self.pagina(d[2], host)
-        if col is None or not p.cuenta:
+        if not p.cuenta:
             return
         self._sumar(semana_iso(d[0]), tipo or p.tipo, self.grupo(*d[3:6]), p.marca, {col: int(float(m[0]))})
 

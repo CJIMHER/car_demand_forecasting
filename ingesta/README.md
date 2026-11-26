@@ -194,7 +194,9 @@ dimensiones de usuario; no guarda nada (ni Postgres, ni bucket, ni `fuentes_esta
 `tests/test_ga4_explorar.py`. Con `EJEMPLOS=1`, las 5 páginas (dominio y ruta) más vistas de cada tipo, con su
 marca y su modelo, para comprobar `config/ga4_paginas.yaml` antes de cargar las series. La sección 5 lista todos
 los dominios (`hostName`) de los últimos 12 meses con sus vistas, en cuáles aparecen las rutas `/peticion/*` y
-cómo se tratan; avisa de los dominios ajenos al grupo (que no cuentan en las señales).
+cómo se tratan; avisa de los dominios ajenos al grupo (que no cuentan en las señales). La sección 6, los eventos
+de intención (los de las series y `eventos_solo_explorar`, como «Lead - Otros») por dominio, y si cuentan en las
+series: solo los de los dominios propios.
 
 ### Páginas de GA4 (ga4_paginas.py)
 
@@ -204,7 +206,9 @@ cuentan y todo lo suyo es de la marca propia; los demás subdominios del grupo (
 marcas y los dominios ajenos al grupo no cuentan. Solo en los dominios compartidos (`dominios.compartidos`) o sin
 dominio («(not set)»), la marca sale de las palabras de la ruta, como respaldo (otra marca del grupo o una de sus
 sedes → fuera; la propia o uno de sus modelos → `propia`; nada → `sin_marca`). Después, fuera lo de `excluir`
-(peticiones, sedes, legal, posventa…); y el tipo de página (el primero que casa) con su tipo de stock (VN, VO o ninguno) y, en las fichas, el modelo de
+(peticiones, sedes, legal, posventa…); y el tipo de página. En ocasión, km 0 y nuevos, una página es ficha solo
+si la ruta termina en un identificador numérico (5 cifras o más; un año no cuenta); si no, es listado por
+modelo, con su modelo. Después, el tipo de página (el primero que casa) con su tipo de stock (VN, VO o ninguno) y, en las fichas, el modelo de
 `modelos_propios`. Con `requiere_modelo`, la regla solo casa si la ruta nombra un modelo: así la página de un
 modelo es ficha y la de toda la gama, listado. Pruebas con rutas reales: `tests/test_ga4_series.py`.
 
@@ -215,7 +219,8 @@ vistas `*_vigente`). Por semana (lunes ISO), tipo (VN, VO, sin_tipo), grupo de c
 otros) y marca (propia, sin_marca): sesiones, sesiones con interacción y tiempo de interacción por la página de
 destino; vistas de fichas por la página vista; y los eventos de `config/ga4_intencion.yaml` (configurador
 —Configurar, COLOR, Opcionales, Precio—, form_start, form_submit, Solicitar información, Click llamada o email,
-Lead - Nuevos, Lead - Segunda mano) por la página del evento. Aparte, vistas de fichas por modelo. El grupo de
+Lead - Nuevos, Lead - Segunda mano) por la página del evento, solo de los dominios propios (el tipo fijo de un
+evento, como el configurador o «Lead - Nuevos» en VN, nunca lo saca del filtro de dominio). Aparte, vistas de fichas por modelo. El grupo de
 canal sale de `config/canales.yaml` (meta y google_ads → pagado; organica → organico; directo → directo) y, si
 el canal no está en `grupos_canal`, de la agrupación de GA4 (`pagado_ga4`); el resto, otros.
 

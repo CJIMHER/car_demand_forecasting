@@ -669,6 +669,8 @@ las rutas que no casan aparecen como «(sin tipo) /ruta/*»; se añade su regla 
      vehículos comerciales de la marca, se añade a `dominios.propios` en `config/ga4_paginas.yaml`. Un dominio
      «AJENO AL GRUPO» (por ejemplo, el de las peticiones `/peticion/*`) no cuenta; si en realidad es del grupo,
      se añade a `dominios.grupo`.
+   - Sección 6, «Eventos de intención por dominio»: cuántos de cada evento hay en cada dominio; en las series
+     solo cuentan los de los dominios propios.
    - Sección 2: en «Ficha de nuevo», «Ficha de ocasión», «Ficha de km 0» y «Landing de modelo» tiene que haber
      fichas, con su modelo entre corchetes; lo de otras marcas, en «(fuera: otra marca)».
    - Si algo cae mal, se corrige `config/ga4_paginas.yaml` en el Mac (commit, push y `make deploy`) y se repite.

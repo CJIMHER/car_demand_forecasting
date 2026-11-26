@@ -1,5 +1,19 @@
 # Cambios
 
+## 2026-11-26 · GA4: ajustes de páginas, eventos por dominio y empresas del grupo (rama hito-2-ga4-ajustes)
+
+Con la salida real de `make ga4-explorar`:
+- `volkswagen.avisa.es/vehiculos-de-ocasion-en-stock` y `/ocasion-hibridos-y-electricos-volkswagen` → listado de
+  ocasión (stock VO); también `/coches/segunda-mano+km0/…`.
+- **Ficha frente a listado** en ocasión, km 0 y nuevos: ficha solo si la ruta termina en un identificador numérico
+  (5 cifras o más, tras «/» o «-»; un año no cuenta); si no, listado por modelo, con su modelo. Corrige las fichas
+  de nuevo que caían en «Listado de nuevos» (Touran y demás modelos que faltaban en `modelos_propios`).
+- **Eventos por dominio**: `make ga4-explorar`, sección 6, con los eventos de intención (también «Lead - Otros»)
+  por `hostName`. En las series solo cuentan los de los dominios propios: el tipo fijo del configurador y de
+  «Lead - Nuevos» ya no puede saltarse el filtro de dominio.
+- `cartujamotor.com` e `hispalauto.com` son empresas del grupo: «otra marca del grupo», no ajenas. Siguen fuera.
+- Fuera también los formularios de testimonios, la accesibilidad y «sobre nosotros»; «Contacto» recoge sus variantes.
+
 ## 2026-11-26 · GA4: marca por subdominio y validación fuera de Meta (rama hito-2-ga4-series)
 
 - **Marca por subdominio** (`config/ga4_paginas.yaml`, `dominios`): la web tiene un subdominio por marca. Solo

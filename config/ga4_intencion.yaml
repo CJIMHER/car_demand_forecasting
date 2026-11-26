@@ -21,9 +21,11 @@ grupos_canal:
   google_ads: pagado
 pagado_ga4: [Paid Search, Paid Social, Paid Shopping, Paid Video, Paid Other, Display, Cross-network, Audio]
 
-# Eventos de GA4 que se cuentan (columna de la tabla → nombre del evento). tipo: el tipo de stock del evento,
-# sea cual sea su página (el configurador y «Lead - Nuevos», VN; «Lead - Segunda mano», VO); sin tipo, el de
-# la página en que ocurre. Un evento en una página que no cuenta (no comercial u otra marca) no se cuenta.
+# Eventos de GA4 que se cuentan (columna de la tabla → nombre del evento). Solo los de los dominios propios
+# (config/ga4_paginas.yaml, dominios.propios), siempre: ni los de otros subdominios del grupo, ni los de dominios
+# compartidos o sin dominio, ni los de páginas no comerciales. tipo: el tipo de stock del evento dentro del
+# dominio propio, sea cual sea su página (el configurador y «Lead - Nuevos», VN; «Lead - Segunda mano», VO); sin
+# tipo, el de la página en que ocurre.
 eventos:
   configurar: {evento: Configurar, tipo: VN}
   color: {evento: COLOR, tipo: VN}
@@ -35,6 +37,8 @@ eventos:
   click_llamada_email: {evento: Click llamada o email}
   lead_nuevos: {evento: Lead - Nuevos, tipo: VN}
   lead_segunda_mano: {evento: Lead - Segunda mano, tipo: VO}
+# Eventos de intención que make ga4-explorar enseña por dominio, además de los de arriba (no van a las series)
+eventos_solo_explorar: [Lead - Otros]
 
 # ---------------------------------------------------------------------------- análisis (make ga4-intencion-informe)
 # Fijado antes de mirar los resultados: no se cambia para que una señal pase.

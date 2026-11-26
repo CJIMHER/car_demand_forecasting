@@ -1,6 +1,6 @@
 """Clasificación de las páginas de la web en GA4 con config/ga4_paginas.yaml: si cuentan (dominio y web
-comercial), de qué marca son, de qué tipo de página, de qué tipo de stock (VN, VO) y, en las fichas, de qué
-modelo. Lo usan make ga4-explorar y las señales semanales de intención (ga4_series.py).
+comercial), de qué marca son, de qué tipo de página, de qué tipo de stock (VN, VO) y, en las fichas y los
+listados por modelo, de qué modelo. Lo usan make ga4-explorar y las señales semanales de intención (ga4_series.py).
 
 La marca sale del dominio (un subdominio por marca): los propios cuentan como marca propia; los demás del grupo
 son de otras marcas y los ajenos al grupo no cuentan. Solo en los dominios compartidos o sin dominio («(not
@@ -34,7 +34,7 @@ class TipoPagina:
     patron: re.Pattern
     tipo: str | None = None              # VN, VO o None
     ficha: bool = False
-    requiere_modelo: bool = False
+    modelo: bool = False                 # se saca el modelo de la ruta (las fichas, siempre)
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ class Pagina:
     tipo_pagina: str | None              # None: sin tipo
     tipo: str | None                     # VN, VO o None
     ficha: bool
-    modelo: str | None                   # solo en fichas de la marca propia
+    modelo: str | None                   # en fichas y listados por modelo, de modelos_propios
 
     @property
     def cuenta(self) -> bool:
@@ -104,10 +104,9 @@ class Paginas:
             marca = PROPIA                       # todo el subdominio es de la marca propia
         elif marca == OTRA:
             return Pagina(r, "otra marca", OTRA, None, None, False, None)
-        hay_modelo = modelo is not None or any(_contiene(palabras, p) for p in self.modelos_otras)
         for t in self.tipos:
-            if t.patron.search(r) and (hay_modelo or not t.requiere_modelo):
-                return Pagina(r, None, marca, t.nombre, t.tipo, t.ficha, modelo if t.ficha else None)
+            if t.patron.search(r):
+                return Pagina(r, None, marca, t.nombre, t.tipo, t.ficha, modelo if t.ficha or t.modelo else None)
         return Pagina(r, None, marca, None, None, False, None)
 
 
@@ -194,7 +193,7 @@ def _cargar(texto: str) -> Paginas:
         if stock is not None and stock not in TIPOS_STOCK:
             raise error(f"el tipo de stock de «{t['nombre']}» debe ser VN, VO o nada")
         tipos.append(TipoPagina(str(t["nombre"]).strip(), regex(t["patron"], t["nombre"]), stock,
-                                bool(t.get("ficha")), bool(t.get("requiere_modelo"))))
+                                bool(t.get("ficha")), bool(t.get("modelo"))))
     return Paginas(
         propios=frozenset(normalizar_host(str(h)) for h in lista(dominios.get("propios"), "dominios.propios")),
         grupo=tuple(normalizar_host(str(h)) for h in lista(dominios.get("grupo"), "dominios.grupo")),

@@ -36,12 +36,31 @@ USUARIO = {"userId", "user_pseudo_id", "clientId", "customUser:email", "userEmai
     ("/vehiculos-nuevos-en-stock", None, "sin_marca", "Listado de nuevos", "VN", None),
     ("/landing-volkswagen-taigo", None, "propia", "Landing de modelo", "VN", "Taigo"),
     ("/landing-t-roc", None, "propia", "Landing de modelo", "VN", "T-Roc"),
-    ("/vehiculos-comerciales/volkswagen/caddy/monovolumen-5-puertas/x1", None, "propia", "Ficha de nuevo", "VN",
+    ("/vehiculos-comerciales/volkswagen/caddy/monovolumen-5-puertas/1000123456", None, "propia", "Ficha de nuevo", "VN",
      "Caddy"),
-    ("/vehiculos-comerciales/volkswagen/id-buzz", None, "propia", "Ficha de nuevo", "VN", "ID. Buzz"),
+    ("/vehiculos-comerciales/volkswagen/id-buzz", None, "propia", "Listado de nuevos", "VN", "ID. Buzz"),
+    # rutas reales: ficha solo si termina en un identificador numérico; si no, listado por modelo
+    ("/coches/nuevos/volkswagen/caddy/diesel/2-0-tdi-122cv-4motion-maxi-origin/2020/1000444937", None, "propia",
+     "Ficha de nuevo", "VN", "Caddy"),
+    ("/coches/nuevos/volkswagen/touran/diesel/2-0-tdi-150cv-dsg-r-line/2015/1000309719", None, "propia",
+     "Ficha de nuevo", "VN", "Touran"),
+    ("/coches/nuevos/volkswagen/taigo/todoterreno-5-puertas/2021", None, "propia", "Listado de nuevos", "VN",
+     "Taigo"),                                                          # un año no es un identificador
+    ("/coches/nuevos/volkswagen", None, "propia", "Listado de nuevos", "VN", None),
+    ("/promociones/nuevo/tiguan", None, "propia", "Listado de nuevos", "VN", "Tiguan"),
+    ("/coches/segunda-mano/sevilla/volkswagen/tiguan/diesel/r-line-2-0-tdi-110-kw-150-cv-dsg/1041709", None, "propia",
+     "Ficha de ocasión", "VO", "Tiguan"),
+    ("/coches/segunda-mano/todas-ciudades/volkswagen/caddy", None, "propia", "Listado de ocasión", "VO", "Caddy"),
+    ("/coches/segunda-mano+km0/todas-ciudades/volkswagen/t-roc", None, "propia", "Listado de ocasión", "VO",
+     "T-Roc"),
+    ("/vehiculos-de-ocasion-en-stock", None, "sin_marca", "Listado de ocasión", "VO", None),
+    ("/ocasion-hibridos-y-electricos-volkswagen", None, "propia", "Listado de ocasión", "VO", None),
+    ("/coches/todos-tipos/sevilla/volkswagen/caddy", None, "propia", "Buscador", None, None),
+    ("/contactanos", None, "sin_marca", "Contacto", None, None),
+    ("/formulario-testimonios", "no comercial", "sin_marca", None, None, None),
     ("/vehiculos-comerciales/volkswagen", None, "propia", "Listado de nuevos", "VN", None),
     ("/ocasion/volkswagen-golf-life-12345?email=a@b.example", None, "propia", "Ficha de ocasión", "VO", "Golf"),
-    ("/configurador/id-4", None, "propia", "Configurador", "VN", None),
+    ("/es/configurador/volkswagen/touareg", None, "propia", "Configurador", "VN", "Touareg"),
     ("/ofertas/black-friday", None, "sin_marca", "Ofertas", None, None),
     ("/financiacion", None, "sin_marca", "Financiación y renting", None, None),
     ("/tasamos-tu-coche", None, "sin_marca", "Tasación", None, None),
@@ -68,6 +87,9 @@ def test_rutas_reales(ruta, excluida, marca, tipo_pagina, tipo, modelo):
     ("audi.avisa.es", "/landing-t-roc", "otra marca", "otra"),
     ("skoda.avisa.es", "/", "otra marca", "otra"),
     ("change.example.org", "/peticion/x", "dominio ajeno", "sin_marca"),
+    ("www.cear.es", "/peticion/corredor-ayuda-humanitaria-gaza", "dominio ajeno", "sin_marca"),
+    ("www.cartujamotor.com", "/vehiculos-ocasion-en-stock", "otra marca", "otra"),     # empresas del grupo
+    ("www.hispalauto.com", "/", "otra marca", "otra"),
     ("www.avisa.es", "/landing-t-roc", None, "propia"),                  # compartido: por la ruta
     ("www.avisa.es", "/landing-audi-q3", "otra marca", "otra"),
     ("(not set)", "/landing-seat-arona", "otra marca", "otra"),
@@ -76,6 +98,12 @@ def test_rutas_reales(ruta, excluida, marca, tipo_pagina, tipo, modelo):
 def test_marca_por_subdominio_y_la_ruta_de_respaldo(host, ruta, excluida, marca):
     p = gp.cargar().clasificar(ruta, host)
     assert (p.excluida, p.marca) == (excluida, marca)
+
+
+@pytest.mark.parametrize("ruta", ["/vehiculos-de-ocasion-en-stock", "/ocasion-hibridos-y-electricos-volkswagen"])
+def test_stock_vo_del_subdominio_propio(ruta):
+    p = gp.cargar().clasificar(ruta, "volkswagen.avisa.es")
+    assert (p.excluida, p.marca, p.tipo_pagina, p.tipo, p.ficha) == (None, "propia", "Listado de ocasión", "VO", False)
 
 
 def test_errores_de_configuracion(tmp_path):
@@ -124,8 +152,9 @@ def datos_ga4(factor=1):
                 (AJENO, "/peticion/causa", *REF, 500, 100, 100),           # dominio ajeno: fuera
                 (SIN, "/ofertas", *REF, 10, 5, 90),                         # sin dominio y sin marca en la ruta
                 (SIN, "/landing-seat-arona", *GOOGLE, 55, 5, 5)]            # sin dominio, otra marca por la ruta
-    vistas = [(VW, "/ocasion/volkswagen-golf-life-12345", *GOOGLE, 40), (VW, "/ocasion/volkswagen-polo-1234", *FB, 15),
-              (VW, "/vehiculos-comerciales/volkswagen/caddy/furgon/x", *DIRECTO, 12),
+    vistas = [(VW, "/ocasion/volkswagen-golf-life-12345", *GOOGLE, 40), (VW, "/ocasion/volkswagen-polo-81234", *FB, 15),
+              (VW, "/vehiculos-comerciales/volkswagen/caddy/furgon/1000123456", *DIRECTO, 12),
+              (VW, "/coches/segunda-mano/todas-ciudades/volkswagen/caddy", *GOOGLE, 70),   # listado: no es ficha
               (VW, "/landing-t-roc", *GOOGLE, 9),
               (VW, "/ocasion/audi-a3-56789", *GOOGLE, 8),                  # en el subdominio propio: cuenta
               (VW, "/vehiculos-ocasion-en-stock", *GOOGLE, 500),           # listado: no es ficha
@@ -133,7 +162,10 @@ def datos_ga4(factor=1):
     eventos = [(VW, "Configurar", "/configurador/t-roc", *GOOGLE, 7), (VW, "COLOR", "/configurador/t-roc", *GOOGLE, 5),
                (VW, "Lead - Nuevos", "/gracias", *FB, 3), (VW, "Lead - Segunda mano", "/gracias", *DIRECTO, 2),
                (VW, "form_start", "/ocasion/volkswagen-golf-life-12345", *GOOGLE, 6),
-               (VW, "form_submit", "/landing-t-roc", *FB, 4), (SIN, "Solicitar información", "/contacto", *DIRECTO, 1),
+               (VW, "form_submit", "/landing-t-roc", *FB, 4), (VW, "Solicitar información", "/contacto", *DIRECTO, 1),
+               # eventos fuera de los dominios propios: nunca cuentan, aunque el evento tenga tipo fijo
+               (SIN, "Solicitar información", "/contacto", *DIRECTO, 20), (SIN, "Lead - Nuevos", "/gracias", *FB, 30),
+               (AUDI, "Configurar", "/configurador/q3", *GOOGLE, 40), (VW, "Lead - Nuevos", "/peticion/x", *FB, 5),
                (AUDI, "Click llamada o email", "/landing-audi-q3", *GOOGLE, 50)]     # otra marca: fuera
     return sesiones, vistas, eventos
 
@@ -238,7 +270,10 @@ def test_series_por_tipo_canal_y_marca(pg, monkeypatch):
     assert f[("VO", "directo", "propia")]["lead_segunda_mano"] == 2
     assert f[("VO", "organico", "propia")]["form_start"] == 6
     assert f[("VN", "pagado", "propia")]["form_submit"] == 4
-    assert f[("sin_tipo", "directo", "sin_marca")]["solicitar_informacion"] == 1
+    assert f[("sin_tipo", "directo", "propia")]["solicitar_informacion"] == 1
+    # solo los eventos del dominio propio, y en páginas comerciales
+    assert sum(v["solicitar_informacion"] for v in f.values()) == 1
+    assert sum(v["lead_nuevos"] for v in f.values()) == 3 and sum(v["configurar"] for v in f.values()) == 7
     assert sum(v["click_llamada_email"] for v in f.values()) == 0            # en el subdominio de Audi: fuera
     # vistas por modelo (el Audi de ocasión no tiene modelo propio)
     assert pg.execute("SELECT tipo, modelo, vistas FROM ga4_fichas_modelo_semana_vigente WHERE semana = %s "
