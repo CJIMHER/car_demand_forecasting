@@ -8,9 +8,11 @@ Por semana (lunes ISO), tipo (VN, VO o sin_tipo), grupo de canal (organico, dire
   Click llamada o email, Lead - Nuevos y Lead - Segunda mano), por la página del evento;
 y, aparte, las vistas de fichas por modelo (ga4_fichas_modelo_semana).
 
-Las rutas se clasifican con config/ga4_paginas.yaml (ingesta/ga4_paginas.py): las no comerciales y las de otras
-marcas del grupo no cuentan. El canal, con config/canales.yaml (fuente, medio y agrupación de canales de GA4),
-agrupado con config/ga4_intencion.yaml. Ninguna dimensión de usuario: de las páginas, solo la ruta.
+Las páginas se clasifican con config/ga4_paginas.yaml (ingesta/ga4_paginas.py) por su dominio (hostName: un
+subdominio por marca; solo cuentan los de la marca propia) y su ruta: las no comerciales, las de otras marcas del
+grupo y las de dominios ajenos no cuentan. El canal, con config/canales.yaml (fuente, medio y agrupación de
+canales de GA4), agrupado con config/ga4_intencion.yaml. Ninguna dimensión de usuario: de las páginas, solo el
+dominio y la ruta.
 
 Cada semana cargada queda en ga4_intencion_carga con la huella de su contenido: si al recargarla no ha cambiado
 (ni config/ga4_paginas.yaml), no se añade nada; si ha cambiado, sus filas nuevas sustituyen a las anteriores (vistas
@@ -200,12 +202,11 @@ def huella(filas: list[dict], modelos: list[dict]) -> str:
 def descargar_tramo(cli, desde: date, hasta: date, cfg: Config, paginas: gp.Paginas, canales: cn.Canales
                     ) -> dict[date, tuple[list[dict], list[dict]]]:
     """Semanas [desde, hasta] (lunes a domingo) → {semana: (filas, filas por modelo)}."""
-    con_host = bool(paginas.hosts)
-    extra = ["hostName"] if con_host else []
+    extra = ["hostName"]                     # la marca sale del subdominio
     ag = Agregador(cfg, paginas, canales)
 
-    def host(d: list[str]) -> str | None:
-        return d[-1] if con_host else None
+    def host(d: list[str]) -> str:
+        return d[-1]
 
     for d, m in cli.informe(desde, hasta, ["isoYearIsoWeek", "landingPage", *CANAL_DIMS, *extra],
                             ["sessions", "engagedSessions", "userEngagementDuration"]):

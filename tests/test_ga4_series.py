@@ -60,14 +60,30 @@ def test_rutas_reales(ruta, excluida, marca, tipo_pagina, tipo, modelo):
     assert (p.excluida, p.marca, p.tipo_pagina, p.tipo, p.modelo) == (excluida, marca, tipo_pagina, tipo, modelo)
 
 
-def test_hosts_y_errores_de_configuracion(tmp_path):
+@pytest.mark.parametrize("host, ruta, excluida, marca", [
+    ("volkswagen.avisa.es", "/landing-t-roc", None, "propia"),
+    ("VolksWagen.Avisa.es", "/contacto", None, "propia"),                # sin mayúsculas
+    ("volkswagen.avisa.es", "/ocasion/audi-a3-56789", None, "propia"),   # el subdominio manda sobre la ruta
+    ("volkswagen.avisa.es", "/peticion/x", "no comercial", "sin_marca"),
+    ("audi.avisa.es", "/landing-t-roc", "otra marca", "otra"),
+    ("skoda.avisa.es", "/", "otra marca", "otra"),
+    ("change.example.org", "/peticion/x", "dominio ajeno", "sin_marca"),
+    ("www.avisa.es", "/landing-t-roc", None, "propia"),                  # compartido: por la ruta
+    ("www.avisa.es", "/landing-audi-q3", "otra marca", "otra"),
+    ("(not set)", "/landing-seat-arona", "otra marca", "otra"),
+    ("(not set)", "/ofertas", None, "sin_marca"),
+])
+def test_marca_por_subdominio_y_la_ruta_de_respaldo(host, ruta, excluida, marca):
+    p = gp.cargar().clasificar(ruta, host)
+    assert (p.excluida, p.marca) == (excluida, marca)
+
+
+def test_errores_de_configuracion(tmp_path):
     f = tmp_path / "p.yaml"
-    f.write_text("hosts: [web.ejemplo.es]\ntipos:\n  - {nombre: Inicio, patron: '^/$'}\n")
-    p = gp.cargar(f)
-    assert p.clasificar("/", "web.ejemplo.es").cuenta and p.clasificar("/", "otra.ejemplo.es").excluida == "dominio"
     for texto, error in (("tipos:\n  - {nombre: Roto, patron: '('}\n", "patrón de «Roto» no válido"),
                          ("tipos:\n  - {patron: x}\n", "necesita «nombre» y «patron»"),
                          ("tipos:\n  - {nombre: X, patron: x, tipo: KM0}\n", "debe ser VN, VO o nada"),
+                         ("dominios: [a]\ntipos:\n  - {nombre: X, patron: x}\n", "«dominios» debe ser un diccionario"),
                          ("tipos: []\n", "«tipos» debe ser una lista con algún valor")):
         f.write_text(texto)
         with pytest.raises(gp.ErrorPaginas, match=error):
@@ -96,21 +112,29 @@ BING = ("bing", "cpc", "Paid Search")              # sin regla propia, agrupaci�
 REF = ("foro.example", "referral", "Referral")     # → otros
 
 
+VW, AUDI, AJENO, SIN = "volkswagen.avisa.es", "audi.avisa.es", "peticiones.ejemplo.org", "(not set)"
+
+
 def datos_ga4(factor=1):
-    """Por semana: filas de sesiones, de vistas y de eventos (sin la semana)."""
-    sesiones = [("/landing-t-roc", *GOOGLE, 100 * factor, 60, 3000.5), ("/landing-t-roc", *FB, 50, 20, 800),
-                ("/vehiculos-ocasion-en-stock", *DIRECTO, 80, 50, 4000), ("/", *BING, 30, 10, 200),
-                ("/landing-audi-q3", *GOOGLE, 999, 999, 9999), ("/peticion/causa", *REF, 500, 100, 100),
-                ("/ofertas", *REF, 10, 5, 90)]
-    vistas = [("/ocasion/volkswagen-golf-life-12345", *GOOGLE, 40), ("/ocasion/volkswagen-polo-1234", *FB, 15),
-              ("/vehiculos-comerciales/volkswagen/caddy/furgon/x", *DIRECTO, 12), ("/landing-t-roc", *GOOGLE, 9),
-              ("/vehiculos-ocasion-en-stock", *GOOGLE, 500),          # listado: no es ficha
-              ("/landing-audi-q3", *GOOGLE, 300)]                     # otra marca: fuera
-    eventos = [("Configurar", "/configurador/t-roc", *GOOGLE, 7), ("COLOR", "/configurador/t-roc", *GOOGLE, 5),
-               ("Lead - Nuevos", "/gracias", *FB, 3), ("Lead - Segunda mano", "/gracias", *DIRECTO, 2),
-               ("form_start", "/ocasion/volkswagen-golf-life-12345", *GOOGLE, 6),
-               ("form_submit", "/landing-t-roc", *FB, 4), ("Solicitar información", "/contacto", *DIRECTO, 1),
-               ("Click llamada o email", "/landing-audi-q3", *GOOGLE, 50)]     # otra marca: fuera
+    """Por semana: filas de sesiones, de vistas y de eventos (sin la semana), cada una con su dominio delante."""
+    sesiones = [(VW, "/landing-t-roc", *GOOGLE, 100 * factor, 60, 3000.5), (VW, "/landing-t-roc", *FB, 50, 20, 800),
+                (VW, "/vehiculos-ocasion-en-stock", *DIRECTO, 80, 50, 4000), (VW, "/", *BING, 30, 10, 200),
+                (AUDI, "/landing-audi-q3", *GOOGLE, 999, 999, 9999),
+                (AUDI, "/landing-t-roc", *GOOGLE, 777, 7, 7),              # otro subdominio: fuera aunque sea T-Roc
+                (AJENO, "/peticion/causa", *REF, 500, 100, 100),           # dominio ajeno: fuera
+                (SIN, "/ofertas", *REF, 10, 5, 90),                         # sin dominio y sin marca en la ruta
+                (SIN, "/landing-seat-arona", *GOOGLE, 55, 5, 5)]            # sin dominio, otra marca por la ruta
+    vistas = [(VW, "/ocasion/volkswagen-golf-life-12345", *GOOGLE, 40), (VW, "/ocasion/volkswagen-polo-1234", *FB, 15),
+              (VW, "/vehiculos-comerciales/volkswagen/caddy/furgon/x", *DIRECTO, 12),
+              (VW, "/landing-t-roc", *GOOGLE, 9),
+              (VW, "/ocasion/audi-a3-56789", *GOOGLE, 8),                  # en el subdominio propio: cuenta
+              (VW, "/vehiculos-ocasion-en-stock", *GOOGLE, 500),           # listado: no es ficha
+              (AUDI, "/landing-audi-q3", *GOOGLE, 300)]                    # otra marca: fuera
+    eventos = [(VW, "Configurar", "/configurador/t-roc", *GOOGLE, 7), (VW, "COLOR", "/configurador/t-roc", *GOOGLE, 5),
+               (VW, "Lead - Nuevos", "/gracias", *FB, 3), (VW, "Lead - Segunda mano", "/gracias", *DIRECTO, 2),
+               (VW, "form_start", "/ocasion/volkswagen-golf-life-12345", *GOOGLE, 6),
+               (VW, "form_submit", "/landing-t-roc", *FB, 4), (SIN, "Solicitar información", "/contacto", *DIRECTO, 1),
+               (AUDI, "Click llamada o email", "/landing-audi-q3", *GOOGLE, 50)]     # otra marca: fuera
     return sesiones, vistas, eventos
 
 
@@ -133,14 +157,15 @@ class Api:
             if not desde <= s <= hasta:
                 continue
             sesiones, vistas, eventos = self.por_semana.get(s, self.datos)
+            assert dims[-1] == "hostName"
             if dims[1] == "landingPage":
-                filas += [([_sem(s), *f[:4]], f[4:]) for f in sesiones]
+                filas += [([_sem(s), *f[1:5], f[0]], f[5:]) for f in sesiones]
             elif dims[1] == "pagePath":
-                filas += [([_sem(s), *f[:4]], f[4:]) for f in vistas]
+                filas += [([_sem(s), *f[1:5], f[0]], f[5:]) for f in vistas]
             else:
                 assert dims[1] == "eventName"
                 permitidos = c["dimensionFilter"]["filter"]["inListFilter"]["values"]
-                filas += [([_sem(s), *f[:5]], f[5:]) for f in eventos if f[0] in permitidos]
+                filas += [([_sem(s), *f[1:6], f[0]], f[6:]) for f in eventos if f[1] in permitidos]
         filas = filas[c["offset"]:c["offset"] + 5]                  # páginas de 5 filas
         cuerpo = {"rows": [{"dimensionValues": [{"value": v} for v in d],
                             "metricValues": [{"value": str(v)} for v in m]} for d, m in filas],
@@ -196,25 +221,26 @@ def test_series_por_tipo_canal_y_marca(pg, monkeypatch):
     assert (f[("VN", "organico", "propia")]["sesiones"], f[("VN", "organico", "propia")]["sesiones_interaccion"],
             f[("VN", "organico", "propia")]["tiempo_interaccion"]) == (100, 60, 3000.5)
     assert f[("VN", "pagado", "propia")]["sesiones"] == 50
-    assert f[("VO", "directo", "sin_marca")]["sesiones"] == 80
-    assert f[("sin_tipo", "pagado", "sin_marca")]["sesiones"] == 30          # Bing de pago, por la agrupación de GA4
-    assert f[("sin_tipo", "otros", "sin_marca")]["sesiones"] == 10           # la petición (500) no cuenta
-    assert sum(v["sesiones"] for v in f.values()) == 270                     # ni la landing de Audi (999)
+    assert f[("VO", "directo", "propia")]["sesiones"] == 80                 # todo el subdominio propio es propio
+    assert f[("sin_tipo", "pagado", "propia")]["sesiones"] == 30            # Bing de pago, por la agrupación de GA4
+    assert f[("sin_tipo", "otros", "sin_marca")]["sesiones"] == 10          # sin dominio: marca por la ruta
+    # fuera: el subdominio de Audi (también su /landing-t-roc), el dominio ajeno y la ruta de SEAT sin dominio
+    assert sum(v["sesiones"] for v in f.values()) == 270
     # vistas de fichas (no de listados ni de otras marcas)
-    assert f[("VO", "organico", "propia")]["vistas_fichas"] == 40
+    assert f[("VO", "organico", "propia")]["vistas_fichas"] == 48           # con la ficha de un Audi de ocasión
     assert f[("VO", "pagado", "propia")]["vistas_fichas"] == 15
     assert f[("VN", "directo", "propia")]["vistas_fichas"] == 12
     assert f[("VN", "organico", "propia")]["vistas_fichas"] == 9             # landing de modelo
-    assert sum(v["vistas_fichas"] for v in f.values()) == 76
+    assert sum(v["vistas_fichas"] for v in f.values()) == 84
     # eventos: el configurador y «Lead - Nuevos», VN; «Lead - Segunda mano», VO; el resto, por su página
     assert (f[("VN", "organico", "propia")]["configurar"], f[("VN", "organico", "propia")]["color"]) == (7, 5)
-    assert f[("VN", "pagado", "sin_marca")]["lead_nuevos"] == 3
-    assert f[("VO", "directo", "sin_marca")]["lead_segunda_mano"] == 2
+    assert f[("VN", "pagado", "propia")]["lead_nuevos"] == 3
+    assert f[("VO", "directo", "propia")]["lead_segunda_mano"] == 2
     assert f[("VO", "organico", "propia")]["form_start"] == 6
     assert f[("VN", "pagado", "propia")]["form_submit"] == 4
     assert f[("sin_tipo", "directo", "sin_marca")]["solicitar_informacion"] == 1
-    assert sum(v["click_llamada_email"] for v in f.values()) == 0            # en una página de Audi: fuera
-    # vistas por modelo
+    assert sum(v["click_llamada_email"] for v in f.values()) == 0            # en el subdominio de Audi: fuera
+    # vistas por modelo (el Audi de ocasión no tiene modelo propio)
     assert pg.execute("SELECT tipo, modelo, vistas FROM ga4_fichas_modelo_semana_vigente WHERE semana = %s "
                       "ORDER BY 1, 2", (S3,)).fetchall() == [("VN", "Caddy", 12), ("VN", "T-Roc", 9),
                                                              ("VO", "Golf", 40), ("VO", "Polo", 15)]
@@ -228,7 +254,8 @@ def test_solo_agregados_y_eventos_filtrados(pg, monkeypatch):
     gs.cargar(pg, _cliente(api, monkeypatch), "4567", S1, HOY, HOY, subir=Bucket())
     informes = api.informes()
     pedidas = {d["name"] for c in informes for d in c["dimensions"]}
-    assert not pedidas & USUARIO and "hostName" not in pedidas               # sin hosts en la configuración
+    assert not pedidas & USUARIO
+    assert all(c["dimensions"][-1] == {"name": "hostName"} for c in informes)    # la marca sale del subdominio
     assert {d["name"] for c in informes for d in c["dimensions"]} >= {"isoYearIsoWeek", "landingPage", "pagePath"}
     filtro = next(c["dimensionFilter"] for c in informes if "dimensionFilter" in c)
     assert sorted(filtro["filter"]["inListFilter"]["values"]) == sorted(

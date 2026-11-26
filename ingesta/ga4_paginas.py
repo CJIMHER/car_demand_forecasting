@@ -1,6 +1,10 @@
-"""Clasificación de las rutas de la web en GA4 con config/ga4_paginas.yaml: si cuentan (dominio y web
+"""Clasificación de las páginas de la web en GA4 con config/ga4_paginas.yaml: si cuentan (dominio y web
 comercial), de qué marca son, de qué tipo de página, de qué tipo de stock (VN, VO) y, en las fichas, de qué
 modelo. Lo usan make ga4-explorar y las señales semanales de intención (ga4_series.py).
+
+La marca sale del dominio (un subdominio por marca): los propios cuentan como marca propia; los demás del grupo
+son de otras marcas y los ajenos al grupo no cuentan. Solo en los dominios compartidos o sin dominio («(not
+set)») se mira la ruta (palabras de la marca y de sus modelos), como respaldo.
 """
 
 from __future__ import annotations
@@ -36,7 +40,7 @@ class TipoPagina:
 @dataclass(frozen=True)
 class Pagina:
     ruta: str
-    excluida: str | None                 # motivo: «dominio», «no comercial», «otra marca»; None si cuenta
+    excluida: str | None                 # motivo: «dominio ajeno», «otra marca», «no comercial»; None si cuenta
     marca: str                           # propia, sin_marca u otra
     tipo_pagina: str | None              # None: sin tipo
     tipo: str | None                     # VN, VO o None
@@ -50,7 +54,9 @@ class Pagina:
 
 @dataclass(frozen=True)
 class Paginas:
-    hosts: frozenset[str]
+    propios: frozenset[str]
+    grupo: tuple[str, ...]
+    compartidos: frozenset[str]
     excluir: tuple[re.Pattern, ...]
     propia: tuple[tuple[str, ...], ...]
     modelos_propios: tuple[tuple[str, tuple[str, ...]], ...]       # (nombre, palabras), las más largas antes
@@ -71,15 +77,32 @@ class Paginas:
             return OTRA, None
         return SIN_MARCA, None
 
+    def dominio(self, host: str | None) -> str:
+        """propio, compartido (o sin dominio: la marca sale de la ruta), otra_marca o ajeno."""
+        h = normalizar_host(host)
+        if h in self.propios:
+            return "propio"
+        if not h or h in self.compartidos:
+            return "compartido"
+        if any(h == g or h.endswith("." + g) for g in self.grupo):
+            return "otra_marca"
+        return "ajeno"
+
     def clasificar(self, ruta: str | None, host: str | None = None) -> Pagina:
+        """`host` None: sin dominio (como «(not set)»), la marca sale de la ruta."""
         r = normalizar(ruta)
-        if self.hosts and plegar(host) not in self.hosts:
-            return Pagina(r, "dominio", SIN_MARCA, None, None, False, None)
+        dominio = self.dominio(host)
+        if dominio == "ajeno":
+            return Pagina(r, "dominio ajeno", SIN_MARCA, None, None, False, None)
+        if dominio == "otra_marca":
+            return Pagina(r, "otra marca", OTRA, None, None, False, None)
         if any(p.search(r) for p in self.excluir):
             return Pagina(r, "no comercial", SIN_MARCA, None, None, False, None)
         palabras = _palabras(r)
         marca, modelo = self.marca(palabras)
-        if marca == OTRA:
+        if dominio == "propio":
+            marca = PROPIA                       # todo el subdominio es de la marca propia
+        elif marca == OTRA:
             return Pagina(r, "otra marca", OTRA, None, None, False, None)
         hay_modelo = modelo is not None or any(_contiene(palabras, p) for p in self.modelos_otras)
         for t in self.tipos:
@@ -93,6 +116,12 @@ def normalizar(ruta: str | None) -> str:
     r = plegar((ruta or "/").split("?", 1)[0].split("#", 1)[0]).replace(" ", "-")
     r = r if r.startswith("/") or r.startswith("(") else "/" + r
     return r.rstrip("/") or "/"
+
+
+def normalizar_host(host: str | None) -> str:
+    """En minúsculas, sin puerto ni punto final; «(not set)» o vacío → ''."""
+    h = plegar(host).split(":", 1)[0].rstrip(".")
+    return "" if not h or h.startswith("(") else h
 
 
 def _palabras(texto: str) -> list[str]:
@@ -143,6 +172,9 @@ def _cargar(texto: str) -> Paginas:
             salida.append(p)
         return tuple(sorted(salida, key=len, reverse=True))
 
+    dominios = cfg.get("dominios") or {}
+    if not isinstance(dominios, dict):
+        raise error("«dominios» debe ser un diccionario (propios, grupo, compartidos)")
     marcas = cfg.get("marcas") or {}
     if not isinstance(marcas, dict):
         raise error("«marcas» debe ser un diccionario")
@@ -164,7 +196,10 @@ def _cargar(texto: str) -> Paginas:
         tipos.append(TipoPagina(str(t["nombre"]).strip(), regex(t["patron"], t["nombre"]), stock,
                                 bool(t.get("ficha")), bool(t.get("requiere_modelo"))))
     return Paginas(
-        hosts=frozenset(plegar(str(h)) for h in lista(cfg.get("hosts"), "hosts")),
+        propios=frozenset(normalizar_host(str(h)) for h in lista(dominios.get("propios"), "dominios.propios")),
+        grupo=tuple(normalizar_host(str(h)) for h in lista(dominios.get("grupo"), "dominios.grupo")),
+        compartidos=frozenset(normalizar_host(str(h)) for h in lista(dominios.get("compartidos"),
+                                                                     "dominios.compartidos")),
         excluir=tuple(regex(p, "excluir") for p in lista(cfg.get("excluir"), "excluir")),
         propia=secuencias(marcas.get("propia"), "marcas.propia"), modelos_propios=tuple(modelos),
         otras=secuencias(marcas.get("otras"), "marcas.otras"),

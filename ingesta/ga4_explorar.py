@@ -10,6 +10,8 @@ consulta la GA4 Data API y enseña en pantalla:
   3. Dimensiones y métricas de interacción disponibles (de los metadatos de la propiedad), con su total
      de los últimos 12 meses, las personalizadas y el número de todas por categoría.
   4. Desde qué día hay datos en la propiedad.
+  5. Todos los dominios (hostName) con sus vistas, en cuáles aparecen las rutas /peticion/* y cómo se tratan
+     (marca propia, compartido, otra marca del grupo o ajeno al grupo, con aviso).
 
 Solo agregados: ninguna dimensión de usuario ni identificador; de las páginas, solo la ruta (sin
 parámetros). No guarda nada: ni en Postgres, ni en el bucket, ni en fuentes_estado.
@@ -92,21 +94,42 @@ def grupo(p: gp.Pagina) -> str:
     return p.tipo_pagina or f"(sin tipo) {forma(p.ruta)}"
 
 
-def agrupar_paginas(filas: list[tuple[str, int]], paginas: gp.Paginas) -> list[dict]:
-    """[(ruta, vistas)] → [{tipo, vistas, rutas, ejemplos}], de más a menos vistos. ejemplos: las rutas más
-    vistas del grupo, con su marca y su modelo."""
+def agrupar_paginas(filas: list[tuple[str, str, int]], paginas: gp.Paginas) -> list[dict]:
+    """[(dominio, ruta, vistas)] → [{tipo, vistas, rutas, ejemplos}], de más a menos vistos. ejemplos: las páginas
+    más vistas del grupo (dominio y ruta), con su marca y su modelo."""
     vistas: Counter = Counter()
     rutas: dict[str, Counter] = defaultdict(Counter)
-    clase: dict[str, gp.Pagina] = {}
-    for ruta, n in filas:
-        p = paginas.clasificar(ruta)
+    clase: dict[tuple[str, str], gp.Pagina] = {}
+    for host, ruta, n in filas:
+        p = paginas.clasificar(ruta, host)
         t = grupo(p)
+        h = gp.normalizar_host(host) or "(not set)"
         vistas[t] += n
-        rutas[t][p.ruta] += n
-        clase[p.ruta] = p
+        rutas[t][(h, p.ruta)] += n
+        clase[(h, p.ruta)] = p
     return [{"tipo": t, "vistas": n, "rutas": len(rutas[t]),
-             "ejemplos": [(r, v, clase[r].marca, clase[r].modelo) for r, v in rutas[t].most_common(EJEMPLOS)]}
+             "ejemplos": [(h, r, v, clase[(h, r)].marca, clase[(h, r)].modelo)
+                          for (h, r), v in rutas[t].most_common(EJEMPLOS)]}
             for t, n in sorted(vistas.items(), key=lambda x: (-x[1], x[0]))]
+
+
+TRATO = {"propio": "marca propia: cuenta", "compartido": "compartido: la marca sale de la ruta",
+         "otra_marca": "otra marca del grupo: fuera", "ajeno": "AJENO AL GRUPO: fuera",
+         "sin_dominio": "sin dominio en GA4: la marca sale de la ruta"}
+
+
+def dominios(filas: list[tuple[str, str, int]], paginas: gp.Paginas) -> list[dict]:
+    """[(dominio, ruta, vistas)] → por dominio, de más a menos vistas: vistas, vistas de /peticion/* y trato."""
+    vistas: Counter = Counter()
+    peticion: Counter = Counter()
+    for host, ruta, n in filas:
+        h = gp.normalizar_host(host) or "(not set)"
+        vistas[h] += n
+        if gp.normalizar(ruta).startswith("/peticion/"):
+            peticion[h] += n
+    return [{"dominio": h, "vistas": n, "peticion": peticion[h],
+             "trato": "sin_dominio" if h == "(not set)" else paginas.dominio(h)}
+            for h, n in sorted(vistas.items(), key=lambda x: (-x[1], x[0]))]
 
 
 # --------------------------------------------------------------------------- API
@@ -184,11 +207,11 @@ def eventos(cli: Cliente, desde: date, hasta: date) -> list[dict]:
     return sorted(lista, key=lambda e: (-e["recuento"], e["evento"]))
 
 
-def paginas(cli: Cliente, desde: date, hasta: date, tipos: gp.Paginas) -> tuple[list[dict], int]:
-    """(tipos de página de más a menos vistos, rutas leídas)."""
-    filas = cli.informe(desde, hasta, ["pagePath"], ["screenPageViews"],
+def paginas(cli: Cliente, desde: date, hasta: date) -> list[tuple[str, str, int]]:
+    """Vistas de cada página (dominio, ruta) en [desde, hasta]."""
+    filas = cli.informe(desde, hasta, ["hostName", "pagePath"], ["screenPageViews"],
                         orden=[{"metric": {"metricName": "screenPageViews"}, "desc": True}])
-    return agrupar_paginas([(d[0], int(_num(m[0]))) for d, m in filas], tipos), len(filas)
+    return [(d[0], d[1], int(_num(m[0]))) for d, m in filas]
 
 
 def primer_dia(cli: Cliente, hasta: date) -> date | None:
@@ -251,20 +274,22 @@ def explorar(entorno: Mapping[str, str], hoy: date, escribir: Callable[[str], No
         escribir(f"  {e['evento']:<{ancho}}  {_n(e['recuento']):>12}  {_f(e['primero']):>10}  {_f(e['ultimo']):>10}")
 
     escribir(f"\n== 2. Los {TIPOS_PAGINA} tipos de página más vistos (últimos 12 meses; config/ga4_paginas.yaml)")
-    grupos, leidas = paginas(cli, desde, hasta, tipos)
+    vistas_pagina = paginas(cli, desde, hasta)
+    grupos, leidas = agrupar_paginas(vistas_pagina, tipos), len(vistas_pagina)
     total = sum(g["vistas"] for g in grupos)
     sin_tipo = sum(g["vistas"] for g in grupos if g["tipo"].startswith("(sin tipo)"))
     fuera = sum(g["vistas"] for g in grupos if g["tipo"].startswith("(fuera"))
-    escribir(f"  {_n(leidas)} rutas en {len(grupos)} tipos; sin tipo de config/ga4_paginas.yaml, el "
-             f"{_pct(sin_tipo, total)} % de las vistas; fuera (no comercial u otra marca), el {_pct(fuera, total)} %.")
+    escribir(f"  {_n(leidas)} páginas en {len(grupos)} tipos; sin tipo de config/ga4_paginas.yaml, el "
+             f"{_pct(sin_tipo, total)} % de las vistas; fuera (dominio, no comercial u otra marca), el "
+             f"{_pct(fuera, total)} %.")
     ancho = max([len(g["tipo"]) for g in grupos[:TIPOS_PAGINA]] + [4])
     escribir(f"  {'tipo':<{ancho}}  {'vistas':>12}  {'%':>6}  {'rutas':>7}")
     for g in grupos[:TIPOS_PAGINA]:
         escribir(f"  {g['tipo']:<{ancho}}  {_n(g['vistas']):>12}  {_pct(g['vistas'], total):>6}  "
                  f"{_n(g['rutas']):>7}")
         if ejemplos:
-            for r, v, marca, modelo in g["ejemplos"]:
-                escribir(f"      {_n(v):>9}  {r}  [{marca}" + (f"; {modelo}]" if modelo else "]"))
+            for h, r, v, marca, modelo in g["ejemplos"]:
+                escribir(f"      {_n(v):>9}  {h}{r}  [{marca}" + (f"; {modelo}]" if modelo else "]"))
 
     escribir("\n== 3. Dimensiones y métricas de interacción disponibles")
     dims, mets = disponibles(cli.metadatos())
@@ -296,6 +321,20 @@ def explorar(entorno: Mapping[str, str], hoy: date, escribir: Callable[[str], No
     escribir("\n== 4. Datos en la propiedad")
     primero = primer_dia(cli, hasta)
     escribir(f"  Primer día con datos: {_f(primero)}" if primero else "  La propiedad no tiene datos.")
+
+    escribir("\n== 5. Dominios (hostName) de los últimos 12 meses (config/ga4_paginas.yaml, «dominios»)")
+    lista_d = dominios(vistas_pagina, tipos)
+    if not lista_d:
+        escribir("  Ningún dominio.")
+    ancho = max([len(d["dominio"]) for d in lista_d] + [7])
+    escribir(f"  {'dominio':<{ancho}}  {'vistas':>12}  {'/peticion/*':>11}  trato")
+    for d in lista_d:
+        escribir(f"  {d['dominio']:<{ancho}}  {_n(d['vistas']):>12}  {_n(d['peticion']):>11}  {TRATO[d['trato']]}")
+    con_peticion = [d["dominio"] for d in lista_d if d["peticion"]]
+    escribir("  Las rutas /peticion/* aparecen en: " + (", ".join(con_peticion) if con_peticion else "ningún dominio"))
+    ajenos = [d["dominio"] for d in lista_d if d["trato"] == "ajeno"]
+    if ajenos:
+        escribir(f"  ¡AVISO! Dominios ajenos al grupo en la propiedad (excluidos de las señales): {', '.join(ajenos)}")
     escribir(f"\nPeticiones a la API: {cli.peticiones}. No se ha guardado nada.")
     return 0
 

@@ -664,10 +664,14 @@ las rutas que no casan aparecen como «(sin tipo) /ruta/*»; se añade su regla 
 ### 7.20 Señales semanales de GA4 e informe de intención (hito 2)
 
 1. `make deploy` (migración 0026: tablas `ga4_intencion_*`).
-2. Comprobar las rutas antes de cargar: `make ga4-explorar EJEMPLOS=1 > ga4_explorar.txt`. En «Ficha de nuevo»,
-   «Ficha de ocasión», «Ficha de km 0» y «Landing de modelo» tiene que haber fichas, con su modelo entre
-   corchetes; lo de otras marcas, en «(fuera: otra marca)». Si algo cae mal, se corrige `config/ga4_paginas.yaml`
-   en el Mac (commit, push y `make deploy`) y se repite.
+2. Comprobar los dominios y las rutas antes de cargar: `make ga4-explorar EJEMPLOS=1 > ga4_explorar.txt`.
+   - Sección 5, «Dominios»: el subdominio de la marca tiene que salir «marca propia: cuenta». Si hay uno de
+     vehículos comerciales de la marca, se añade a `dominios.propios` en `config/ga4_paginas.yaml`. Un dominio
+     «AJENO AL GRUPO» (por ejemplo, el de las peticiones `/peticion/*`) no cuenta; si en realidad es del grupo,
+     se añade a `dominios.grupo`.
+   - Sección 2: en «Ficha de nuevo», «Ficha de ocasión», «Ficha de km 0» y «Landing de modelo» tiene que haber
+     fichas, con su modelo entre corchetes; lo de otras marcas, en «(fuera: otra marca)».
+   - Si algo cae mal, se corrige `config/ga4_paginas.yaml` en el Mac (commit, push y `make deploy`) y se repite.
 3. Carga inicial: `make ga4-series DESDE=2023-06-05`. Va por tramos de 4 semanas (3 peticiones por tramo, más si
    hay muchas filas); si se corta, se relanza igual: las semanas ya cargadas y sin cambios no se repiten.
 4. Desde ese día, la descarga de GA4 de las 06:10 la mantiene al día (las 2 últimas semanas terminadas y las

@@ -1,5 +1,19 @@
 # Cambios
 
+## 2026-11-26 · GA4: marca por subdominio y validación fuera de Meta (rama hito-2-ga4-series)
+
+- **Marca por subdominio** (`config/ga4_paginas.yaml`, `dominios`): la web tiene un subdominio por marca. Solo
+  cuentan los de la marca propia (`volkswagen.avisa.es`; el de vehículos comerciales, si existe, se añade); los
+  demás subdominios del grupo son de otras marcas y los dominios ajenos al grupo no cuentan. Las palabras de la
+  ruta solo deciden la marca en los dominios compartidos o sin dominio («(not set)»). Las series piden siempre
+  `hostName`.
+- **`make ga4-explorar`**: las páginas se agrupan con su dominio, y la sección 5 lista todos los dominios de los
+  últimos 12 meses con sus vistas, dónde aparecen las rutas `/peticion/*` y cómo se tratan, con aviso de los
+  ajenos al grupo.
+- **Informe**: además de la validación con el modelo de leads de Meta, cada señal se valida con un modelo sencillo
+  de los leads de Walcu de todos los orígenes y de las ventas por fecha de venta, frente a la media de 4 semanas y
+  con el mismo umbral del 5 %. PASA / NO PASA por separado para cada objetivo.
+
 ## 2026-11-25 · Señales semanales de intención de GA4 e informe (rama hito-2-ga4-series)
 
 - **Páginas** (`config/ga4_paginas.yaml`, `ingesta/ga4_paginas.py`): la propiedad es de todo el grupo. Fuera lo que

@@ -175,13 +175,19 @@ antemano en `config/ga4_intencion.yaml` (`analisis`), que el informe repite al p
   ni otras empresas del grupo) y con las ventas por fecha de venta (sin las 2 últimas semanas), retardos de 0 a
   8 semanas, en diferencias semanales de log(1 + x). Tal cual y sin Meta (parcial, quitando el gasto de Meta de
   las semanas t y t−k). * si |r| > 1,96/√n. Orienta, no decide.
-- **Validación con origen móvil** (decide): la señal entra en el modelo de leads de la previsión como Google
-  Trends (la de la semana anterior, fija en las 4 semanas previstas) y se compara el error de los leads del tipo
-  con y sin ella. PASA si lo baja al menos un 5 % con el gasto que hubo y con el previsto. El umbral sale de
-  simular señales de ruido: con el 2 %, pasarían 9 de cada 100.
+- **Validación con origen móvil** (decide), con PASA / NO PASA por separado para cada objetivo y el mismo umbral
+  del 5 % (con el 2 %, una señal de ruido pasaría en 9 de cada 100 pruebas):
+  - leads de Meta: la señal entra en el modelo de leads de la previsión como Google Trends (la de la semana
+    anterior, fija en las 4 semanas previstas) y se compara el error de los leads del tipo con y sin ella, con el
+    gasto que hubo y con el previsto;
+  - leads de Walcu de todos los orígenes y ventas por fecha de venta (`validar_simple`): la referencia es la media
+    de las últimas 4 semanas conocidas (las ventas, hasta 2 semanas antes del origen); el modelo la corrige con
+    β·(cambio de la señal frente a su media de esas semanas), con β por horizonte estimado con lo ya conocido.
+    Sin señal es la referencia, así que lo que mejora es lo que aporta la señal. 26 orígenes × 4 semanas. Con
+    ruido simulado pasa 2 de cada 100 veces con los leads y 7 con las ventas: un PASA solo en ventas es débil.
 
 Pruebas: `tests/test_ga4_intencion.py` (retardo plantado, correlación que solo viene del gasto, una señal que
-adelanta los leads frente a ruido, sin mirar al futuro, informe de punta a punta).
+adelanta los leads frente a ruido en las dos validaciones, sin mirar al futuro, informe de punta a punta).
 
 ## Cómo se prueba
 

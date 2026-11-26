@@ -191,15 +191,20 @@ primera regla que casa; las que no, por su forma, con «*» en los tramos con n�
 dimensiones de interacción que tiene la propiedad, con su total de 12 meses, el tiempo medio de
 interacción calculado y las definiciones personalizadas; (4) el primer día con datos. Solo agregados, sin
 dimensiones de usuario; no guarda nada (ni Postgres, ni bucket, ni `fuentes_estado`). Pruebas:
-`tests/test_ga4_explorar.py`. Con `EJEMPLOS=1`, las 5 rutas más vistas de cada tipo, con su marca y su modelo,
-para comprobar `config/ga4_paginas.yaml` antes de cargar las series.
+`tests/test_ga4_explorar.py`. Con `EJEMPLOS=1`, las 5 páginas (dominio y ruta) más vistas de cada tipo, con su
+marca y su modelo, para comprobar `config/ga4_paginas.yaml` antes de cargar las series. La sección 5 lista todos
+los dominios (`hostName`) de los últimos 12 meses con sus vistas, en cuáles aparecen las rutas `/peticion/*` y
+cómo se tratan; avisa de los dominios ajenos al grupo (que no cuentan en las señales).
 
 ### Páginas de GA4 (ga4_paginas.py)
 
-`config/ga4_paginas.yaml` decide, para cada ruta (sin parámetros, en minúsculas y sin tildes): si cuenta (dominios
-de `hosts`, si hay; fuera lo de `excluir`: peticiones, sedes, legal, posventa…), su marca por palabras enteras
-(otra marca del grupo o una de sus sedes → fuera; la propia o uno de sus modelos → `propia`; nada → `sin_marca`),
-su tipo de página (el primero que casa) con su tipo de stock (VN, VO o ninguno) y, en las fichas, el modelo de
+`config/ga4_paginas.yaml` decide, para cada página (dominio de GA4, `hostName`, y ruta sin parámetros, en
+minúsculas y sin tildes): la marca por el **subdominio** (la web tiene uno por marca): los de `dominios.propios`
+cuentan y todo lo suyo es de la marca propia; los demás subdominios del grupo (`dominios.grupo`) son de otras
+marcas y los dominios ajenos al grupo no cuentan. Solo en los dominios compartidos (`dominios.compartidos`) o sin
+dominio («(not set)»), la marca sale de las palabras de la ruta, como respaldo (otra marca del grupo o una de sus
+sedes → fuera; la propia o uno de sus modelos → `propia`; nada → `sin_marca`). Después, fuera lo de `excluir`
+(peticiones, sedes, legal, posventa…); y el tipo de página (el primero que casa) con su tipo de stock (VN, VO o ninguno) y, en las fichas, el modelo de
 `modelos_propios`. Con `requiere_modelo`, la regla solo casa si la ruta nombra un modelo: así la página de un
 modelo es ficha y la de toda la gama, listado. Pruebas con rutas reales: `tests/test_ga4_series.py`.
 

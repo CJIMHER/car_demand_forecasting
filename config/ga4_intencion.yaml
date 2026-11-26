@@ -70,3 +70,12 @@ analisis:
   # orígenes, una señal de puro ruido baja el error un 2 % o más en 9 de cada 100 pruebas, y un 5 % o más en menos
   # de 2; con unas 50 señales y canales, el 2 % daría 4 o 5 «pasa» falsos.
   mejora_minima_pct: 5
+  # Validación fuera de Meta (leads de Walcu de todos los orígenes y ventas por fecha de venta): un modelo sencillo
+  # —la media de las últimas semanas_referencia semanas conocidas, corregida por cuánto se ha movido la señal
+  # respecto a su media de esas semanas— frente a esa misma media, con el mismo mejora_minima_pct. Con datos
+  # simulados, una señal de ruido pasa el 5 % en 2 de cada 100 pruebas con los leads y en 7 de cada 100 con las
+  # ventas (pocas a la semana y muy ruidosas): un PASA en ventas, solo, es débil.
+  fuera_meta:
+    origenes: 26
+    horizonte: 4
+    semanas_referencia: 4

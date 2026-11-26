@@ -18,11 +18,15 @@ email y el lead de la web), en tres grupos de canal: todos, orgánico y directo,
    que usa la previsión), porque la inversión en Meta mueve a la vez el tráfico pagado y los leads. Una
    correlación es distinta de 0 si pasa de ±1,96/√n (marcada con *). Con muchas señales y retardos, alguna
    pasará por azar (1 de cada 20): la correlación orienta, no decide.
-2. Validación con origen móvil (la que decide): la señal entra en el modelo de leads de la previsión
-   (analitica/prevision.py, como Google Trends: log(1 + señal de la semana anterior a la previsión) y se compara
-   el error absoluto medio de los leads del tipo con y sin ella, en los mismos orígenes, con el gasto que hubo y
-   con el previsto. PASA si baja el error al menos mejora_minima_pct en los dos. El modelo ya lleva el gasto de
-   Meta: lo que aporte la señal es lo que no explica la inversión.
+2. Validación con origen móvil (la que decide), con PASA / NO PASA por separado para cada objetivo:
+   a. Leads de Meta: la señal entra en el modelo de leads de la previsión (analitica/prevision.py, como Google
+      Trends: log(1 + señal de la semana anterior a la previsión) y se compara el error absoluto medio de los
+      leads del tipo con y sin ella, en los mismos orígenes, con el gasto que hubo y con el previsto. PASA si baja
+      el error al menos mejora_minima_pct en los dos. El modelo ya lleva el gasto de Meta: lo que aporte la señal
+      es lo que no explica la inversión.
+   b. Leads de Walcu de todos los orígenes y ventas por fecha de venta (fuera de Meta): un modelo sencillo
+      (validar_simple: la media de las últimas semanas corregida por cuánto se ha movido la señal) frente a esa
+      misma media. Sin señal es la referencia; PASA si baja su error al menos mejora_minima_pct.
 
 Uso:
   python -m analitica.ga4_intencion [--hoy AAAA-MM-DD]       (make ga4-intencion-informe, a un fichero)
@@ -51,6 +55,7 @@ TIPOS = ("VN", "VO")
 UNA_SEMANA = timedelta(days=7)
 OBJETIVOS = (("leads_todos", "leads de Walcu (todos los orígenes)"), ("leads_facebook", "leads de Walcu (Facebook)"),
              ("ventas", "ventas por fecha de venta"))
+FUERA_META = ("leads_todos", "ventas")           # objetivos de la validación con el modelo sencillo
 
 
 # --------------------------------------------------------------------------- protocolo
@@ -65,6 +70,9 @@ class Protocolo:
     semanas_minimas: int
     mejora_minima: float           # fracción
     version: str
+    fm_origenes: int = 26          # validación fuera de Meta
+    fm_horizonte: int = 4
+    fm_ventana: int = 4
 
 
 def protocolo(cfg: gs.Config | None = None) -> Protocolo:
@@ -93,8 +101,19 @@ def protocolo(cfg: gs.Config | None = None) -> Protocolo:
     if isinstance(mejora, bool) or not isinstance(mejora, (int, float)) or not 0 <= mejora < 100:
         raise error("mejora_minima_pct tiene que ser un número entre 0 y 100")
     texto = repr(sorted(a.items()))
+    fm = a.get("fuera_meta") or {}
+    if not isinstance(fm, dict):
+        raise error("fuera_meta debe ser un diccionario (origenes, horizonte, semanas_referencia)")
+
+    def entero_fm(clave: str) -> int:
+        v = fm.get(clave)
+        if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+            raise error(f"fuera_meta.{clave} tiene que ser un entero ≥ 1")
+        return v
+
     return Protocolo(entero("retardo_maximo", 0), marcas, grupos, senales, entero("ventas_semanas_excluidas", 0),
-                     entero("semanas_minimas", 3), mejora / 100, hashlib.sha256(texto.encode()).hexdigest()[:12])
+                     entero("semanas_minimas", 3), mejora / 100, hashlib.sha256(texto.encode()).hexdigest()[:12],
+                     entero_fm("origenes"), entero_fm("horizonte"), entero_fm("semanas_referencia"))
 
 
 # --------------------------------------------------------------------------- datos
@@ -275,6 +294,71 @@ def base_validacion(datos: pv.Datos, cfg: pv.Config, tipo: str) -> dict[str, tup
     return _errores(pv.validar(solo, cfg, {tipo: False})[0])
 
 
+# --------------------------------------------------------------------------- validación fuera de Meta
+
+@dataclass(frozen=True)
+class ValidacionSimple:
+    n: int
+    mae_referencia: float
+    mae_modelo: float
+
+    @property
+    def mejora(self) -> float:
+        return (self.mae_referencia - self.mae_modelo) / self.mae_referencia if self.mae_referencia > 0 else 0.0
+
+    def pasa(self, minima: float) -> bool:
+        return self.mejora >= minima
+
+
+def validar_simple(senal: Serie, objetivo: Serie, origenes: int, horizonte: int, ventana: int, retraso: int,
+                   minimas: int) -> ValidacionSimple | None:
+    """Validación con origen móvil de un modelo sencillo frente a la referencia (la media de las últimas `ventana`
+    semanas conocidas del objetivo).
+
+    En el origen t solo se sabe el objetivo hasta t − retraso (las ventas se cierran con retraso) y la señal hasta t.
+    Referencia R_t: media del objetivo en las `ventana` semanas que acaban en t − retraso. Cambio de la señal
+    d_t = log(1 + señal_t) − log(1 + media de la señal en esas mismas semanas). Modelo, para cada horizonte h:
+    log(1 + y_{t+h}) = log(1 + R_t) + β_h · d_t, con β_h por mínimos cuadrados sin término independiente, con los
+    pares ya conocidos en t. Sin señal (β = 0) es la referencia: lo que mejora es lo que aporta la señal.
+    Se prevén h = 1 … horizonte desde los últimos `origenes` orígenes con todo el horizonte conocido."""
+    def ventana_de(t: date) -> list[date]:
+        return [t - (retraso + j) * UNA_SEMANA for j in range(ventana)]
+
+    def referencia(t: date) -> float | None:
+        w = ventana_de(t)
+        return sum(objetivo[s] for s in w) / ventana if all(s in objetivo for s in w) else None
+
+    def cambio(t: date) -> float | None:
+        w = ventana_de(t)
+        if t not in senal or not all(s in senal for s in w):
+            return None
+        return math.log1p(senal[t]) - math.log1p(sum(senal[s] for s in w) / ventana)
+
+    semanas = sorted(objetivo)
+    utiles = {t: (referencia(t), cambio(t)) for t in semanas}
+    utiles = {t: v for t, v in utiles.items() if v[0] is not None and v[1] is not None}
+    candidatos = [t for t in sorted(utiles) if all(t + h * UNA_SEMANA in objetivo for h in range(1, horizonte + 1))]
+    puntos = []
+    for t in candidatos[-origenes:]:
+        corte = t - retraso * UNA_SEMANA                      # lo último que se sabe del objetivo en t
+        r_t, d_t = utiles[t]
+        for h in range(1, horizonte + 1):
+            pares = [(d, math.log1p(objetivo[u + h * UNA_SEMANA]) - math.log1p(r))
+                     for u, (r, d) in utiles.items() if u + h * UNA_SEMANA <= corte]
+            if len(pares) < minimas:
+                continue
+            dd = np.array([p[0] for p in pares])
+            yy = np.array([p[1] for p in pares])
+            beta = float(dd @ yy / (dd @ dd)) if dd @ dd > 0 else 0.0
+            real = objetivo[t + h * UNA_SEMANA]
+            prevista = max(0.0, math.expm1(math.log1p(r_t) + beta * d_t))
+            puntos.append((abs(r_t - real), abs(prevista - real)))
+    if not puntos:
+        return None
+    arr = np.array(puntos)
+    return ValidacionSimple(len(puntos), float(arr[:, 0].mean()), float(arr[:, 1].mean()))
+
+
 # --------------------------------------------------------------------------- informe
 
 def _desde_primera(serie: Serie, primera: date | None) -> Serie:
@@ -313,8 +397,11 @@ def informe(pg: psycopg.Connection, hoy: date, cfg: gs.Config | None = None, cfg
     w("  las semanas t y t−k; * = distinta de 0 (|r| > 1,96/√n); con menos de "
       f"{p.semanas_minimas} semanas en común, «—»;")
     w(f"  marcas: {', '.join(p.marcas)}; ventas sin las últimas {p.ventas_excluidas} semanas terminadas;")
-    w(f"  una señal PASA si en la validación con origen móvil baja el error de los leads al menos un "
-      f"{_pct(p.mejora_minima).lstrip('+')} con el gasto que hubo y con el previsto.")
+    w(f"  una señal PASA si en la validación con origen móvil baja el error al menos un "
+      f"{_pct(p.mejora_minima).lstrip('+')}, por separado para cada objetivo:")
+    w("    · leads de Meta: en el modelo de leads de la previsión, con el gasto que hubo y con el previsto;")
+    w("    · leads de Walcu (todos los orígenes) y ventas por fecha de venta: un modelo sencillo frente a la media de")
+    w(f"      las últimas {p.fm_ventana} semanas conocidas, {p.fm_origenes} orígenes × {p.fm_horizonte} semanas.")
 
     series, primera = leer_senales(pg, p)
     datos = pv.leer(pg, hoy, cfg_prev)
@@ -388,19 +475,51 @@ def informe(pg: psycopg.Connection, hoy: date, cfg: gs.Config | None = None, cfg
                     "NO PASA (distintas semanas)" if not v.comparable else "NO PASA")
                 w(f"  {senal:<22} {grupo:<17} {real:>20} {prev:>20}  {veredicto}")
 
+    # 2b. Validación fuera de Meta: leads de Walcu de todos los orígenes y ventas
+    simples: dict[tuple[str, str, str, str], ValidacionSimple | None] = {}
+    retrasos = {"leads_todos": 0, "ventas": p.ventas_excluidas}
+    nombres = dict(OBJETIVOS)
+    for t in TIPOS:
+        for clave in FUERA_META:
+            w("")
+            w(f"2b. Validación fuera de Meta · {t} · {nombres[clave]} · modelo sencillo frente a la media de "
+              f"{p.fm_ventana} semanas")
+            w(f"  {'señal':<22} {'canal':<17} {'n':>4} {'referencia':>11} {'con la señal':>22}  veredicto")
+            for senal in p.senales:
+                for grupo in p.grupos_canal:
+                    serie = _desde_primera(series[(t, senal, grupo)], primera.get(senal))
+                    v = (validar_simple(serie, objetivos[clave][t], p.fm_origenes, p.fm_horizonte, p.fm_ventana,
+                                        retrasos[clave], p.semanas_minimas) if any(serie.values()) else None)
+                    simples[(t, clave, senal, grupo)] = v
+                    if v is None:
+                        w(f"  {senal:<22} {grupo:<17} {'—':>4} {'—':>11} {'—':>22}  NO PASA (sin datos bastantes)")
+                        continue
+                    con = f"{v.mae_modelo:.2f} ({_pct(v.mejora)})".replace(".", ",", 1)
+                    w(f"  {senal:<22} {grupo:<17} {v.n:>4} {f'{v.mae_referencia:.2f}'.replace('.', ','):>11} "
+                      f"{con:>22}  {'PASA' if v.pasa(p.mejora_minima) else 'NO PASA'}")
+
     # 3. Resumen
     w("")
-    w("3. Resumen")
+    w("3. Resumen: PASA / NO PASA por objetivo")
+
+    def listar(t: str, objetivo: str, veredictos: dict[tuple[str, str], bool | None]) -> None:
+        pasan = [k for k, v in veredictos.items() if v]
+        no = [k for k, v in veredictos.items() if v is False]
+        sin = [k for k, v in veredictos.items() if v is None]
+        for nombre, lista in (("PASAN", pasan), ("NO PASAN", no), ("Sin datos de la señal (no pasan)", sin)):
+            w(f"  {t} · {objetivo} · {nombre} ({len(lista)}): "
+              + ("; ".join(f"{s} ({g})" for s, g in lista) if lista else "ninguna"))
+
     for t in TIPOS:
         if t in sin_validar:
-            w(f"  {t} · no se ha podido validar ninguna señal: sin semanas de Meta con leads de Walcu de {t}.")
+            w(f"  {t} · leads de Meta: no se ha podido validar ninguna señal: sin semanas de Meta con leads de "
+              f"Walcu de {t}.")
         else:
-            pasan = [k for k, v in resultados.items() if k[0] == t and v and v.pasa(p.mejora_minima)]
-            no = [k for k, v in resultados.items() if k[0] == t and v and k not in pasan]
-            sin = [k for k, v in resultados.items() if k[0] == t and v is None]
-            for nombre, lista in (("PASAN", pasan), ("NO PASAN", no), ("Sin datos de la señal (no pasan)", sin)):
-                w(f"  {t} · {nombre} ({len(lista)}): "
-                  + ("; ".join(f"{s} ({g})" for _, s, g in lista) if lista else "ninguna"))
+            listar(t, "leads de Meta", {(s, g): (v.pasa(p.mejora_minima) if v else None)
+                                        for (tt, s, g), v in resultados.items() if tt == t})
+        for clave in FUERA_META:
+            listar(t, nombres[clave], {(s, g): (v.pasa(p.mejora_minima) if v else None)
+                                       for (tt, c, s, g), v in simples.items() if tt == t and c == clave})
         corr = [f"{s} ({g}): {' · '.join(v)}" for (tt, s, g), v in sorted(adelanta.items()) if tt == t]
         w(f"  {t} · Adelantan con correlación parcial positiva distinta de 0 (orienta, no decide):")
         for c in corr or ["ninguna"]:

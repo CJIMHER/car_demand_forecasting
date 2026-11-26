@@ -45,7 +45,12 @@ PAGINAS = [("/", 30000), ("/ocasion", 20000), ("/ocasion/volkswagen-golf-life-12
            ("/ocasion/volkswagen-t-roc-sport-67890/", 7000), ("/nuevos/t-roc", 8000), ("/nuevos", 3000),
            ("/configurador/id-4", 2500), ("/ofertas/black-friday", 2000), ("/contacto", 1500),
            ("/gracias", 400), ("/vehiculos-especiales/serie-2025", 300), ("/vehiculos-especiales/serie-2024", 200),
-           ("/Ocasión/Polo-99887", 100), ("/landing-audi-q3", 600), ("/peticion/una-causa", 250)]
+           ("/Ocasión/Polo-99887", 100)]
+VW = "volkswagen.avisa.es"
+# (dominio, ruta, vistas): un subdominio por marca; las peticiones, en un dominio ajeno al grupo
+OTRAS = [("audi.avisa.es", "/landing-audi-q3", 600), ("audi.avisa.es", "/landing-t-roc", 40),
+         ("peticiones.ejemplo.org", "/peticion/una-causa", 250), ("(not set)", "/landing-seat-arona", 30),
+         ("(not set)", "/financiacion", 20)]
 METRICAS_META = ["sessions", "engagedSessions", "engagementRate", "userEngagementDuration", "averageSessionDuration",
                  "screenPageViews", "screenPageViewsPerSession", "eventCount", "keyEvents", "activeUsers",
                  "totalUsers"]                                                    # sin newUsers
@@ -87,9 +92,10 @@ class Api:
             if self.paginar_eventos:
                 filas = filas[c["offset"]:c["offset"] + 4]
             return self._r({"rows": filas, "rowCount": len(EVENTOS_DIAS)})
-        if dims == ["pagePath"]:
+        if dims == ["hostName", "pagePath"]:
             assert mets == ["screenPageViews"] and c["orderBys"][0]["desc"] is True
-            return self._r({"rows": [_fila([p], [n]) for p, n in PAGINAS], "rowCount": len(PAGINAS)})
+            filas = [(VW, p, n) for p, n in PAGINAS] + OTRAS
+            return self._r({"rows": [_fila([h, p], [n]) for h, p, n in filas], "rowCount": len(filas)})
         if dims == ["date"]:
             assert c["limit"] == 1 and c["orderBys"] == [{"dimension": {"dimensionName": "date"}}]
             return self._r({"rows": [_fila(["20230301"], [500])], "rowCount": 1360})
@@ -155,34 +161,52 @@ def test_eventos_con_recuento_de_12_meses_y_primer_dia(monkeypatch, entorno, sin
 def test_tipos_de_pagina_por_patron_y_por_forma(monkeypatch, entorno, sin_bd):
     _, texto = _explorar(monkeypatch, entorno, Api())
     bloque = texto.split("== 2.")[1].split("== 3.")[0]
-    assert "15 rutas en 12 tipos" in bloque
+    assert "18 páginas en 13 tipos" in bloque
     # las dos fichas de ocasión y la de «/Ocasión/Polo-99887» (mayúsculas y tilde) juntas
     assert _linea(bloque, "Ficha de ocasión").split()[-3:] == ["16.100", "19,0", "3"]
-    assert _linea(bloque, "Listado de ocasión").split()[-3:] == ["20.000", "23,6", "1"]
-    assert _linea(bloque, "Inicio").split()[-3:] == ["30.000", "35,4", "1"]
+    assert _linea(bloque, "Listado de ocasión").split()[-3:] == ["20.000", "23,5", "1"]
+    assert _linea(bloque, "Inicio").split()[-3:] == ["30.000", "35,3", "1"]
     for tipo in ("Ficha de nuevo", "Listado de nuevos", "Configurador", "Ofertas", "Contacto",
                  "Gracias (formulario enviado)"):
         assert _linea(bloque, tipo)
     # lo que no casa, agrupado por su forma, para añadirle una regla
     assert _linea(bloque, "(sin tipo) /vehiculos-especiales/*").split()[-3:] == ["500", "0,6", "2"]
-    # lo que no cuenta: otra marca del grupo y lo que no es de la web comercial
-    assert _linea(bloque, "(fuera: otra marca)").split()[-3:] == ["600", "0,7", "1"]
-    assert _linea(bloque, "(fuera: no comercial)").split()[-3:] == ["250", "0,3", "1"]
-    assert "el 0,6 % de las vistas; fuera (no comercial u otra marca), el 1,0 %" in bloque
+    # lo que no cuenta: otro subdominio del grupo (aunque la ruta sea de un modelo propio), la ruta de otra marca
+    # sin dominio, y un dominio ajeno al grupo
+    assert _linea(bloque, "(fuera: otra marca)").split()[-3:] == ["670", "0,8", "3"]
+    assert _linea(bloque, "(fuera: dominio ajeno)").split()[-3:] == ["250", "0,3", "1"]
+    assert "el 0,6 % de las vistas; fuera (dominio, no comercial u otra marca), el 1,1 %" in bloque
     tipos = [x.strip().rsplit(None, 3)[0] for x in bloque.splitlines()[3:] if x.strip()]
     assert tipos[:3] == ["Inicio", "Listado de ocasión", "Ficha de ocasión"]
     assert "/ocasion/" not in bloque                     # sin ejemplos si no se piden
 
 
-def test_ejemplos_de_rutas_con_marca_y_modelo(monkeypatch, entorno, sin_bd):
+def test_ejemplos_de_paginas_con_dominio_marca_y_modelo(monkeypatch, entorno, sin_bd):
     _, texto = _explorar(monkeypatch, entorno, Api(), ejemplos=True)
     bloque = texto.split("== 2.")[1].split("== 3.")[0]
     lineas = [x.strip() for x in bloque.splitlines()]
     i = lineas.index(_linea(bloque, "Ficha de ocasión").strip())
-    assert lineas[i + 1:i + 4] == ["9.000  /ocasion/volkswagen-golf-life-12345  [propia; Golf]",
-                                   "7.000  /ocasion/volkswagen-t-roc-sport-67890  [propia; T-Roc]",
-                                   "100  /ocasion/polo-99887  [propia; Polo]"]
-    assert "600  /landing-audi-q3  [otra]" in lineas
+    assert lineas[i + 1:i + 4] == ["9.000  volkswagen.avisa.es/ocasion/volkswagen-golf-life-12345  [propia; Golf]",
+                                   "7.000  volkswagen.avisa.es/ocasion/volkswagen-t-roc-sport-67890  [propia; T-Roc]",
+                                   "100  volkswagen.avisa.es/ocasion/polo-99887  [propia; Polo]"]
+    assert "40  audi.avisa.es/landing-t-roc  [otra]" in lineas
+    assert "30  (not set)/landing-seat-arona  [otra]" in lineas          # sin dominio: por la ruta
+    assert "20  (not set)/financiacion  [sin_marca]" in lineas
+
+
+def test_dominios_con_sus_vistas_las_peticiones_y_aviso_de_los_ajenos(monkeypatch, entorno, sin_bd):
+    _, texto = _explorar(monkeypatch, entorno, Api())
+    bloque = texto.split("== 5.")[1].split("Peticiones a la API")[0]
+    assert [x.split()[:3] for x in bloque.splitlines()[2:6]] == [
+        ["volkswagen.avisa.es", "84.000", "0"], ["audi.avisa.es", "640", "0"],
+        ["peticiones.ejemplo.org", "250", "250"], ["(not", "set)", "50"]]
+    assert _linea(bloque, "volkswagen.avisa.es").endswith("marca propia: cuenta")
+    assert _linea(bloque, "audi.avisa.es").endswith("otra marca del grupo: fuera")
+    assert _linea(bloque, "peticiones.ejemplo.org").endswith("AJENO AL GRUPO: fuera")
+    assert _linea(bloque, "(not set)").endswith("sin dominio en GA4: la marca sale de la ruta")
+    assert "Las rutas /peticion/* aparecen en: peticiones.ejemplo.org" in bloque
+    assert "¡AVISO! Dominios ajenos al grupo en la propiedad (excluidos de las señales): peticiones.ejemplo.org" \
+        in bloque
 
 
 def test_metricas_y_dimensiones_de_interaccion(monkeypatch, entorno, sin_bd):
@@ -215,7 +239,7 @@ def test_solo_agregados_sin_dimensiones_de_usuario_y_sin_el_token(monkeypatch, e
     api = Api()
     _, texto = _explorar(monkeypatch, entorno, api)
     pedidas = {d["name"] for c in api.informes() for d in c["dimensions"]}
-    assert pedidas == {"eventName", "date", "pagePath"} and not pedidas & USUARIO
+    assert pedidas == {"eventName", "date", "hostName", "pagePath"} and not pedidas & USUARIO
     assert TOKEN not in texto and "jwt-firmado" not in texto
     assert all(p.headers.get("Authorization") == f"Bearer {TOKEN}" for p in api.peticiones
                if p.full_url != "https://oauth2.googleapis.com/token")
@@ -224,7 +248,7 @@ def test_solo_agregados_sin_dimensiones_de_usuario_y_sin_el_token(monkeypatch, e
 def test_propiedad_sin_datos(monkeypatch, entorno, sin_bd):
     codigo, texto = _explorar(monkeypatch, entorno, Api(vacia=True))
     assert codigo == 0
-    assert "Ningún evento." in texto and "0 rutas en 0 tipos" in texto
+    assert "Ningún evento." in texto and "0 páginas en 0 tipos" in texto and "Ningún dominio." in texto
     assert "La propiedad no tiene datos." in texto
 
 

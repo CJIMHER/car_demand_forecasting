@@ -2,17 +2,30 @@
 # make ga4-explorar (ingesta/ga4_explorar.py) y las señales semanales de intención (ingesta/ga4_series.py:
 # make ga4-series y la descarga diaria de GA4). La propiedad de GA4 es de todo el grupo.
 #
-# Todo se compara con la ruta (pagePath o landingPage, sin parámetros) en minúsculas y sin tildes. Orden:
-#   1. hosts: si la lista tiene algo, solo cuentan las páginas de esos dominios (vacía: todos).
+# Cada página es un dominio (hostName de GA4) y una ruta (pagePath o landingPage, sin parámetros), comparados en
+# minúsculas y sin tildes. Orden:
+#   1. dominios: la web tiene un subdominio por marca. Solo cuentan los de la marca propia (todo lo suyo es de la
+#      marca propia); los otros subdominios del grupo son de otras marcas y los dominios ajenos al grupo, fuera.
+#      En los dominios compartidos por varias marcas, o sin dominio en GA4 («(not set)»), la marca sale de las
+#      palabras de la ruta (respaldo, punto 3).
 #   2. excluir: rutas que no son de la web comercial (peticiones, sedes, legal, posventa…). No cuentan.
-#   3. marca: la de otra marca del grupo no cuenta; la propia y la que no dice marca, sí (por separado).
+#   3. marca por la ruta (solo de respaldo): otra marca del grupo, fuera; la propia y la que no dice marca, sí
+#      (por separado).
 #   4. tipos: el primero que casa da el tipo de página, su tipo de stock (VN, VO o ninguno) y, en las
 #      fichas, el modelo.
+# make ga4-explorar enseña todos los dominios de los últimos 12 meses, con sus vistas y cómo se tratan.
 #
 # Tras cambiarlo: make ga4-explorar EJEMPLOS=1 para comprobar las rutas de cada tipo y, si cambia lo que
 # ya se cargó, make ga4-series DESDE=2023-06-05 (cada semana recargada sustituye a la anterior).
 
-hosts: []
+dominios:
+  # Subdominios de la marca propia: el de turismos y, si existe, el de vehículos comerciales (comprobar con
+  # make ga4-explorar, sección «Dominios», y añadirlo aquí)
+  propios: [volkswagen.avisa.es]
+  # Dominios del grupo: sus otros subdominios (audi.avisa.es…) son de otras marcas y no cuentan
+  grupo: [avisa.es]
+  # Dominios del grupo compartidos por todas las marcas: la marca sale de la ruta
+  compartidos: [avisa.es, www.avisa.es]
 
 excluir:
   - '^/peticion(/|$)'                 # peticiones y causas solidarias: no son de la web comercial
